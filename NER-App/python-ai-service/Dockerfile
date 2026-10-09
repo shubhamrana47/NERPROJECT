@@ -19,6 +19,13 @@ RUN pip install --no-cache-dir fastapi uvicorn transformers safetensors
 COPY model/ ./model/
 COPY app.py types.json labels.json ./
 
+# Download actual model weights if cloned as a Git LFS pointer (<1000 bytes)
+RUN if [ $(wc -c < model/model.safetensors) -lt 1000 ]; then \
+        echo "LFS pointer detected, downloading model weights..."; \
+        curl -L -o model/model.safetensors "https://media.githubusercontent.com/media/shubhamrana47/NERPROJECT/main/NER-App/python-ai-service/model/model.safetensors"; \
+    fi
+
+
 ENV MODEL_DIR=/app/model
 ENV PYTHONUNBUFFERED=1
 
