@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+*/node_modules/
+*/*/node_modules/
+
+# Python
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# Frontend Build
+frontend/dist/
+dist/
+.vite/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Scratch and Temp
+python-ai-service/scratch/
+scratch/
+NER-roberta-base_512/
+
+# OS Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
