@@ -1,14 +1,22 @@
 /** Client for the Python AI service + confidence routing. */
 async function runNER(segments) {
   const aiUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
-  const res = await fetch(`${aiUrl}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ segments: segments.map((s) => ({ id: s.index, text: s.text })) }),
-  });
-  if (!res.ok) throw new Error(`AI service error ${res.status}: ${await res.text()}`);
-  return (await res.json()).results;
+  try {
+    const res = await fetch(`${aiUrl}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments: segments.map((s) => ({ id: s.index, text: s.text })) }),
+    });
+    if (!res.ok) throw new Error(`AI service error ${res.status}: ${await res.text()}`);
+    return (await res.json()).results;
+  } catch (err) {
+    if (err.cause && err.cause.code === 'ECONNREFUSED') {
+      throw new Error(`AI Service is offline at ${aiUrl}. In local dev, please run 'npm run dev' to start all services.`);
+    }
+    throw err;
+  }
 }
+
 
 /**
  * Confidence >= threshold -> 'accepted'; otherwise 'review'.
