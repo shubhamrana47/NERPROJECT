@@ -34,7 +34,7 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-7xl p-6">
-      <h1 className="mb-6 text-2xl font-bold text-slate-800">AgNER-BERTa Annotation Tool</h1>
+      <h1 className="mb-6 text-2xl font-bold text-slate-800">CSIO Annotation Tool</h1>
       {error && <div className="mb-4 rounded bg-red-100 p-3 text-red-700">{error}</div>}
       <div className="grid gap-6 md:grid-cols-[18rem_1fr]">
         <aside className="space-y-4">
