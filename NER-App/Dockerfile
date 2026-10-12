@@ -48,6 +48,6 @@ ENV NODE_ENV=production
 ENV AI_SERVICE_URL=http://127.0.0.1:8000
 
 # Railway provides $PORT dynamically at runtime (defaults to 5000)
-EXPOSE 5000
+EXPOSE 5000 8080
 
 CMD ["/bin/bash", "./start.sh"]

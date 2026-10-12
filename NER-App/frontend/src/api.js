@@ -1,4 +1,17 @@
-const API_BASE = import.meta.env.VITE_API_URL || '';
+function getApiBase() {
+  // 1. Explicit build-time or env setting
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, '');
+  }
+  // 2. Production fallback on Railway
+  if (typeof window !== 'undefined' && window.location.hostname.includes('railway.app')) {
+    return 'https://nerproject-production.up.railway.app';
+  }
+  // 3. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
+  return '';
+}
+
+const API_BASE = getApiBase();
 const BASE = `${API_BASE}/api/documents`;
 
 async function req(url, opts) {

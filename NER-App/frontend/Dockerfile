@@ -1,4 +1,3 @@
-
 # Build stage
 FROM node:20-alpine AS builder
 
@@ -9,7 +8,7 @@ RUN npm install
 
 COPY . .
 
-ARG VITE_API_URL=""
+ARG VITE_API_URL="https://nerproject-production.up.railway.app"
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
@@ -17,11 +16,12 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+WORKDIR /usr/share/nginx/html
 
-ENV NGINX_ENVSUBST_FILTER="^PORT$"
+COPY --from=builder /app/dist .
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN tr -d '\r' < /docker-entrypoint.sh > /docker-entrypoint-unix.sh && mv /docker-entrypoint-unix.sh /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

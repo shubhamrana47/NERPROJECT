@@ -26,29 +26,20 @@ until curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; do
 done
 echo "Python AI Service is ready and responding on 127.0.0.1:8000!"
 
-# Cleanup handler
+# Cleanup on shutdown
 cleanup() {
-    echo "Shutting down services..."
+    echo "Shutting down AI service..."
     kill -TERM $AI_PID 2>/dev/null || true
-    kill -TERM $NODE_PID 2>/dev/null || true
-    exit 0
 }
-trap cleanup SIGTERM SIGINT
+trap cleanup EXIT TERM INT
 
-# 2. Start Node.js Express Backend
+# 2. Start Node.js Express Backend as foreground process
 PORT="${PORT:-5000}"
 export PORT
 export AI_SERVICE_URL="http://127.0.0.1:8000"
 
 echo "[2/2] Starting Node.js Backend on port $PORT..."
 cd /app/backend
-node src/server.js &
-NODE_PID=$!
 
-# Wait for either process to terminate
-wait -n $AI_PID $NODE_PID
-EXIT_STATUS=$?
-
-echo "A service process terminated with status $EXIT_STATUS. Shutting down container..."
-cleanup
-exit $EXIT_STATUS
+# exec replaces the shell with node to maintain container lifecycle and signal handling
+exec node src/server.js
