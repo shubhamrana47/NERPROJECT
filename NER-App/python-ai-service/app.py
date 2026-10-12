@@ -20,7 +20,7 @@ LABELS_FILE = os.path.join(BASE, "labels.json")
 CHUNK_WORDS = int(os.environ.get("CHUNK_WORDS", 200))  # words per model call (<512 tokens)
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, add_prefix_space=True)
-model = AutoModelForTokenClassification.from_pretrained(MODEL_DIR).eval()
+model = AutoModelForTokenClassification.from_pretrained(MODEL_DIR, low_cpu_mem_usage=True).eval()
 
 # The checkpoint only has LABEL_0..LABEL_72 = "O" + 36 types x (B, I).
 # Layout inferred from predictions: id 2k-1 = B- of type k, id 2k = I- of type k.
