@@ -10,6 +10,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check for Railway monitoring
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'ner-backend' });
+});
+
 // API routes
 app.use('/api/documents', require('./routes/documentRoutes'));
 
