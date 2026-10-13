@@ -15,7 +15,20 @@ from pydantic import BaseModel
 from transformers import AutoModelForTokenClassification, AutoTokenizer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(BASE, "model"))
+
+# Auto-detect model directory: checks python-ai-service/model, NERPROJECT/NER-roberta-base_512, or MODEL_DIR env
+candidate_dirs = [
+    os.environ.get("MODEL_DIR"),
+    os.path.join(BASE, "model"),
+    os.path.abspath(os.path.join(BASE, "..", "..", "NER-roberta-base_512")),
+    os.path.abspath(os.path.join(BASE, "..", "model")),
+]
+MODEL_DIR = os.path.join(BASE, "model")
+for cdir in candidate_dirs:
+    if cdir and os.path.exists(os.path.join(cdir, "model.safetensors")):
+        MODEL_DIR = cdir
+        break
+
 LABELS_FILE = os.path.join(BASE, "labels.json")
 CHUNK_WORDS = int(os.environ.get("CHUNK_WORDS", 200))  # words per model call (<512 tokens)
 
@@ -117,7 +130,27 @@ def extract_entities(text):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "labels": len(id2label)}
+    unique_entities = sorted({l.split("-", 1)[1] for l in id2label.values() if l != "O"})
+    return {
+        "status": "ok",
+        "model": "AgNER-BERTa",
+        "base_model": "roberta-base",
+        "architecture": model.config.architectures[0] if model.config.architectures else "RobertaForTokenClassification",
+        "labels_count": len(id2label),
+        "entities_count": len(unique_entities),
+    }
+
+
+@app.get("/model-info")
+def model_info():
+    unique_entities = sorted({l.split("-", 1)[1] for l in id2label.values() if l != "O"})
+    return {
+        "model_name": "AgNER-BERTa",
+        "checkpoint": "NER-roberta-base_512",
+        "paper": "Fine-tuned encoder models with data augmentation beat ChatGPT in agricultural named entity recognition and relation extraction (ESWA 2025)",
+        "num_labels": len(id2label),
+        "entity_types": unique_entities,
+    }
 
 
 @app.post("/predict")

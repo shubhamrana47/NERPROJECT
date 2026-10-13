@@ -21,6 +21,8 @@ const segmentSchema = new mongoose.Schema({
   page: Number,
   paragraph: Number,
   path: String,
+  section: String,
+  heading: String,
   text: String,
   entities: [entitySchema],
 });
