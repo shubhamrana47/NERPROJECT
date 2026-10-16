@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { downloadTrainingDataFile, downloadLabelStudioFile } from '../api.js';
+import { downloadTrainingDataFile } from '../api.js';
 import { Download, ChevronDown, Check, Loader2, FileJson, Layers } from 'lucide-react';
 
 export default function AnnotationBottomBar({
@@ -15,6 +15,7 @@ export default function AnnotationBottomBar({
   viewMode,
   onToggleViewMode,
 }) {
+  const [activeFormat, setActiveFormat] = useState('json'); // 'json' | 'jsonl'
   const [exportOpen, setExportOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState('');
@@ -36,18 +37,17 @@ export default function AnnotationBottomBar({
 
   const handleExport = async (format) => {
     if (!docId) return;
+    const targetFormat = format || activeFormat;
     try {
       setDownloading(true);
       setExportOpen(false);
-      if (format === 'label_studio') {
-        await downloadLabelStudioFile(docId, docFilename);
-        setDownloadSuccess('Label Studio JSON downloaded!');
-      } else if (format === 'jsonl') {
+      setActiveFormat(targetFormat);
+      if (targetFormat === 'jsonl') {
         await downloadTrainingDataFile(docId, 'jsonl', docFilename);
-        setDownloadSuccess('Training Data (.jsonl) downloaded!');
+        setDownloadSuccess('JSONL file downloaded!');
       } else {
         await downloadTrainingDataFile(docId, 'json', docFilename);
-        setDownloadSuccess('Training Data (.json) downloaded!');
+        setDownloadSuccess('JSON file downloaded!');
       }
       setTimeout(() => setDownloadSuccess(''), 3500);
     } catch (err) {
@@ -119,10 +119,10 @@ export default function AnnotationBottomBar({
               {/* Primary Direct Download Button */}
               <button
                 type="button"
-                onClick={() => handleExport('json')}
+                onClick={() => handleExport(activeFormat)}
                 disabled={downloading}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 transition cursor-pointer"
-                title="Download training data with NER vs Manual tags as JSON file"
+                title={`Download ${activeFormat === 'jsonl' ? 'JSONL file' : 'JSON file'}`}
               >
                 {downloading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
@@ -131,7 +131,11 @@ export default function AnnotationBottomBar({
                 ) : (
                   <Download className="w-3.5 h-3.5 text-blue-600" />
                 )}
-                <span>{downloading ? 'Downloading…' : downloadSuccess || 'Download Training Data'}</span>
+                <span>
+                  {downloading
+                    ? 'Downloading…'
+                    : downloadSuccess || (activeFormat === 'jsonl' ? 'Download JSONL file' : 'Download JSON file')}
+                </span>
               </button>
 
               {/* Format Dropdown Trigger */}
@@ -147,45 +151,37 @@ export default function AnnotationBottomBar({
 
             {/* Dropdown Menu */}
             {exportOpen && (
-              <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 animate-fadeIn text-xs">
+              <div className="absolute right-0 bottom-full mb-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 animate-fadeIn text-xs">
                 <div className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
-                  Export Options
+                  Download Options
                 </div>
 
                 <button
                   type="button"
                   onClick={() => handleExport('json')}
-                  className="w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 transition text-slate-800 cursor-pointer"
+                  className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 transition text-slate-800 cursor-pointer ${
+                    activeFormat === 'json' ? 'bg-blue-50/70 text-blue-900 font-semibold' : ''
+                  }`}
                 >
-                  <FileJson className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-slate-900">Training Data (.json)</div>
-                    <div className="text-[11px] text-slate-500">Sentence-level JSON with NER vs Manual tags</div>
+                  <div className="flex items-center gap-2">
+                    <FileJson className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-900">JSON file</span>
                   </div>
+                  {activeFormat === 'json' && <Check className="w-3.5 h-3.5 text-blue-600" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExport('jsonl')}
-                  className="w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 transition text-slate-800 cursor-pointer"
+                  className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 transition text-slate-800 cursor-pointer ${
+                    activeFormat === 'jsonl' ? 'bg-emerald-50/70 text-emerald-900 font-semibold' : ''
+                  }`}
                 >
-                  <Layers className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-slate-900">Training Data (.jsonl)</div>
-                    <div className="text-[11px] text-slate-500">Newline-delimited JSON for ML pipelines</div>
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-900">JSONL file</span>
                   </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleExport('label_studio')}
-                  className="w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 transition text-slate-800 cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-slate-900">Label Studio Tasks (.json)</div>
-                    <div className="text-[11px] text-slate-500">Official Label Studio format with annotations</div>
-                  </div>
+                  {activeFormat === 'jsonl' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
                 </button>
               </div>
             )}
