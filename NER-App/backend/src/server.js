@@ -7,8 +7,38 @@ const connectDB = require('./config/db');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Trust reverse proxies (Railway, Cloudflare, etc.)
+app.set('trust proxy', 1);
+
+// Permissive and explicit CORS configuration
+const corsOptions = {
+  origin: true, // Echoes the request origin (supports https://nerproject-production-e534.up.railway.app, localhost, etc.)
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Disposition'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Explicit header fallback middleware for every response (guarantees headers even on errors)
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check: confirms the HTTP server is responding
 app.get('/health', (_req, res) => {
@@ -21,10 +51,15 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/api/documents', require('./routes/documentRoutes'));
 
-// Error handler
-app.use((err, _req, res, _next) => {
+// Error handler (ensures CORS headers remain present on error responses)
+app.use((err, req, res, _next) => {
   console.error('Request error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+  });
 });
 
 // Listen on Railway's assigned port

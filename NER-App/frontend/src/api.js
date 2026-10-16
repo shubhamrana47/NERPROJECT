@@ -15,10 +15,19 @@ const API_BASE = getApiBase();
 const BASE = `${API_BASE}/api/documents`;
 
 async function req(url, opts) {
-  const res = await fetch(url, opts);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
+  try {
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError' || err.message.toLowerCase().includes('fetch')) {
+      throw new Error(
+        `Unable to connect to backend (${url}). If the service is deploying or waking up on Railway, please wait a minute and retry.`
+      );
+    }
+    throw err;
+  }
 }
 
 export const uploadDocument = (file) => {
