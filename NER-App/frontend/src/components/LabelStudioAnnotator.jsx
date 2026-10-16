@@ -53,10 +53,6 @@ const CATEGORY_COLORS = {
   Other: 'bg-slate-100 text-slate-800 border-slate-300',
 };
 
-const QUICK_LABELS = [
-  'Crop', 'Chemical', 'Disease', 'Treatment', 'Nutrient',
-  'Quantity', 'Location', 'Weather', 'Soil', 'Agri_Method'
-];
 
 /**
  * Label Studio-style Interactive Text Annotator.
@@ -266,69 +262,79 @@ export default function LabelStudioAnnotator({
 
       {/* Manual Annotation Toolbar / Popover: Triggered when user selects text */}
       {selectedSpan && (
-        <div className="rounded-xl border-2 border-blue-400 bg-blue-50/60 p-4 shadow-md transition-all animate-fadeIn">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-700">
-                Selected Text to Annotate:
+        <div className="rounded-xl border border-blue-300 bg-blue-50/70 p-3 shadow-sm transition-all animate-fadeIn">
+          {/* Compact Header: Selected text context, character offsets, filter input & cancel */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-blue-200/70">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 shrink-0">
+                Annotate:
               </span>
-              <span className="rounded bg-white px-2.5 py-1 text-sm font-bold text-slate-900 border border-blue-200">
+              <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-900 border border-blue-200 truncate max-w-[14rem] sm:max-w-md shadow-2xs">
                 "{selectedSpan.text}"
               </span>
-              <span className="text-xs font-mono text-slate-500">
-                offsets [{selectedSpan.localStart}:{selectedSpan.localEnd}]
+              <span className="text-[11px] font-mono text-slate-500 shrink-0">
+                [{selectedSpan.localStart}:{selectedSpan.localEnd}]
               </span>
             </div>
-            <button
-              onClick={() => setSelectedSpan(null)}
-              className="text-xs text-slate-500 hover:text-slate-800 underline font-medium"
-            >
-              Cancel selection
-            </button>
-          </div>
 
-          {/* Quick Category Chips */}
-          <div className="mb-2">
-            <span className="text-[11px] font-semibold text-slate-600 block mb-1">
-              Select Entity Label:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {QUICK_LABELS.map((ql) => (
-                <button
-                  key={ql}
-                  type="button"
-                  onClick={() => applyLabel(ql)}
-                  className={`rounded px-2.5 py-1 text-xs font-semibold border transition hover:scale-105 active:scale-95 shadow-xs ${
-                    CATEGORY_COLORS[ql] || 'bg-white text-slate-800 border-slate-300'
-                  }`}
-                >
-                  + {ql}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 ml-auto">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Filter 36 entities..."
+                  value={labelSearch}
+                  onChange={(e) => setLabelSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setSelectedSpan(null);
+                    if (e.key === 'Enter' && filteredLabels.length === 1) {
+                      applyLabel(filteredLabels[0]);
+                    }
+                  }}
+                  className="w-44 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                  autoFocus
+                />
+                {labelSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setLabelSearch('')}
+                    className="absolute right-1.5 top-1 text-xs text-slate-400 hover:text-slate-700"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedSpan(null)}
+                className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded border border-transparent hover:border-slate-300 hover:bg-white transition font-medium cursor-pointer"
+                title="Cancel selection (Esc)"
+              >
+                Cancel
+              </button>
             </div>
           </div>
 
-          {/* Search / All 36 labels dropdown */}
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Search all 36 entity types..."
-              value={labelSearch}
-              onChange={(e) => setLabelSearch(e.target.value)}
-              className="w-56 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-              {filteredLabels.slice(0, 10).map((fl) => (
-                <button
-                  key={fl}
-                  type="button"
-                  onClick={() => applyLabel(fl)}
-                  className="rounded bg-white px-2 py-1 text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-100"
-                >
-                  {fl}
-                </button>
-              ))}
-            </div>
+          {/* All 36 Entity Badges: Ultra-compact, easy-to-read flex wrap */}
+          <div className="flex flex-wrap gap-1 max-h-48 overflow-y-auto pr-0.5">
+            {filteredLabels.map((fl) => (
+              <button
+                key={fl}
+                type="button"
+                onClick={() => applyLabel(fl)}
+                className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition hover:scale-105 active:scale-95 shadow-2xs whitespace-nowrap cursor-pointer ${
+                  CATEGORY_COLORS[fl] || 'bg-white text-slate-800 border-slate-300'
+                }`}
+                title={`Annotate "${selectedSpan.text}" as ${fl}`}
+              >
+                + {fl}
+              </button>
+            ))}
+            {filteredLabels.length === 0 && (
+              <div className="text-xs text-slate-500 py-1 italic">
+                No matching entity found for "{labelSearch}". Press Esc or clear search.
+              </div>
+            )}
           </div>
         </div>
       )}
