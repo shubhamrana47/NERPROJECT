@@ -1,0 +1,329 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg" style="background:#0B132B; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <defs>
+    <filter id="cardShadow" x="-10" y="-5" width="100%" height="100%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.06"/>
+    </filter>
+    <filter id="modalShadow" x="-20" y="-10" width="100%" height="100%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="32" flood-color="#0B132B" flood-opacity="0.18"/>
+    </filter>
+    <linearGradient id="primaryGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0B1528"/>
+      <stop offset="100%" stop-color="#162A45"/>
+    </linearGradient>
+    <linearGradient id="cardGlow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1440" height="960" fill="#F8FAFC"/>
+
+  <!-- Top Navigation Bar -->
+  <rect width="1440" height="70" fill="url(#headerGrad)"/>
+  <line x1="0" y1="70" x2="1440" y2="70" stroke="#1E293B" stroke-width="1"/>
+
+  <!-- CSIR-CSIO Logo & Title -->
+  <g transform="translate(40, 16)">
+    <!-- Scientific Emblem Icon -->
+    <rect x="0" y="0" width="38" height="38" rx="8" fill="#047857"/>
+    <path d="M19 8L29 14V24L19 30L9 24V14L19 8Z" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+    <circle cx="19" cy="19" r="4" fill="#34D399"/>
+    
+    <text x="48" y="18" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="0.5">CSIR-CSIO</text>
+    <text x="134" y="18" fill="#10B981" font-size="14" font-weight="600">AgNER Studio</text>
+    <text x="48" y="32" fill="#94A3B8" font-size="11" font-weight="400">Agricultural Named Entity Recognition Platform • Central Scientific Instruments Organisation</text>
+  </g>
+
+  <!-- Model Badge -->
+  <g transform="translate(760, 20)">
+    <rect x="0" y="0" width="280" height="30" rx="15" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <circle cx="16" cy="15" r="4" fill="#10B981"/>
+    <text x="28" y="19" fill="#E2E8F0" font-size="11" font-weight="500">AgRoBERTa-512 Base</text>
+    <text x="148" y="19" fill="#94A3B8" font-size="11">|</text>
+    <text x="160" y="19" fill="#38BDF8" font-size="11" font-weight="500">Threshold: 0.85</text>
+    <text x="245" y="19" fill="#4ADE80" font-size="11" font-weight="600">92% Acc</text>
+  </g>
+
+  <!-- Annotator Profile -->
+  <g transform="translate(1220, 18)">
+    <rect x="0" y="0" width="180" height="34" rx="17" fill="#1E293B"/>
+    <circle cx="18" cy="17" r="12" fill="#047857"/>
+    <text x="14" y="21" fill="#FFFFFF" font-size="11" font-weight="600">AS</text>
+    <text x="38" y="16" fill="#F8FAFC" font-size="11" font-weight="600">Dr. A. Sharma</text>
+    <text x="38" y="28" fill="#94A3B8" font-size="10">Lead Annotator</text>
+  </g>
+
+  <!-- Subheader Breadcrumb / Navigation -->
+  <rect x="0" y="70" width="1440" height="48" fill="#FFFFFF"/>
+  <line x1="0" y1="118" x2="1440" y2="118" stroke="#E2E8F0" stroke-width="1"/>
+  <g transform="translate(40, 85)">
+    <rect x="0" y="0" width="130" height="26" rx="6" fill="#ECFDF5"/>
+    <text x="14" y="17" fill="#047857" font-size="12" font-weight="700">Corpus Library</text>
+    <text x="160" y="17" fill="#64748B" font-size="12" font-weight="500">Annotation Studio</text>
+    <text x="290" y="17" fill="#64748B" font-size="12" font-weight="500">Model Telemetry</text>
+    <text x="410" y="17" fill="#64748B" font-size="12" font-weight="500">Export &amp; Training Data</text>
+  </g>
+
+  <!-- Metric KPI Cards -->
+  <g transform="translate(40, 140)">
+    <!-- KPI 1 -->
+    <rect x="0" y="0" width="320" height="96" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="20" y="32" fill="#64748B" font-size="12" font-weight="600">TOTAL BULLETINS</text>
+    <text x="20" y="68" fill="#0F172A" font-size="28" font-weight="700">42</text>
+    <text x="75" y="66" fill="#047857" font-size="12" font-weight="600">+6 uploaded today</text>
+    <rect x="250" y="24" width="48" height="48" rx="10" fill="#ECFDF5"/>
+    <path d="M266 40V56M274 40V56M282 40V56" stroke="#047857" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- KPI 2 -->
+    <rect x="345" y="0" width="320" height="96" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="365" y="32" fill="#64748B" font-size="12" font-weight="600">VERIFIED SENTENCES</text>
+    <text x="365" y="68" fill="#0F172A" font-size="28" font-weight="700">1,840</text>
+    <text x="470" y="66" fill="#64748B" font-size="12">/ 2,410 total</text>
+    <rect x="595" y="24" width="48" height="48" rx="10" fill="#EFF6FF"/>
+    <circle cx="619" cy="48" r="12" stroke="#2563EB" stroke-width="3" stroke-dasharray="75 25" fill="none"/>
+
+    <!-- KPI 3 -->
+    <rect x="690" y="0" width="320" height="96" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="710" y="32" fill="#64748B" font-size="12" font-weight="600">PROVENANCE BREAKDOWN</text>
+    <text x="710" y="68" fill="#047857" font-size="24" font-weight="700">84%</text>
+    <text x="765" y="66" fill="#64748B" font-size="12">Model AI</text>
+    <text x="825" y="68" fill="#6366F1" font-size="24" font-weight="700">16%</text>
+    <text x="875" y="66" fill="#64748B" font-size="12">Manual Human</text>
+    <rect x="940" y="24" width="48" height="48" rx="10" fill="#F5F3FF"/>
+    <path d="M956 48L968 40L972 56" stroke="#7C3AED" stroke-width="2" fill="none"/>
+
+    <!-- KPI 4 -->
+    <rect x="1035" y="0" width="365" height="96" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="1055" y="32" fill="#64748B" font-size="12" font-weight="600">ACCEPTED ACCURACY</text>
+    <text x="1055" y="68" fill="#0F172A" font-size="28" font-weight="700">94.2%</text>
+    <text x="1170" y="66" fill="#047857" font-size="12" font-weight="600">&gt; 0.85 Threshold</text>
+    <rect x="1330" y="24" width="48" height="48" rx="10" fill="#ECFDF5"/>
+    <path d="M1346 48L1352 54L1362 42" stroke="#047857" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- Upload Ingestion Station -->
+  <g transform="translate(40, 260)">
+    <rect x="0" y="0" width="1360" height="110" rx="16" fill="#FFFFFF" stroke="#047857" stroke-width="1.5" stroke-dasharray="6 6"/>
+    
+    <!-- Upload Icon Circle -->
+    <circle cx="60" cy="55" r="28" fill="#ECFDF5"/>
+    <path d="M60 43V67M52 51L60 43L68 51" stroke="#047857" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Upload Instructions -->
+    <text x="105" y="46" fill="#0F172A" font-size="16" font-weight="700">Upload Agricultural Advisory Bulletin (JSON or JSONL)</text>
+    <text x="105" y="68" fill="#64748B" font-size="13">Drag and drop PAU / Agromet / ICAR bulletins or click to browse. Real-time AgRoBERTa model inference runs immediately.</text>
+
+    <!-- Schema Badges -->
+    <g transform="translate(105, 78)">
+      <rect x="0" y="0" width="120" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="10" y="15" fill="#334155" font-size="11" font-weight="600">.json Structured Doc</text>
+
+      <rect x="130" y="0" width="120" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="140" y="15" fill="#334155" font-size="11" font-weight="600">.jsonl Training Lines</text>
+
+      <rect x="260" y="0" width="140" height="22" rx="4" fill="#ECFDF5"/>
+      <text x="270" y="15" fill="#047857" font-size="11" font-weight="600">Auto-Detect Sections</text>
+    </g>
+
+    <!-- Upload CTA Button -->
+    <g transform="translate(1180, 36)">
+      <rect x="0" y="0" width="150" height="40" rx="8" fill="#047857"/>
+      <text x="32" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Select Files</text>
+    </g>
+  </g>
+
+  <!-- Repository Document List Header -->
+  <g transform="translate(40, 395)">
+    <text x="0" y="22" fill="#0F172A" font-size="18" font-weight="700">Active Document Corpus</text>
+    <text x="220" y="22" fill="#64748B" font-size="13">4 documents loaded for annotation</text>
+
+    <!-- Search & Filter Bar -->
+    <rect x="940" y="0" width="280" height="34" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+    <text x="955" y="22" fill="#94A3B8" font-size="12">Search documents by title...</text>
+    
+    <rect x="1235" y="0" width="125" height="34" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+    <text x="1250" y="22" fill="#334155" font-size="12" font-weight="500">Filter: All Status</text>
+  </g>
+
+  <!-- Table Container -->
+  <g transform="translate(40, 440)">
+    <rect x="0" y="0" width="1360" height="480" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    
+    <!-- Table Header Row -->
+    <rect x="0" y="0" width="1360" height="44" rx="14" fill="#F8FAFC"/>
+    <line x1="0" y1="44" x2="1360" y2="44" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="24" y="27" fill="#475569" font-size="11" font-weight="700">DOCUMENT TITLE</text>
+    <text x="380" y="27" fill="#475569" font-size="11" font-weight="700">FORMAT</text>
+    <text x="480" y="27" fill="#475569" font-size="11" font-weight="700">LINES / PROGRESS</text>
+    <text x="680" y="27" fill="#475569" font-size="11" font-weight="700">IDENTIFIED ENTITIES</text>
+    <text x="960" y="27" fill="#475569" font-size="11" font-weight="700">STATUS</text>
+    <text x="1140" y="27" fill="#475569" font-size="11" font-weight="700">ACTIONS</text>
+
+    <!-- Row 1: PAU Wheat Advisory (Active / Focus) -->
+    <g transform="translate(0, 44)">
+      <rect x="0" y="0" width="1360" height="96" fill="#F0FDF4" opacity="0.6"/>
+      <line x1="0" y1="96" x2="1360" y2="96" stroke="#E2E8F0" stroke-width="1"/>
+      <rect x="0" y="0" width="4" height="96" fill="#047857"/>
+
+      <text x="24" y="38" fill="#0F172A" font-size="14" font-weight="700">PAU_Ludhiana_Wheat_Advisory_Nov2025.jsonl</text>
+      <text x="24" y="58" fill="#64748B" font-size="12">Punjab Agricultural University • Agromet Advisory Bulletin No. 92</text>
+      <text x="24" y="78" fill="#047857" font-size="11" font-weight="600">Last edited 5 mins ago by Dr. A. Sharma</text>
+
+      <!-- Format Badge -->
+      <rect x="380" y="36" width="60" height="24" rx="4" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+      <text x="392" y="52" fill="#065F46" font-size="11" font-weight="700">.JSONL</text>
+
+      <!-- Progress Bar -->
+      <text x="480" y="38" fill="#0F172A" font-size="13" font-weight="600">48 / 48 Lines (100%)</text>
+      <rect x="480" y="50" width="140" height="8" rx="4" fill="#E2E8F0"/>
+      <rect x="480" y="50" width="140" height="8" rx="4" fill="#047857"/>
+      <text x="480" y="74" fill="#64748B" font-size="11">4 Pages • All verified</text>
+
+      <!-- Entities Breakdown -->
+      <g transform="translate(680, 28)">
+        <rect x="0" y="0" width="70" height="24" rx="4" fill="#ECFDF5"/>
+        <text x="10" y="16" fill="#065F46" font-size="11" font-weight="600">42 Crops</text>
+
+        <rect x="78" y="0" width="78" height="24" rx="4" fill="#FEF2F2"/>
+        <text x="88" y="16" fill="#991B1B" font-size="11" font-weight="600">38 Pests</text>
+
+        <rect x="164" y="0" width="85" height="24" rx="4" fill="#F5F3FF"/>
+        <text x="174" y="16" fill="#5B21B6" font-size="11" font-weight="600">54 Chems</text>
+      </g>
+      <text x="680" y="74" fill="#64748B" font-size="11">Total: 142 tags (118 Model, 24 Manual)</text>
+
+      <!-- Status Badge -->
+      <rect x="960" y="36" width="110" height="26" rx="13" fill="#ECFDF5" stroke="#86EFAC" stroke-width="1"/>
+      <circle cx="974" cy="49" r="4" fill="#16A34A"/>
+      <text x="986" y="53" fill="#166534" font-size="11" font-weight="700">Completed</text>
+
+      <!-- Action Button -->
+      <g transform="translate(1140, 32)">
+        <rect x="0" y="0" width="115" height="34" rx="6" fill="#047857"/>
+        <text x="18" y="21" fill="#FFFFFF" font-size="12" font-weight="600">Open Studio →</text>
+      </g>
+    </g>
+
+    <!-- Row 2: IMD Agromet Punjab (In Progress) -->
+    <g transform="translate(0, 140)">
+      <line x1="0" y1="96" x2="1360" y2="96" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text x="24" y="38" fill="#0F172A" font-size="14" font-weight="700">IMD_Agromet_Punjab_Kharif_Bulletin.json</text>
+      <text x="24" y="58" fill="#64748B" font-size="12">India Meteorological Department • District Agromet Advisory Service</text>
+      <text x="24" y="78" fill="#64748B" font-size="11">Uploaded today at 11:20 AM</text>
+
+      <!-- Format Badge -->
+      <rect x="380" y="36" width="55" height="24" rx="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+      <text x="392" y="52" fill="#1E40AF" font-size="11" font-weight="700">.JSON</text>
+
+      <!-- Progress Bar -->
+      <text x="480" y="38" fill="#0F172A" font-size="13" font-weight="600">46 / 64 Lines (72%)</text>
+      <rect x="480" y="50" width="140" height="8" rx="4" fill="#E2E8F0"/>
+      <rect x="480" y="50" width="100" height="8" rx="4" fill="#2563EB"/>
+      <text x="480" y="74" fill="#64748B" font-size="11">18 lines remaining</text>
+
+      <!-- Entities Breakdown -->
+      <g transform="translate(680, 28)">
+        <rect x="0" y="0" width="70" height="24" rx="4" fill="#ECFDF5"/>
+        <text x="10" y="16" fill="#065F46" font-size="11" font-weight="600">58 Crops</text>
+
+        <rect x="78" y="0" width="78" height="24" rx="4" fill="#FEF2F2"/>
+        <text x="88" y="16" fill="#991B1B" font-size="11" font-weight="600">44 Pests</text>
+
+        <rect x="164" y="0" width="85" height="24" rx="4" fill="#FFFBEB"/>
+        <text x="174" y="16" fill="#92400E" font-size="11" font-weight="600">62 Fertils</text>
+      </g>
+      <text x="680" y="74" fill="#64748B" font-size="11">Total: 198 tags (172 Model, 26 Manual)</text>
+
+      <!-- Status Badge -->
+      <rect x="960" y="36" width="115" height="26" rx="13" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+      <circle cx="974" cy="49" r="4" fill="#2563EB"/>
+      <text x="986" y="53" fill="#1E40AF" font-size="11" font-weight="700">In Progress</text>
+
+      <!-- Action Button -->
+      <g transform="translate(1140, 32)">
+        <rect x="0" y="0" width="115" height="34" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="18" y="21" fill="#334155" font-size="12" font-weight="600">Continue →</text>
+      </g>
+    </g>
+
+    <!-- Row 3: ICAR Mustard Bulletin (Needs Review) -->
+    <g transform="translate(0, 236)">
+      <line x1="0" y1="96" x2="1360" y2="96" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text x="24" y="38" fill="#0F172A" font-size="14" font-weight="700">ICAR_Mustard_Aphid_Management_Dec.jsonl</text>
+      <text x="24" y="58" fill="#64748B" font-size="12">ICAR-Directorate of Rapeseed-Mustard Research • Special Pest Advisory</text>
+      <text x="24" y="78" fill="#64748B" font-size="11">Requires confidence review for agrochemicals</text>
+
+      <!-- Format Badge -->
+      <rect x="380" y="36" width="60" height="24" rx="4" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+      <text x="392" y="52" fill="#065F46" font-size="11" font-weight="700">.JSONL</text>
+
+      <!-- Progress Bar -->
+      <text x="480" y="38" fill="#0F172A" font-size="13" font-weight="600">8 / 32 Lines (25%)</text>
+      <rect x="480" y="50" width="140" height="8" rx="4" fill="#E2E8F0"/>
+      <rect x="480" y="50" width="35" height="8" rx="4" fill="#D97706"/>
+      <text x="480" y="74" fill="#64748B" font-size="11">24 lines pending</text>
+
+      <!-- Entities Breakdown -->
+      <g transform="translate(680, 28)">
+        <rect x="0" y="0" width="70" height="24" rx="4" fill="#ECFDF5"/>
+        <text x="10" y="16" fill="#065F46" font-size="11" font-weight="600">22 Crops</text>
+
+        <rect x="78" y="0" width="78" height="24" rx="4" fill="#FEF2F2"/>
+        <text x="88" y="16" fill="#991B1B" font-size="11" font-weight="600">45 Pests</text>
+      </g>
+      <text x="680" y="74" fill="#64748B" font-size="11">Total: 85 tags (68 Model, 17 Manual)</text>
+
+      <!-- Status Badge -->
+      <rect x="960" y="36" width="120" height="26" rx="13" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1"/>
+      <circle cx="974" cy="49" r="4" fill="#D97706"/>
+      <text x="986" y="53" fill="#92400E" font-size="11" font-weight="700">Needs Review</text>
+
+      <!-- Action Button -->
+      <g transform="translate(1140, 32)">
+        <rect x="0" y="0" width="115" height="34" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="24" y="21" fill="#334155" font-size="12" font-weight="600">Review →</text>
+      </g>
+    </g>
+
+    <!-- Row 4: Horticulture Citrus Advisory -->
+    <g transform="translate(0, 332)">
+      <text x="24" y="38" fill="#0F172A" font-size="14" font-weight="700">Horticulture_Citrus_Canker_Advisory.json</text>
+      <text x="24" y="58" fill="#64748B" font-size="12">Punjab Horticulture Department • Kinnow &amp; Sweet Orange Special Alert</text>
+      <text x="24" y="78" fill="#64748B" font-size="11">Uploaded 1 hour ago</text>
+
+      <!-- Format Badge -->
+      <rect x="380" y="36" width="55" height="24" rx="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+      <text x="392" y="52" fill="#1E40AF" font-size="11" font-weight="700">.JSON</text>
+
+      <!-- Progress Bar -->
+      <text x="480" y="38" fill="#0F172A" font-size="13" font-weight="600">0 / 28 Lines (0%)</text>
+      <rect x="480" y="50" width="140" height="8" rx="4" fill="#E2E8F0"/>
+      <text x="480" y="74" fill="#64748B" font-size="11">Awaiting review</text>
+
+      <!-- Entities Breakdown -->
+      <g transform="translate(680, 28)">
+        <rect x="0" y="0" width="140" height="24" rx="4" fill="#F1F5F9"/>
+        <text x="12" y="16" fill="#475569" font-size="11" font-weight="600">64 Model Entities</text>
+      </g>
+      <text x="680" y="74" fill="#64748B" font-size="11">Auto-detected by AgRoBERTa</text>
+
+      <!-- Status Badge -->
+      <rect x="960" y="36" width="100" height="26" rx="13" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+      <circle cx="974" cy="49" r="4" fill="#64748B"/>
+      <text x="986" y="53" fill="#475569" font-size="11" font-weight="700">Queued</text>
+
+      <!-- Action Button -->
+      <g transform="translate(1140, 32)">
+        <rect x="0" y="0" width="115" height="34" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="24" y="21" fill="#334155" font-size="12" font-weight="600">Start →</text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,490 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg" style="background:#F8FAFC; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <defs>
+    <filter id="cardShadow" x="-5" y="-2" width="100%" height="100%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.05"/>
+    </filter>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0B1528"/>
+      <stop offset="100%" stop-color="#162A45"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Top Navigation Header -->
+  <rect width="1440" height="64" fill="url(#headerGrad)"/>
+  <line x1="0" y1="64" x2="1440" y2="64" stroke="#1E293B" stroke-width="1"/>
+
+  <g transform="translate(32, 14)">
+    <!-- Back to Corpus Icon -->
+    <rect x="0" y="2" width="32" height="32" rx="6" fill="#1E293B"/>
+    <path d="M19 12L13 18L19 24" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <text x="44" y="17" fill="#FFFFFF" font-size="14" font-weight="700">PAU_Ludhiana_Wheat_Advisory_Nov2025.jsonl</text>
+    <text x="44" y="31" fill="#94A3B8" font-size="11">CSIR-CSIO Precision Agro-Informatics • AgNER Studio</text>
+  </g>
+
+  <!-- Center View Mode Toggle -->
+  <g transform="translate(620, 16)">
+    <rect x="0" y="0" width="260" height="32" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <!-- Active Tab: 1-Line Focus Mode -->
+    <rect x="3" y="3" width="138" height="26" rx="6" fill="#047857"/>
+    <text x="14" y="20" fill="#FFFFFF" font-size="11" font-weight="700">1-Line Focus Mode</text>
+    <!-- Inactive Tab: Full Overview -->
+    <text x="154" y="20" fill="#94A3B8" font-size="11" font-weight="500">Full Overview</text>
+  </g>
+
+  <!-- Right Header Actions -->
+  <g transform="translate(1180, 16)">
+    <rect x="0" y="0" width="110" height="32" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <circle cx="16" cy="16" r="4" fill="#10B981"/>
+    <text x="28" y="20" fill="#E2E8F0" font-size="11" font-weight="600">Model: 85%</text>
+
+    <!-- Help Button -->
+    <rect x="120" y="0" width="32" height="32" rx="6" fill="#1E293B"/>
+    <text x="131" y="21" fill="#94A3B8" font-size="13" font-weight="600">?</text>
+
+    <!-- Close Button -->
+    <rect x="160" y="0" width="60" height="32" rx="6" fill="#334155"/>
+    <text x="175" y="20" fill="#FFFFFF" font-size="11" font-weight="600">Exit</text>
+  </g>
+
+  <!-- Main Workspace Grid: Left Stage (920px), Right Palette (440px) -->
+  <g transform="translate(32, 80)">
+    
+    <!-- LEFT MAIN STAGE -->
+    <g transform="translate(0, 0)">
+      
+      <!-- Top Navigator Bar with Page, Line, and Progress Slider -->
+      <rect x="0" y="0" width="910" height="52" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      
+      <g transform="translate(16, 12)">
+        <!-- Page Indicator -->
+        <rect x="0" y="0" width="130" height="28" rx="6" fill="#F1F5F9"/>
+        <text x="10" y="18" fill="#475569" font-size="11">Page <tspan font-weight="700" fill="#0F172A">2</tspan> of 4 (2 left)</text>
+
+        <!-- Line Indicator -->
+        <rect x="140" y="0" width="165" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+        <text x="150" y="18" fill="#1E40AF" font-size="11" font-weight="700">Sentence 14 <tspan font-weight="400" fill="#3B82F6">of 48</tspan> (34 left)</text>
+
+        <!-- Section Tag -->
+        <rect x="315" y="0" width="220" height="28" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="325" y="18" fill="#334155" font-size="11" font-weight="600">Section: Crop Advisory (Wheat)</text>
+      </g>
+
+      <!-- Sentence Navigation Mini-Arrows -->
+      <g transform="translate(750, 12)">
+        <rect x="0" y="0" width="70" height="28" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="12" y="18" fill="#334155" font-size="11" font-weight="600">← Prev</text>
+
+        <rect x="80" y="0" width="70" height="28" rx="6" fill="#047857"/>
+        <text x="94" y="18" fill="#FFFFFF" font-size="11" font-weight="600">Next →</text>
+      </g>
+
+      <!-- PRIMARY ANNOTATION CANVAS (The Focused Sentence) -->
+      <g transform="translate(0, 68)">
+        <rect x="0" y="0" width="910" height="290" rx="14" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5" filter="url(#cardShadow)"/>
+        
+        <!-- Active Focus Header -->
+        <rect x="0" y="0" width="910" height="40" rx="14" fill="#F8FAFC"/>
+        <line x1="0" y1="40" x2="910" y2="40" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="25" fill="#047857" font-size="12" font-weight="700">ACTIVE SENTENCE UNDER ANNOTATION</text>
+        <text x="730" y="25" fill="#64748B" font-size="11">Select text with cursor to tag</text>
+
+        <!-- THE SENTENCE WITH EMBEDDED HIGH-CONTRAST TOKENS -->
+        <g transform="translate(24, 60)">
+          <!-- Plain Text: Apply -->
+          <text x="0" y="32" fill="#0F172A" font-size="18" font-weight="500">Apply </text>
+
+          <!-- TOKEN 1: chlorpyriphos 20 EC (Agrochemical) -->
+          <g transform="translate(58, 8)">
+            <rect x="0" y="0" width="225" height="36" rx="6" fill="#F5F3FF" stroke="#7C3AED" stroke-width="1.5"/>
+            <text x="10" y="23" fill="#5B21B6" font-size="16" font-weight="700">chlorpyriphos 20 EC</text>
+            <!-- Badge -->
+            <rect x="180" y="6" width="38" height="16" rx="3" fill="#7C3AED"/>
+            <text x="184" y="18" fill="#FFFFFF" font-size="9" font-weight="700">CHEM</text>
+          </g>
+
+          <!-- Plain Text: @ 1 litre per acre with irrigation water for the control of -->
+          <text x="290" y="32" fill="#0F172A" font-size="18" font-weight="500"> @ 1 litre per acre with irrigation water for</text>
+          <text x="0" y="80" fill="#0F172A" font-size="18" font-weight="500">the control of </text>
+
+          <!-- TOKEN 2: termites (Pest) -->
+          <g transform="translate(118, 56)">
+            <rect x="0" y="0" width="110" height="36" rx="6" fill="#FEF2F2" stroke="#DC2626" stroke-width="1.5"/>
+            <text x="10" y="23" fill="#991B1B" font-size="16" font-weight="700">termites</text>
+            <rect x="74" y="6" width="30" height="16" rx="3" fill="#DC2626"/>
+            <text x="77" y="18" fill="#FFFFFF" font-size="9" font-weight="700">PEST</text>
+          </g>
+
+          <!-- Plain Text: in -->
+          <text x="238" y="80" fill="#0F172A" font-size="18" font-weight="500"> in </text>
+
+          <!-- TOKEN 3: late sown wheat (Crop) -->
+          <g transform="translate(268, 56)">
+            <rect x="0" y="0" width="180" height="36" rx="6" fill="#ECFDF5" stroke="#059669" stroke-width="1.5"/>
+            <text x="10" y="23" fill="#065F46" font-size="16" font-weight="700">late sown wheat</text>
+            <rect x="138" y="6" width="34" height="16" rx="3" fill="#059669"/>
+            <text x="142" y="18" fill="#FFFFFF" font-size="9" font-weight="700">CROP</text>
+          </g>
+
+          <!-- Plain Text: during -->
+          <text x="458" y="80" fill="#0F172A" font-size="18" font-weight="500"> during </text>
+
+          <!-- TOKEN 4: first irrigation (CRI stage) (Phenology / Manual Tag) -->
+          <g transform="translate(528, 56)">
+            <rect x="0" y="0" width="295" height="36" rx="6" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+            <text x="10" y="23" fill="#1E40AF" font-size="16" font-weight="700">first irrigation (CRI stage)</text>
+            <rect x="238" y="6" width="48" height="16" rx="3" fill="#2563EB"/>
+            <text x="242" y="18" fill="#FFFFFF" font-size="9" font-weight="700">STAGE</text>
+          </g>
+
+          <!-- Plain text closing dot -->
+          <text x="828" y="80" fill="#0F172A" font-size="18" font-weight="500">.</text>
+        </g>
+
+        <!-- Provenance & Token Quick Status Chips -->
+        <g transform="translate(24, 185)">
+          <line x1="0" y1="0" x2="862" y2="0" stroke="#F1F5F9" stroke-width="1"/>
+          
+          <text x="0" y="25" fill="#475569" font-size="11" font-weight="600">TOKENS ON THIS LINE (4 DETECTED):</text>
+
+          <!-- Token summary pills -->
+          <g transform="translate(200, 10)">
+            <rect x="0" y="0" width="145" height="24" rx="4" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+            <circle cx="12" cy="12" r="3" fill="#7C3AED"/>
+            <text x="22" y="16" fill="#5B21B6" font-size="11" font-weight="600">chlorpyriphos (98%)</text>
+
+            <rect x="155" y="0" width="110" height="24" rx="4" fill="#FEF2F2" stroke="#FECACA" stroke-width="1"/>
+            <circle cx="167" cy="12" r="3" fill="#DC2626"/>
+            <text x="177" y="16" fill="#991B1B" font-size="11" font-weight="600">termites (95%)</text>
+
+            <rect x="275" y="0" width="140" height="24" rx="4" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+            <circle cx="287" cy="12" r="3" fill="#059669"/>
+            <text x="297" y="16" fill="#065F46" font-size="11" font-weight="600">late wheat (99%)</text>
+
+            <rect x="425" y="0" width="140" height="24" rx="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+            <circle cx="437" cy="12" r="3" fill="#2563EB"/>
+            <text x="447" y="16" fill="#1E40AF" font-size="11" font-weight="600">CRI stage (Manual)</text>
+          </g>
+        </g>
+
+        <!-- Line Action Toolbar -->
+        <g transform="translate(24, 235)">
+          <!-- Save Line Button -->
+          <rect x="0" y="0" width="140" height="38" rx="8" fill="#047857"/>
+          <text x="22" y="24" fill="#FFFFFF" font-size="13" font-weight="700">Save Line [Ctrl+S]</text>
+
+          <!-- Approve All Button -->
+          <rect x="150" y="0" width="150" height="38" rx="8" fill="#F0FDF4" stroke="#86EFAC" stroke-width="1"/>
+          <text x="170" y="24" fill="#166534" font-size="12" font-weight="600">✓ Approve All [A]</text>
+
+          <!-- Reset Line Button -->
+          <rect x="310" y="0" width="110" height="38" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="330" y="24" fill="#475569" font-size="12" font-weight="600">Reset Line</text>
+
+          <!-- Keyboard Shortcuts Micro Bar -->
+          <text x="560" y="24" fill="#64748B" font-size="11">Shortcuts: <tspan font-weight="600" fill="#334155">←/→ Nav</tspan> • <tspan font-weight="600" fill="#334155">A: Approve</tspan> • <tspan font-weight="600" fill="#334155">1-8: Assign Entity</tspan></text>
+        </g>
+      </g>
+
+      <!-- VERIFICATION & PROVENANCE INSPECTOR TABLE (Below Canvas) -->
+      <g transform="translate(0, 375)">
+        <rect x="0" y="0" width="910" height="315" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        
+        <!-- Table Header -->
+        <rect x="0" y="0" width="910" height="36" rx="12" fill="#F8FAFC"/>
+        <line x1="0" y1="36" x2="910" y2="36" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="20" y="23" fill="#475569" font-size="11" font-weight="700">ENTITY PHRASE</text>
+        <text x="240" y="23" fill="#475569" font-size="11" font-weight="700">TYPE / CLASS</text>
+        <text x="390" y="23" fill="#475569" font-size="11" font-weight="700">OFFSETS</text>
+        <text x="490" y="23" fill="#475569" font-size="11" font-weight="700">CONFIDENCE</text>
+        <text x="610" y="23" fill="#475569" font-size="11" font-weight="700">PROVENANCE</text>
+        <text x="760" y="23" fill="#475569" font-size="11" font-weight="700">DECISION</text>
+
+        <!-- Table Row 1: Chlorpyriphos -->
+        <g transform="translate(0, 36)">
+          <line x1="0" y1="54" x2="910" y2="54" stroke="#F1F5F9" stroke-width="1"/>
+          <text x="20" y="32" fill="#0F172A" font-size="13" font-weight="600">chlorpyriphos 20 EC</text>
+          
+          <rect x="240" y="16" width="90" height="24" rx="4" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+          <text x="250" y="32" fill="#5B21B6" font-size="11" font-weight="700">CHEMICAL</text>
+
+          <text x="390" y="32" fill="#64748B" font-size="12" font-family="'JetBrains Mono', monospace">[6 : 25]</text>
+          
+          <!-- Confidence Gauge -->
+          <text x="490" y="32" fill="#047857" font-size="12" font-weight="700">98.4%</text>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#E2E8F0"/>
+          <rect x="540" y="24" width="44" height="6" rx="3" fill="#047857"/>
+
+          <!-- Provenance Badge -->
+          <rect x="610" y="16" width="105" height="24" rx="12" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="622" y="32" fill="#334155" font-size="11" font-weight="600">⚡ Model AI</text>
+
+          <!-- Action buttons -->
+          <rect x="760" y="15" width="60" height="26" rx="4" fill="#ECFDF5"/>
+          <text x="772" y="32" fill="#065F46" font-size="11" font-weight="600">Accept</text>
+          <rect x="830" y="15" width="55" height="26" rx="4" fill="#FEF2F2"/>
+          <text x="842" y="32" fill="#991B1B" font-size="11" font-weight="600">Delete</text>
+        </g>
+
+        <!-- Table Row 2: Termites -->
+        <g transform="translate(0, 90)">
+          <line x1="0" y1="54" x2="910" y2="54" stroke="#F1F5F9" stroke-width="1"/>
+          <text x="20" y="32" fill="#0F172A" font-size="13" font-weight="600">termites</text>
+          
+          <rect x="240" y="16" width="70" height="24" rx="4" fill="#FEF2F2" stroke="#FECACA" stroke-width="1"/>
+          <text x="250" y="32" fill="#991B1B" font-size="11" font-weight="700">PEST</text>
+
+          <text x="390" y="32" fill="#64748B" font-size="12" font-family="'JetBrains Mono', monospace">[73 : 81]</text>
+          
+          <text x="490" y="32" fill="#047857" font-size="12" font-weight="700">95.1%</text>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#E2E8F0"/>
+          <rect x="540" y="24" width="42" height="6" rx="3" fill="#047857"/>
+
+          <rect x="610" y="16" width="105" height="24" rx="12" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="622" y="32" fill="#334155" font-size="11" font-weight="600">⚡ Model AI</text>
+
+          <rect x="760" y="15" width="60" height="26" rx="4" fill="#ECFDF5"/>
+          <text x="772" y="32" fill="#065F46" font-size="11" font-weight="600">Accept</text>
+          <rect x="830" y="15" width="55" height="26" rx="4" fill="#FEF2F2"/>
+          <text x="842" y="32" fill="#991B1B" font-size="11" font-weight="600">Delete</text>
+        </g>
+
+        <!-- Table Row 3: Late Sown Wheat -->
+        <g transform="translate(0, 144)">
+          <line x1="0" y1="54" x2="910" y2="54" stroke="#F1F5F9" stroke-width="1"/>
+          <text x="20" y="32" fill="#0F172A" font-size="13" font-weight="600">late sown wheat</text>
+          
+          <rect x="240" y="16" width="70" height="24" rx="4" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+          <text x="250" y="32" fill="#065F46" font-size="11" font-weight="700">CROP</text>
+
+          <text x="390" y="32" fill="#64748B" font-size="12" font-family="'JetBrains Mono', monospace">[85 : 100]</text>
+          
+          <text x="490" y="32" fill="#047857" font-size="12" font-weight="700">99.2%</text>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#E2E8F0"/>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#047857"/>
+
+          <rect x="610" y="16" width="105" height="24" rx="12" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="622" y="32" fill="#334155" font-size="11" font-weight="600">⚡ Model AI</text>
+
+          <rect x="760" y="15" width="60" height="26" rx="4" fill="#ECFDF5"/>
+          <text x="772" y="32" fill="#065F46" font-size="11" font-weight="600">Accept</text>
+          <rect x="830" y="15" width="55" height="26" rx="4" fill="#FEF2F2"/>
+          <text x="842" y="32" fill="#991B1B" font-size="11" font-weight="600">Delete</text>
+        </g>
+
+        <!-- Table Row 4: CRI Stage (Manual Provenance Tag) -->
+        <g transform="translate(0, 198)">
+          <rect x="0" y="0" width="910" height="54" fill="#F0FDF4" opacity="0.6"/>
+          <line x1="0" y1="54" x2="910" y2="54" stroke="#F1F5F9" stroke-width="1"/>
+          <text x="20" y="32" fill="#0F172A" font-size="13" font-weight="700">first irrigation (CRI stage)</text>
+          
+          <rect x="240" y="16" width="85" height="24" rx="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+          <text x="250" y="32" fill="#1E40AF" font-size="11" font-weight="700">STAGE</text>
+
+          <text x="390" y="32" fill="#64748B" font-size="12" font-family="'JetBrains Mono', monospace">[122 : 148]</text>
+          
+          <text x="490" y="32" fill="#166534" font-size="12" font-weight="700">100%</text>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#E2E8F0"/>
+          <rect x="540" y="24" width="45" height="6" rx="3" fill="#16A34A"/>
+
+          <!-- Manual Provenance Badge -->
+          <rect x="610" y="16" width="125" height="24" rx="12" fill="#DCFCE7" stroke="#86EFAC" stroke-width="1"/>
+          <text x="622" y="32" fill="#166534" font-size="11" font-weight="700">✍ Annotator</text>
+
+          <!-- Verified state -->
+          <rect x="760" y="15" width="75" height="26" rx="4" fill="#047857"/>
+          <text x="770" y="32" fill="#FFFFFF" font-size="11" font-weight="600">✓ Saved</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- RIGHT SIDEBAR: CATEGORIZED 36 ENTITY TYPES PALETTE (450px) -->
+    <g transform="translate(930, 0)">
+      <rect x="0" y="0" width="445" height="690" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      
+      <!-- Palette Header -->
+      <rect x="0" y="0" width="445" height="50" rx="14" fill="#F8FAFC"/>
+      <line x1="0" y1="50" x2="445" y2="50" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="30" fill="#0F172A" font-size="13" font-weight="700">AgNER Entity Palette</text>
+      <text x="320" y="30" fill="#047857" font-size="11" font-weight="600">36 Entity Types</text>
+
+      <!-- Search Input -->
+      <g transform="translate(16, 62)">
+        <rect x="0" y="0" width="413" height="36" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="14" y="23" fill="#94A3B8" font-size="12">Search entities by name or type... [/]</text>
+      </g>
+
+      <!-- Semantic Category Tabs -->
+      <g transform="translate(16, 110)">
+        <rect x="0" y="0" width="60" height="26" rx="6" fill="#047857"/>
+        <text x="18" y="17" fill="#FFFFFF" font-size="11" font-weight="700">All</text>
+
+        <rect x="68" y="0" width="70" height="26" rx="6" fill="#ECFDF5"/>
+        <text x="78" y="17" fill="#065F46" font-size="11" font-weight="600">Crops (8)</text>
+
+        <rect x="146" y="0" width="70" height="26" rx="6" fill="#FEF2F2"/>
+        <text x="156" y="17" fill="#991B1B" font-size="11" font-weight="600">Pests (8)</text>
+
+        <rect x="224" y="0" width="75" height="26" rx="6" fill="#F5F3FF"/>
+        <text x="234" y="17" fill="#5B21B6" font-size="11" font-weight="600">Chems (6)</text>
+
+        <rect x="307" y="0" width="65" height="26" rx="6" fill="#EFF6FF"/>
+        <text x="317" y="17" fill="#1E40AF" font-size="11" font-weight="600">Stages</text>
+
+        <rect x="380" y="0" width="50" height="26" rx="6" fill="#FFFBEB"/>
+        <text x="390" y="17" fill="#92400E" font-size="11" font-weight="600">Soil</text>
+      </g>
+
+      <!-- Entity Grid List -->
+      <g transform="translate(16, 150)">
+        
+        <!-- Category 1: Crops & Varieties -->
+        <text x="0" y="16" fill="#64748B" font-size="10" font-weight="700">CROPS &amp; BOTANICAL VARIETIES</text>
+        <g transform="translate(0, 26)">
+          <!-- CROP -->
+          <rect x="0" y="0" width="195" height="34" rx="6" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+          <rect x="8" y="6" width="22" height="22" rx="4" fill="#059669"/>
+          <text x="15" y="21" fill="#FFFFFF" font-size="10" font-weight="700">1</text>
+          <text x="36" y="21" fill="#065F46" font-size="12" font-weight="700">CROP</text>
+          <text x="145" y="21" fill="#047857" font-size="10">Wheat...</text>
+
+          <!-- VARIETY -->
+          <rect x="210" y="0" width="195" height="34" rx="6" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+          <rect x="218" y="6" width="22" height="22" rx="4" fill="#059669"/>
+          <text x="225" y="21" fill="#FFFFFF" font-size="10" font-weight="700">2</text>
+          <text x="246" y="21" fill="#065F46" font-size="12" font-weight="700">VARIETY</text>
+          <text x="350" y="21" fill="#047857" font-size="10">PBW-725</text>
+        </g>
+
+        <!-- Category 2: Pathogens, Pests & Weeds -->
+        <text x="0" y="86" fill="#64748B" font-size="10" font-weight="700">PESTS, PATHOGENS &amp; WEEDS</text>
+        <g transform="translate(0, 96)">
+          <!-- PEST -->
+          <rect x="0" y="0" width="195" height="34" rx="6" fill="#FEF2F2" stroke="#FECACA" stroke-width="1"/>
+          <rect x="8" y="6" width="22" height="22" rx="4" fill="#DC2626"/>
+          <text x="15" y="21" fill="#FFFFFF" font-size="10" font-weight="700">3</text>
+          <text x="36" y="21" fill="#991B1B" font-size="12" font-weight="700">PEST</text>
+          <text x="145" y="21" fill="#DC2626" font-size="10">Aphid...</text>
+
+          <!-- DISEASE -->
+          <rect x="210" y="0" width="195" height="34" rx="6" fill="#FEF2F2" stroke="#FECACA" stroke-width="1"/>
+          <rect x="218" y="6" width="22" height="22" rx="4" fill="#DC2626"/>
+          <text x="225" y="21" fill="#FFFFFF" font-size="10" font-weight="700">4</text>
+          <text x="246" y="21" fill="#991B1B" font-size="12" font-weight="700">DISEASE</text>
+          <text x="345" y="21" fill="#DC2626" font-size="10">Yellow Rust</text>
+        </g>
+
+        <!-- Category 3: Agrochemicals & Fertilizers -->
+        <text x="0" y="156" fill="#64748B" font-size="10" font-weight="700">AGROCHEMICALS &amp; NUTRIENTS</text>
+        <g transform="translate(0, 166)">
+          <!-- CHEMICAL -->
+          <rect x="0" y="0" width="195" height="34" rx="6" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+          <rect x="8" y="6" width="22" height="22" rx="4" fill="#7C3AED"/>
+          <text x="15" y="21" fill="#FFFFFF" font-size="10" font-weight="700">5</text>
+          <text x="36" y="21" fill="#5B21B6" font-size="12" font-weight="700">CHEMICAL</text>
+          <text x="135" y="21" fill="#7C3AED" font-size="10">Pesticide</text>
+
+          <!-- FERTILIZER -->
+          <rect x="210" y="0" width="195" height="34" rx="6" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+          <rect x="218" y="6" width="22" height="22" rx="4" fill="#D97706"/>
+          <text x="225" y="21" fill="#FFFFFF" font-size="10" font-weight="700">6</text>
+          <text x="246" y="21" fill="#92400E" font-size="12" font-weight="700">FERTILIZER</text>
+          <text x="350" y="21" fill="#D97706" font-size="10">Urea, DAP</text>
+        </g>
+
+        <!-- Category 4: Phenology & Agricultural Operations -->
+        <text x="0" y="226" fill="#64748B" font-size="10" font-weight="700">PHENOLOGY &amp; OPERATIONS</text>
+        <g transform="translate(0, 236)">
+          <!-- STAGE -->
+          <rect x="0" y="0" width="195" height="34" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+          <rect x="8" y="6" width="22" height="22" rx="4" fill="#2563EB"/>
+          <text x="15" y="21" fill="#FFFFFF" font-size="10" font-weight="700">7</text>
+          <text x="36" y="21" fill="#1E40AF" font-size="12" font-weight="700">STAGE</text>
+          <text x="140" y="21" fill="#2563EB" font-size="10">CRI, Tillering</text>
+
+          <!-- OPERATION -->
+          <rect x="210" y="0" width="195" height="34" rx="6" fill="#ECFEFF" stroke="#A5F3FC" stroke-width="1"/>
+          <rect x="218" y="6" width="22" height="22" rx="4" fill="#0891B2"/>
+          <text x="225" y="21" fill="#FFFFFF" font-size="10" font-weight="700">8</text>
+          <text x="246" y="21" fill="#155E75" font-size="12" font-weight="700">OPERATION</text>
+          <text x="345" y="21" fill="#0891B2" font-size="10">Irrigation</text>
+        </g>
+
+        <!-- Category 5: Soil, Weather & Dosage -->
+        <text x="0" y="296" fill="#64748B" font-size="10" font-weight="700">SOIL, WEATHER &amp; MEASUREMENTS</text>
+        <g transform="translate(0, 306)">
+          <rect x="0" y="0" width="130" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="12" y="20" fill="#334155" font-size="11" font-weight="600">DOSAGE (g/ha)</text>
+
+          <rect x="140" y="0" width="130" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="152" y="20" fill="#334155" font-size="11" font-weight="600">WEATHER</text>
+
+          <rect x="280" y="0" width="125" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="292" y="20" fill="#334155" font-size="11" font-weight="600">SOIL_TYPE</text>
+        </g>
+
+        <!-- Category 6: Livestock & Veterinary -->
+        <text x="0" y="366" fill="#64748B" font-size="10" font-weight="700">LIVESTOCK &amp; ANIMAL HUSBANDRY</text>
+        <g transform="translate(0, 376)">
+          <rect x="0" y="0" width="130" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="12" y="20" fill="#334155" font-size="11" font-weight="600">ANIMAL_BREED</text>
+
+          <rect x="140" y="0" width="130" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="152" y="20" fill="#334155" font-size="11" font-weight="600">VET_VACCINE</text>
+
+          <rect x="280" y="0" width="125" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="292" y="20" fill="#334155" font-size="11" font-weight="600">FODDER</text>
+        </g>
+
+        <!-- Quick Help Note -->
+        <g transform="translate(0, 440)">
+          <rect x="0" y="0" width="413" height="70" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="14" y="24" fill="#047857" font-size="11" font-weight="700">💡 Tip for Fast Annotation:</text>
+          <text x="14" y="42" fill="#475569" font-size="11">Highlight any word or phrase with cursor, then tap keys [1] - [8]</text>
+          <text x="14" y="58" fill="#475569" font-size="11">to immediately apply that entity tag without lifting hands from keyboard.</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- STICKY ANNOTATION BOTTOM BAR (Export & Status Station) -->
+  <g transform="translate(32, 880)">
+    <rect x="0" y="0" width="1376" height="64" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" filter="url(#cardShadow)"/>
+    
+    <!-- Left: Status Counters -->
+    <g transform="translate(20, 16)">
+      <!-- Page Badge -->
+      <rect x="0" y="0" width="130" height="32" rx="6" fill="#F1F5F9"/>
+      <text x="10" y="20" fill="#475569" font-size="12">Page <tspan font-weight="700" fill="#0F172A">2</tspan> of 4 (2 left)</text>
+
+      <!-- Line Badge -->
+      <rect x="140" y="0" width="170" height="32" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+      <text x="150" y="20" fill="#1E40AF" font-size="12" font-weight="700">Line 14 <tspan font-weight="400">of 48</tspan> (34 remaining)</text>
+
+      <!-- Annotations Done -->
+      <rect x="320" y="0" width="270" height="32" rx="6" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+      <text x="330" y="20" fill="#065F46" font-size="12" font-weight="700">Done: 34 <tspan font-weight="400">(6 manual, 28 model)</tspan></text>
+    </g>
+
+    <!-- Center: Progress Bar -->
+    <g transform="translate(680, 22)">
+      <text x="0" y="14" fill="#64748B" font-size="12">Progress:</text>
+      <rect x="65" y="4" width="140" height="10" rx="5" fill="#E2E8F0"/>
+      <rect x="65" y="4" width="67" height="10" rx="5" fill="#047857"/>
+      <text x="215" y="14" fill="#0F172A" font-size="12" font-weight="700">48%</text>
+    </g>
+
+    <!-- Right: EXPORT BUTTONS (Only JSON file and JSONL file) -->
+    <g transform="translate(1030, 14)">
+      <!-- Primary Download JSON file -->
+      <rect x="0" y="0" width="160" height="36" rx="8" fill="#047857"/>
+      <path d="M18 18V24M14 20L18 24L22 20" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+      <text x="28" y="23" fill="#FFFFFF" font-size="12" font-weight="700">Download JSON file</text>
+
+      <!-- Dropdown Split / JSONL Trigger -->
+      <rect x="170" y="0" width="160" height="36" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+      <path d="M188 18V24M184 20L188 24L192 20" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+      <text x="200" y="23" fill="#0F172A" font-size="12" font-weight="600">Download JSONL file</text>
+    </g>
+  </g>
+</svg>
