@@ -14,6 +14,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import AutoModelForTokenClassification, AutoTokenizer
 
+# Optimize CPU threads to prevent thread pool contention and memory spikes in container environments
+torch.set_num_threads(int(os.environ.get("TORCH_THREADS", 2)))
+if hasattr(torch, "set_num_interop_threads"):
+    try:
+        torch.set_num_interop_threads(1)
+    except Exception:
+        pass
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 # Auto-detect model directory: checks python-ai-service/model, NERPROJECT/NER-roberta-base_512, or MODEL_DIR env
@@ -68,7 +76,11 @@ class PredictRequest(BaseModel):
 
 def split_chunks(text):
     """Yield lists of (word, start, end) with at most CHUNK_WORDS words."""
+    if not text:
+        return
     words = [(m.group(), m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+    if not words:
+        return
     for i in range(0, len(words), CHUNK_WORDS):
         yield words[i:i + CHUNK_WORDS]
 
@@ -79,11 +91,16 @@ def split_label(label):
     return None, label
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def predict_chunk(words):
+    if not words:
+        return {}
     enc = tokenizer([w[0] for w in words], is_split_into_words=True,
                     return_tensors="pt", truncation=True, max_length=512)
-    probs = torch.softmax(model(**enc).logits[0], dim=-1)
+    logits = model(**enc).logits
+    if logits.shape[0] == 0:
+        return {}
+    probs = torch.softmax(logits[0], dim=-1)
     word_ids = enc.word_ids()
     seen, per_word = set(), {}
     for tok_idx, wid in enumerate(word_ids):
@@ -97,8 +114,12 @@ def predict_chunk(words):
 
 
 def extract_entities(text):
+    if not text or not text.strip():
+        return []
     entities = []
     for words in split_chunks(text):
+        if not words:
+            continue
         per_word = predict_chunk(words)
         cur = None
         for wid in range(len(words)):
@@ -119,9 +140,13 @@ def extract_entities(text):
                 entities.append(cur)
     out = []
     for e in entities:
-        confs = e.pop("_confs")
-        while e["end"] > e["start"] + 1 and text[e["end"] - 1] in ".,;:!?)\"'":
+        confs = e.pop("_confs", [])
+        if not confs:
+            continue
+        while e["end"] > e["start"] + 1 and e["end"] <= len(text) and text[e["end"] - 1] in ".,;:!?)\"'":
             e["end"] -= 1
+        if e["end"] <= e["start"]:
+            continue
         e["text"] = text[e["start"]:e["end"]]
         e["confidence"] = round(sum(confs) / len(confs), 4)
         out.append(e)
