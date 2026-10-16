@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { uploadDocument } from './api.js';
 import DocumentView from './pages/DocumentView.jsx';
+import EntityPaletteSidebar from './components/EntityPaletteSidebar.jsx';
+import { AnnotationProvider } from './context/AnnotationContext.jsx';
 import { Upload } from "lucide-react";
 
 export default function App() {
@@ -16,6 +18,7 @@ export default function App() {
     try {
       const doc = await uploadDocument(file);
       setCurrent(doc);
+      setSidebarCollapsed(false); // Ensure sidebar is displayed when annotating
     } catch (err) { setError(err.message); }
     setLoading(false);
     e.target.value = '';
@@ -26,73 +29,98 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
-      {/* Top Navigation Bar */}
-      <header className="border-b border-slate-200 bg-white shadow-xs">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">
-                CSIO  NER Annotation 
-              </h1>
-              <p className="text-xs text-slate-500">
-                
-              </p>
+    <AnnotationProvider>
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
+        {/* Top Navigation Bar */}
+        <header className="border-b border-slate-200 bg-white shadow-xs">
+          <div className="mx-auto flex max-w-[1536px] items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                  CSIO NER Annotation Studio
+                </h1>
+                <p className="text-xs text-slate-500">
+                  AgNER Precision Annotation &amp; Dataset Curation Platform
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                {sidebarCollapsed ? 'Show Entity Sidebar' : 'Hide Entity Sidebar'}
+              </button>
             </div>
           </div>
+        </header>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-            >
-              {sidebarCollapsed ? 'Show Documents Sidebar' : 'Hide Sidebar'}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <div className="mx-auto max-w-7xl p-6">
-        {error && (
-          <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800">
-            {error}
-          </div>
-        )}
-
-        <div className={`grid gap-6 transition-all ${sidebarCollapsed ? 'grid-cols-1' : 'md:grid-cols-[18rem_1fr]'}`}>
-          {/* Sidebar */}
-          {!sidebarCollapsed && (
-            <aside className="space-y-4">
-              <label className="block cursor-pointer rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/40 p-5 text-center transition hover:bg-blue-50 hover:border-blue-400">
-                <span className="block text-sm font-bold text-blue-700">
-                  {loading ? 'Running NER model… please wait' : '+ Upload Document (JSON / JSONL)'}
-                </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Upload .json or .jsonl file
-                </span>
-                <input
-                  type="file"
-                  accept=".json,.jsonl,application/json,application/x-jsonlines,text/plain"
-                  className="hidden"
-                  onChange={onFile}
-                  disabled={loading}
-                />
-              </label>
-            </aside>
+        {/* Main Container */}
+        <div className="mx-auto max-w-[1536px] p-6">
+          {error && (
+            <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800">
+              {error}
+            </div>
           )}
 
-          {/* Main Stage */}
-          <main className="min-w-0">
-            {current ? (
-              <DocumentView doc={current} onChange={handleDocChange} />
-            ) : (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center shadow-xs">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 text-2xl font-bold">
-                   <Upload/>
-                </div>
+          <div className={`grid gap-6 transition-all ${sidebarCollapsed ? 'grid-cols-1' : 'md:grid-cols-[19rem_1fr] lg:grid-cols-[21rem_1fr]'}`}>
+            {/* Dedicated Sidebar Div */}
+            {!sidebarCollapsed && (
+              <aside className="space-y-4">
+                {current ? (
+                  <>
+                    {/* Compact Upload Box when document is active */}
+                    <label className="block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-white p-3 text-center transition hover:bg-slate-50 hover:border-blue-400 shadow-2xs">
+                      <span className="block text-xs font-bold text-blue-700">
+                        {loading ? 'Running NER model… please wait' : '+ Upload Another Document'}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500">
+                        .json or .jsonl file
+                      </span>
+                      <input
+                        type="file"
+                        accept=".json,.jsonl,application/json,application/x-jsonlines,text/plain"
+                        className="hidden"
+                        onChange={onFile}
+                        disabled={loading}
+                      />
+                    </label>
+
+                    {/* Dedicated Entity Categories Palette for Manual Annotation */}
+                    <EntityPaletteSidebar />
+                  </>
+                ) : (
+                  /* Full Upload Zone when no document is loaded */
+                  <label className="block cursor-pointer rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/40 p-5 text-center transition hover:bg-blue-50 hover:border-blue-400">
+                    <span className="block text-sm font-bold text-blue-700">
+                      {loading ? 'Running NER model… please wait' : '+ Upload Document (JSON / JSONL)'}
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Upload .json or .jsonl file
+                    </span>
+                    <input
+                      type="file"
+                      accept=".json,.jsonl,application/json,application/x-jsonlines,text/plain"
+                      className="hidden"
+                      onChange={onFile}
+                      disabled={loading}
+                    />
+                  </label>
+                )}
+              </aside>
+            )}
+
+            {/* Main Stage */}
+            <main className="min-w-0">
+              {current ? (
+                <DocumentView doc={current} onChange={handleDocChange} />
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center shadow-xs">
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 text-2xl font-bold">
+                     <Upload/>
+                  </div>
                 <h3 className="text-base font-bold text-slate-900 mb-1">
                   Start Document Annotation
                 </h3>
@@ -115,5 +143,6 @@ export default function App() {
         </div>
       </div>
     </div>
-  );
+  </AnnotationProvider>
+);
 }

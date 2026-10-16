@@ -1,62 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ENTITY_TYPES, getConfidenceThresholdClass } from '../utils/textUtils.jsx';
-
-const CATEGORY_COLORS = {
-  // Crops & Plants
-  Crop: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  Fruit: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  Vegetable: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  Food_Item: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  
-  // Diseases & Organisms
-  Disease: 'bg-rose-100 text-rose-900 border-rose-300',
-  Organism: 'bg-rose-100 text-rose-900 border-rose-300',
-  Agri_Pollution: 'bg-rose-100 text-rose-900 border-rose-300',
-  Agri_Waste: 'bg-amber-100 text-amber-900 border-amber-300',
-  
-  // Chemicals & Treatments
-  Chemical: 'bg-teal-100 text-teal-900 border-teal-300',
-  Treatment: 'bg-teal-100 text-teal-900 border-teal-300',
-  Nutrient: 'bg-cyan-100 text-cyan-900 border-cyan-300',
-  
-  // Weather & Environment
-  Weather: 'bg-sky-100 text-sky-900 border-sky-300',
-  Rainfall: 'bg-sky-100 text-sky-900 border-sky-300',
-  Temp: 'bg-sky-100 text-sky-900 border-sky-300',
-  Humidity: 'bg-sky-100 text-sky-900 border-sky-300',
-  Season: 'bg-sky-100 text-sky-900 border-sky-300',
-  Natural_Disaster: 'bg-red-100 text-red-900 border-red-300',
-  Natural_Resource: 'bg-lime-100 text-lime-900 border-lime-300',
-  Soil: 'bg-amber-100 text-amber-900 border-amber-400',
-  
-  // Quantities & Time
-  Quantity: 'bg-purple-100 text-purple-900 border-purple-300',
-  Other_Quantity: 'bg-purple-100 text-purple-900 border-purple-300',
-  Field_Area: 'bg-purple-100 text-purple-900 border-purple-300',
-  Duration: 'bg-purple-100 text-purple-900 border-purple-300',
-  Money: 'bg-emerald-100 text-emerald-900 border-emerald-400',
-  Date_and_Time: 'bg-blue-100 text-blue-900 border-blue-300',
-  Event: 'bg-blue-100 text-blue-900 border-blue-300',
-  
-  // Entity Actors
-  Person: 'bg-indigo-100 text-indigo-900 border-indigo-300',
-  Organization: 'bg-indigo-100 text-indigo-900 border-indigo-300',
-  Location: 'bg-violet-100 text-violet-900 border-violet-300',
-  Policy: 'bg-slate-200 text-slate-900 border-slate-400',
-  
-  // Tech & Methods
-  Agri_Method: 'bg-amber-100 text-amber-900 border-amber-300',
-  Agri_Process: 'bg-amber-100 text-amber-900 border-amber-300',
-  Technology: 'bg-slate-100 text-slate-800 border-slate-300',
-  ML_Model: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300',
-  Citation: 'bg-slate-100 text-slate-700 border-slate-300',
-  Other: 'bg-slate-100 text-slate-800 border-slate-300',
-};
-
+import React, { useRef, useMemo } from 'react';
+import { useAnnotation } from '../context/AnnotationContext.jsx';
+import { getConfidenceThresholdClass } from '../utils/textUtils.jsx';
 
 /**
  * Label Studio-style Interactive Text Annotator.
- * Allows user to highlight any span of text to manually annotate new entities,
+ * Allows user to highlight any span of text to manually annotate new entities via the dedicated sidebar,
  * or click on existing entities to change their label or remove them.
  */
 export default function LabelStudioAnnotator({
@@ -69,9 +17,13 @@ export default function LabelStudioAnnotator({
   onDeleteEntity,
 }) {
   const containerRef = useRef(null);
-  const [selectedSpan, setSelectedSpan] = useState(null); // { text, localStart, localEnd, globalStart, globalEnd }
-  const [activeEditingEntity, setActiveEditingEntity] = useState(null);
-  const [labelSearch, setLabelSearch] = useState('');
+  const annotation = useAnnotation();
+
+  const selectedSpan = annotation?.selectedSpan;
+  const setSelectedSpan = annotation?.setSelectedSpan;
+  const activeEditingEntity = annotation?.activeEditingEntity;
+  const setActiveEditingEntity = annotation?.setActiveEditingEntity;
+  const clearSelection = annotation?.clearSelection;
 
   // Filter entities that fall within this sentence range
   const sentenceEntities = useMemo(() => {
@@ -89,7 +41,7 @@ export default function LabelStudioAnnotator({
 
     const selectedText = selection.toString().trim();
     if (!selectedText) {
-      setSelectedSpan(null);
+      if (clearSelection) clearSelection();
       return;
     }
 
@@ -131,31 +83,17 @@ export default function LabelStudioAnnotator({
       const globalStart = sentenceStart + localStart;
       const globalEnd = sentenceStart + localEnd;
 
-      setSelectedSpan({
-        text: selectedText,
-        localStart,
-        localEnd,
-        globalStart,
-        globalEnd,
-      });
-      setLabelSearch('');
-      setActiveEditingEntity(null);
+      if (setSelectedSpan) {
+        setSelectedSpan({
+          text: selectedText,
+          localStart,
+          localEnd,
+          globalStart,
+          globalEnd,
+        });
+      }
+      if (setActiveEditingEntity) setActiveEditingEntity(null);
     }
-  };
-
-  const applyLabel = (labelName) => {
-    if (!selectedSpan) return;
-    onAddEntity({
-      text: selectedSpan.text,
-      label: labelName,
-      start: selectedSpan.globalStart,
-      end: selectedSpan.globalEnd,
-      confidence: 1.0,
-      source: 'human',
-      status: 'approved',
-    });
-    setSelectedSpan(null);
-    window.getSelection()?.removeAllRanges();
   };
 
   // Render tokens/spans with interactive entity highlights
@@ -189,8 +127,8 @@ export default function LabelStudioAnnotator({
           }`}
           onClick={(e) => {
             e.stopPropagation();
-            setActiveEditingEntity(ent);
-            setSelectedSpan(null);
+            if (setActiveEditingEntity) setActiveEditingEntity(ent);
+            if (clearSelection) clearSelection();
           }}
           title={`Click to edit · ${ent.label} · ${isManual ? 'Manual Annotation' : `Confidence: ${(Number(ent.confidence ?? 1) * 100).toFixed(1)}%`}`}
         >
@@ -213,6 +151,9 @@ export default function LabelStudioAnnotator({
             onClick={(e) => {
               e.stopPropagation();
               onDeleteEntity(ent);
+              if (activeEditingEntity && activeEditingEntity._id === ent._id) {
+                if (setActiveEditingEntity) setActiveEditingEntity(null);
+              }
             }}
             title="Remove entity tag"
           >
@@ -224,12 +165,12 @@ export default function LabelStudioAnnotator({
       currentPos = entEndInSent;
     });
 
-    // Remainder of sentence
+    // Remainder of the sentence after the last entity
     if (currentPos < sentenceEnd) {
-      const remaining = sentenceText.slice(currentPos - sentenceStart);
+      const textAfter = sentenceText.slice(currentPos - sentenceStart);
       pieces.push(
-        <span key={`text-end`} className="text-slate-800 select-text">
-          {remaining}
+        <span key={`text-end-${currentPos}`} className="text-slate-800 select-text">
+          {textAfter}
         </span>
       );
     }
@@ -237,161 +178,36 @@ export default function LabelStudioAnnotator({
     return pieces;
   };
 
-  const filteredLabels = useMemo(() => {
-    if (!labelSearch) return ENTITY_TYPES;
-    return ENTITY_TYPES.filter((t) => t.toLowerCase().includes(labelSearch.toLowerCase()));
-  }, [labelSearch]);
-
   return (
-    <div className="space-y-4">
-      {/* Interactive Sentence Reading Workspace */}
+    <div className="space-y-3">
+      {/* Interactive Sentence Text Box */}
       <div
         ref={containerRef}
         onMouseUp={handleMouseUp}
-        className="relative rounded-xl border border-slate-200 bg-white p-6 shadow-sm leading-8 text-base text-slate-900 transition focus-within:border-blue-400"
+        className={`relative rounded-xl border bg-white p-6 shadow-sm leading-8 text-base text-slate-900 transition ${
+          selectedSpan
+            ? 'border-emerald-400 ring-2 ring-emerald-100'
+            : 'border-slate-200 focus-within:border-blue-400'
+        }`}
       >
         <div className="mb-2.5 flex items-center justify-between gap-2 text-xs border-b border-slate-100 pb-2">
           <div className="font-semibold text-slate-700">Sentence Text:</div>
-          <div className="text-slate-400 font-medium">Tip· Highlight words with cursor to tag manually</div>
-        </div>
-        
-        <div className="p-1 min-h-[3.5rem] text-[17px] leading-relaxed selection:bg-blue-200 selection:text-blue-900">
-          {renderAnnotatedText()}
-        </div>
-      </div>
-
-      {/* Manual Annotation Toolbar / Popover: Triggered when user selects text */}
-      {selectedSpan && (
-        <div className="rounded-xl border border-blue-300 bg-blue-50/70 p-3 shadow-sm transition-all animate-fadeIn">
-          {/* Compact Header: Selected text context, character offsets, filter input & cancel */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-blue-200/70">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 shrink-0">
-                Annotate:
+          <div className="text-slate-500 font-medium">
+            {selectedSpan ? (
+              <span className="text-emerald-700 font-bold inline-flex items-center gap-1.5 animate-fadeIn">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Selected: "{selectedSpan.text}" → Pick an entity tag from the sidebar
               </span>
-              <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-900 border border-blue-200 truncate max-w-[14rem] sm:max-w-md shadow-2xs">
-                "{selectedSpan.text}"
-              </span>
-              <span className="text-[11px] font-mono text-slate-500 shrink-0">
-                [{selectedSpan.localStart}:{selectedSpan.localEnd}]
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Filter 36 entities..."
-                  value={labelSearch}
-                  onChange={(e) => setLabelSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setSelectedSpan(null);
-                    if (e.key === 'Enter' && filteredLabels.length === 1) {
-                      applyLabel(filteredLabels[0]);
-                    }
-                  }}
-                  className="w-44 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
-                  autoFocus
-                />
-                {labelSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setLabelSearch('')}
-                    className="absolute right-1.5 top-1 text-xs text-slate-400 hover:text-slate-700"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedSpan(null)}
-                className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded border border-transparent hover:border-slate-300 hover:bg-white transition font-medium cursor-pointer"
-                title="Cancel selection (Esc)"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-
-          {/* All 36 Entity Badges: Ultra-compact, easy-to-read flex wrap */}
-          <div className="flex flex-wrap gap-1 max-h-48 overflow-y-auto pr-0.5">
-            {filteredLabels.map((fl) => (
-              <button
-                key={fl}
-                type="button"
-                onClick={() => applyLabel(fl)}
-                className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition hover:scale-105 active:scale-95 shadow-2xs whitespace-nowrap cursor-pointer ${
-                  CATEGORY_COLORS[fl] || 'bg-white text-slate-800 border-slate-300'
-                }`}
-                title={`Annotate "${selectedSpan.text}" as ${fl}`}
-              >
-                + {fl}
-              </button>
-            ))}
-            {filteredLabels.length === 0 && (
-              <div className="text-xs text-slate-500 py-1 italic">
-                No matching entity found for "{labelSearch}". Press Esc or clear search.
-              </div>
+            ) : (
+              'Highlight words with cursor to tag directly from the sidebar'
             )}
           </div>
         </div>
-      )}
 
-      {/* Entity Edit Drawer: When clicking an existing entity */}
-      {activeEditingEntity && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-indigo-900">
-                Editing Entity Tag:
-              </span>
-              <span className="font-bold text-slate-900">
-                "{activeEditingEntity.text}"
-              </span>
-              <span className="text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded font-mono">
-                Current: {activeEditingEntity.label}
-              </span>
-            </div>
-            <button
-              onClick={() => setActiveEditingEntity(null)}
-              className="text-xs text-slate-500 hover:text-slate-800 font-medium"
-            >
-              Done
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-600">Change label to:</span>
-            <select
-              value={activeEditingEntity.label}
-              onChange={(e) => {
-                onUpdateEntity(activeEditingEntity, { label: e.target.value });
-                setActiveEditingEntity((prev) => ({ ...prev, label: e.target.value }));
-              }}
-              className="rounded border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-800 focus:border-blue-500 focus:outline-none"
-            >
-              {ENTITY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => {
-                onDeleteEntity(activeEditingEntity);
-                setActiveEditingEntity(null);
-              }}
-              className="rounded bg-rose-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-700"
-            >
-              Remove Tag
-            </button>
-          </div>
+        <div className="p-1 min-h-[3.5rem] text-[17px] leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
+          {renderAnnotatedText()}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
 import { ENTITY_TYPES, getConfidenceThresholdClass } from '../utils/textUtils.jsx';
+import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 export default function LineAnnotationCard({
   lineItem,
@@ -24,6 +25,8 @@ export default function LineAnnotationCard({
     segIndex,
   } = lineItem;
 
+  const annotation = useAnnotation();
+
   // Local entities for this sentence to support immediate manipulation, Save & Reset
   const [lineEntities, setLineEntities] = useState([]);
   const [isDirty, setIsDirty] = useState(false);
@@ -36,9 +39,15 @@ export default function LineAnnotationCard({
     setIsDirty(false);
   }, [initialEntities]);
 
-  // Clear success notification only when navigating away to another line
+  // Clear success notification & selection only when navigating away to another line
   useEffect(() => {
     setSaveSuccessMsg('');
+    if (annotation?.clearSelection) {
+      annotation.clearSelection();
+    }
+    if (annotation?.setActiveEditingEntity) {
+      annotation.setActiveEditingEntity(null);
+    }
   }, [globalLineNumber]);
 
   // Handle adding a new entity manually (not identified by model)
@@ -103,6 +112,20 @@ export default function LineAnnotationCard({
     setIsDirty(true);
     setSaveSuccessMsg('');
   };
+
+  // Register this active line's annotation callbacks with context so the sidebar can trigger actions directly
+  useEffect(() => {
+    if (annotation?.registerLineAnnotator) {
+      annotation.registerLineAnnotator({
+        onAddEntity: handleAddEntity,
+        onUpdateEntity: handleUpdateEntity,
+        onDeleteEntity: handleDeleteEntity,
+        sentenceStart,
+        sentenceEnd,
+        sentenceText,
+      });
+    }
+  }, [annotation?.registerLineAnnotator, sentenceStart, sentenceEnd, sentenceText]);
 
   // Save current line annotations to backend
   const handleSave = async () => {

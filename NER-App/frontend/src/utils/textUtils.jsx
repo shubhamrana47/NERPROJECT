@@ -39,6 +39,96 @@ export const ENTITY_TYPES = [
   'Weather',
 ];
 
+export const ENTITY_GROUPS = [
+  {
+    name: 'Crops & Botanical',
+    icon: '🌾',
+    types: ['Crop', 'Fruit', 'Vegetable', 'Food_Item'],
+  },
+  {
+    name: 'Pests & Diseases',
+    icon: '🐛',
+    types: ['Disease', 'Organism', 'Agri_Pollution', 'Agri_Waste'],
+  },
+  {
+    name: 'Chemicals & Nutrients',
+    icon: '🧪',
+    types: ['Chemical', 'Treatment', 'Nutrient'],
+  },
+  {
+    name: 'Weather & Environment',
+    icon: '⛅',
+    types: ['Weather', 'Rainfall', 'Temp', 'Humidity', 'Season', 'Natural_Disaster', 'Natural_Resource', 'Soil'],
+  },
+  {
+    name: 'Quantities & Time',
+    icon: '📏',
+    types: ['Quantity', 'Other_Quantity', 'Field_Area', 'Duration', 'Money', 'Date_and_Time', 'Event'],
+  },
+  {
+    name: 'Actors & Policy',
+    icon: '🏛️',
+    types: ['Person', 'Organization', 'Location', 'Policy'],
+  },
+  {
+    name: 'Methods & Technology',
+    icon: '⚙️',
+    types: ['Agri_Method', 'Agri_Process', 'Technology', 'ML_Model', 'Citation', 'Other'],
+  },
+];
+
+export const CATEGORY_COLORS = {
+  // Crops & Plants
+  Crop: 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200',
+  Fruit: 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200',
+  Vegetable: 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200',
+  Food_Item: 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200',
+
+  // Diseases & Organisms
+  Disease: 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200',
+  Organism: 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200',
+  Agri_Pollution: 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200',
+  Agri_Waste: 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200',
+
+  // Chemicals & Treatments
+  Chemical: 'bg-teal-100 text-teal-900 border-teal-300 hover:bg-teal-200',
+  Treatment: 'bg-teal-100 text-teal-900 border-teal-300 hover:bg-teal-200',
+  Nutrient: 'bg-cyan-100 text-cyan-900 border-cyan-300 hover:bg-cyan-200',
+
+  // Weather & Environment
+  Weather: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200',
+  Rainfall: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200',
+  Temp: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200',
+  Humidity: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200',
+  Season: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200',
+  Natural_Disaster: 'bg-red-100 text-red-900 border-red-300 hover:bg-red-200',
+  Natural_Resource: 'bg-lime-100 text-lime-900 border-lime-300 hover:bg-lime-200',
+  Soil: 'bg-amber-100 text-amber-900 border-amber-400 hover:bg-amber-200',
+
+  // Quantities & Time
+  Quantity: 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200',
+  Other_Quantity: 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200',
+  Field_Area: 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200',
+  Duration: 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200',
+  Money: 'bg-emerald-100 text-emerald-900 border-emerald-400 hover:bg-emerald-200',
+  Date_and_Time: 'bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200',
+  Event: 'bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200',
+
+  // Entity Actors
+  Person: 'bg-indigo-100 text-indigo-900 border-indigo-300 hover:bg-indigo-200',
+  Organization: 'bg-indigo-100 text-indigo-900 border-indigo-300 hover:bg-indigo-200',
+  Location: 'bg-violet-100 text-violet-900 border-violet-300 hover:bg-violet-200',
+  Policy: 'bg-slate-200 text-slate-900 border-slate-400 hover:bg-slate-300',
+
+  // Tech & Methods
+  Agri_Method: 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200',
+  Agri_Process: 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200',
+  Technology: 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200',
+  ML_Model: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300 hover:bg-fuchsia-200',
+  Citation: 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200',
+  Other: 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200',
+};
+
 export const statusStyle = {
   accepted: 'bg-green-100 border-green-400 text-green-950',
   approved: 'bg-green-200 border-green-600 text-green-950',
