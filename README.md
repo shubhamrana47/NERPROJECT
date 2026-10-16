@@ -1,8 +1,8 @@
-# AgNER Agricultural NER & Annotation Suite
+# AgNER: Agricultural Named Entity Recognition & Human-in-the-Loop Annotation Suite
 
-An AI-powered Named Entity Recognition (NER) and human-in-the-loop manual annotation suite designed for agricultural advisories, crop research, and biological documents.
+A full-stack, enterprise-grade Named Entity Recognition (NER) pipeline and interactive annotation workbench purpose-built for agricultural advisories, pest/disease reports, and agronomic research documents.
 
-The system pairs fine-tuned **RoBERTa-base (AgNER-BERTa)** with a **1-line-per-screen Focus Mode annotator** compatible with **Label Studio**, allowing domain specialists to review model predictions line-by-line, manually tag missed entities, and export verified datasets for model retraining.
+The system pairs fine-tuned **RoBERTa-base (AgNER-BERTa)** with a **1-Line Focus Mode Annotation Workbench**, offering full compatibility with **Label Studio** and training dataset exports. Reviewers can inspect model predictions sentence-by-sentence, tag missed entities across **all 36 canonical agricultural classes**, and export verified ground-truth datasets distinguishing model predictions from manual human annotations.
 
 ---
 
@@ -12,140 +12,282 @@ The system pairs fine-tuned **RoBERTa-base (AgNER-BERTa)** with a **1-line-per-s
 NERPROJECT/
 ├── NER-roberta-base_512/      # Fine-tuned RoBERTa token classification checkpoint
 ├── NER-App/
-│   ├── frontend/              # React 18 + Vite + Tailwind CSS (Interactive Annotator)
+│   ├── frontend/              # React 18 + Vite + Tailwind CSS (Focus Mode UI & Annotator)
 │   ├── backend/               # Node.js + Express + Mongoose (REST API & Persistence)
-│   └── python-ai-service/     # FastAPI + PyTorch + HuggingFace Transformers
-└── .agents/                   # Antigravity agent configuration & frontend-design skill
+│   ├── python-ai-service/     # FastAPI + PyTorch + Hugging Face Transformers
+│   ├── Dockerfile             # Unified production container (Node + FastAPI + PyTorch)
+│   └── start.sh               # Container orchestration & startup script
+└── README.md
 ```
 
 ---
 
-## Key Features
+## Key Capabilities
 
-### 1. 1-Line Focus Mode (Sentence-by-Sentence Review)
-* **Single Line Presentation**: Each screen displays **one line (sentence)** at a time with a prominent header (`Line X of Y`), current page number, and advisory section name.
-* **Next Card Progression**: Users can advance through lines sequentially via the `Next Line →` and `← Previous Line` buttons or keyboard shortcuts (`ArrowRight` / `ArrowLeft`).
-* **Unsaved Changes Guard**: Prevents accidental navigation if manual annotations on the current line have not been saved.
+### 1. Multi-Format Document Ingestion (`.json` and `.jsonl`)
+* **Flexible Ingestion**: Upload standard `.json` documents or newline-delimited `.jsonl` files (common in modern NLP/NER training pipelines).
+* **Automatic Format Detection**: If a `.jsonl` file is uploaded with a `.json` or `.txt` extension, the backend automatically detects line-by-line JSON and parses it gracefully.
+* **Document Structure Support**: Handles nested advisory sections, PAU/Agromet bulletin formats, page-segmented reports, or flat sentence-record datasets (`{"text": "..."}`).
 
-### 2. Label Studio-Style Manual Text Annotation
-* **Manual Span Tagging**: Select or highlight **any word or phrase** with the mouse cursor to annotate entities that were not identified by the model.
-* **Instant Category Selector**: A floating/inline Label Studio palette presents:
-  * Quick-category badges: `Crop`, `Chemical`, `Disease`, `Treatment`, `Nutrient`, `Quantity`, `Location`, `Weather`, `Soil`, `Agri_Method`.
-  * Searchable dropdown covering all **36 canonical agricultural entity classes**.
-* **Model vs. Manual Distinction**:
-  * Model predictions display a confidence percentage pill (`96%`).
-  * User annotations display an emerald `Manual` badge.
-  * Click any entity tag to modify its label or remove it with `×`.
+### 2. 1-Line Focus Mode (Sentence-by-Sentence Review)
+* **Distraction-Free Focus**: Displays exactly one sentence per screen (`Line X of Y`) with page numbers, advisory section tags, and document progress.
+* **Rapid Keyboard Navigation**: Advance or rewind through sentences with keyboard shortcuts (<kbd>ArrowRight</kbd> / <kbd>ArrowLeft</kbd>) or navigation buttons.
+* **Unsaved Changes Guard**: Built-in state guard (`isDirty`) prevents navigating away if manual edits on the active line have not been saved.
 
-### 3. Save & Reset Workflows
-* **Save Line Annotations**: Persists all additions, edits, and deletions for that sentence directly to MongoDB line-by-line via `PUT /api/documents/:id/segments/:segmentIndex/line-entities`. Even if the user annotates only some lines, the backend database remains immediately updated without risking other lines in the segment.
-* **Reset Line to Model Output**: Reverts only the current line back to the model's original predictions via `POST /api/documents/:id/segments/:segmentIndex/reset-line` without wiping annotations on other lines.
+### 3. Compact All-36 Entity Annotation Palette
+* **Free-Form Text Highlighting**: Highlight any word or multi-word phrase with the cursor to tag missed entities.
+* **All 36 Classes Visible**: Displays all 36 canonical agricultural entity classes in a single, high-density, color-coded palette (~80–90px height) without arbitrary 10-item limits or hidden dropdowns.
+* **Live Typeahead Search**: Filter entities in real time by typing (<kbd>Enter</kbd> to apply matching tag, <kbd>Esc</kbd> to cancel).
+* **In-Place Entity Editing**: Click any existing tag to reclassify its category, inspect confidence scores, or delete false positives.
 
-### 4. Real-Time Bottom Metrics Deck
-A persistent, docked status bar at the bottom displays:
-* **Current Page**: e.g., `Page 1 of 3 (2 pages left)`
-* **Current Line & Lines Remaining**: e.g., `Line 4 of 28 (24 remaining)`
-* **Annotations Done Counter**: Total tagged entities with a breakdown (e.g., `14 done (3 manual, 11 model)`)
-* **Progress Bar**: Document-level completion percentage
-* **Label Studio Export Button**: Direct one-click download of the document formatted according to official **Label Studio NER tasks & annotations JSON schema**.
-* **View Mode Switcher**: Toggle between `1-Line Focus Mode` and `Full Document Overview`.
+### 4. Direct File Download Station
+* **One-Click Real Downloads**: Replaced raw text viewing with immediate browser file downloads (Blob-driven, saving directly to the user's Downloads directory).
+* **Multiple Export Formats**:
+  * **Training Data (`.json`)**: Sentence-level training dataset with character offsets and provenance tags.
+  * **Training Data (`.jsonl`)**: Standard newline-delimited JSON Lines for fine-tuning Hugging Face transformers.
+  * **Label Studio Tasks (`.json`)**: Official Label Studio schema containing model pre-annotations and human ground-truth.
+* **Sticky Bottom Metrics Deck**: Displays current page, remaining sentences, total annotations completed (model vs. manual breakdown), progress bar, and the export station.
+
+### 5. Entity Provenance & Labelling Tags (NER vs. Manual)
+Exported datasets explicitly record the provenance of every single entity:
+* **NER Model Output**: Entities identified by the AI model are tagged with:
+  * `"tag": "NER_LABELLED"`
+  * `"labelled_by": "NER Model"`
+  * `"source": "model"`
+* **Manual Annotations**: Terms added from scratch or corrected by an annotator are tagged with:
+  * `"tag": "MANUALLY_LABELLED"`
+  * `"labelled_by": "Manual Annotator"`
+  * `"source": "human"`
+* **Sentence-Level Summary**: Every exported sentence row includes a `labelled_summary` object with exact counts (`ner_labelled_count`, `manually_labelled_count`, and `total_entities`).
+
+### 6. Non-Destructive Granular Persistence
+* **Line-Level Save (`PUT .../line-entities`)**: Commits additions and corrections for only the active sentence directly to MongoDB.
+* **Line-Level Reset (`POST .../reset-line`)**: Restores original model predictions for only the current sentence from immutable `originalEntities` without altering annotations on any other line.
 
 ---
 
-## 36 Canonical Entity Classes
+## 36 Canonical Agricultural Entity Classes
 
-The model and annotation interface support 36 standardized entity types grouped into functional domains:
+The model and annotation interface categorize agronomic entities into 36 standardized classes across 7 functional domains:
 
-| Category | Entity Types |
-| :--- | :--- |
-| **Crops & Agriculture** | `Crop`, `Fruit`, `Vegetable`, `Food_Item`, `Soil` |
-| **Pests & Pathology** | `Disease`, `Organism`, `Agri_Pollution`, `Agri_Waste` |
-| **Treatments & Inputs** | `Chemical`, `Treatment`, `Nutrient` |
-| **Meteorology & Climate**| `Weather`, `Rainfall`, `Temp`, `Humidity`, `Season`, `Natural_Disaster`, `Natural_Resource` |
-| **Quantities & Time** | `Quantity`, `Other_Quantity`, `Field_Area`, `Duration`, `Money`, `Date_and_Time`, `Event` |
-| **Entities & Agents** | `Person`, `Organization`, `Location`, `Policy` |
-| **Methods & Technology** | `Agri_Method`, `Agri_Process`, `Technology`, `ML_Model`, `Citation`, `Other` |
+| Domain | Entity Classes | Typical Examples |
+| :--- | :--- | :--- |
+| **Crops & Agriculture** | `Crop`, `Fruit`, `Vegetable`, `Food_Item`, `Soil` | Wheat, Maize, Basmati Rice, Sandy Loam, Clay Soil |
+| **Pests & Pathology** | `Disease`, `Organism`, `Agri_Pollution`, `Agri_Waste` | Yellow Rust, Aphids, Whitefly, Stubble Burning, Rice Straw |
+| **Treatments & Inputs** | `Chemical`, `Treatment`, `Nutrient` | Urea, Imidacloprid, Fungicide Spray, Nitrogen, Potash |
+| **Meteorology & Climate**| `Weather`, `Rainfall`, `Temp`, `Humidity`, `Season`, `Natural_Disaster`, `Natural_Resource` | Monsoon, Frost, 28°C, 85% RH, Kharif, Drought, Groundwater |
+| **Quantities & Time** | `Quantity`, `Other_Quantity`, `Field_Area`, `Duration`, `Money`, `Date_and_Time`, `Event` | 50 kg/ha, 2.5 acres, 15 days, ₹1200, October 15, Sowing |
+| **Entities & Agents** | `Person`, `Organization`, `Location`, `Policy` | PAU Ludhiana, ICAR, Punjab, PM-KISAN, Extension Officer |
+| **Methods & Technology** | `Agri_Method`, `Agri_Process`, `Technology`, `ML_Model`, `Citation`, `Other` | Drip Irrigation, Tillering, Tensiometer, AgNER-BERTa |
+
+---
+
+## Exported Data Format Samples
+
+### 1. Training Data (`.json` or `.jsonl`)
+```json
+{
+  "document": "punjab_wheat_advisory.jsonl",
+  "segmentIndex": 0,
+  "lineIndex": 1,
+  "text": "Wheat crop requires nitrogen fertilizer at tillering stage, but watch for yellow rust.",
+  "entities": [
+    {
+      "text": "Wheat",
+      "label": "Crop",
+      "start": 0,
+      "end": 5,
+      "tag": "NER_LABELLED",
+      "labelled_by": "NER Model",
+      "source": "model",
+      "status": "accepted",
+      "confidence": 0.9842
+    },
+    {
+      "text": "nitrogen fertilizer",
+      "label": "Chemical",
+      "start": 19,
+      "end": 38,
+      "tag": "MANUALLY_LABELLED",
+      "labelled_by": "Manual Annotator",
+      "source": "human",
+      "status": "approved",
+      "confidence": 1.0
+    },
+    {
+      "text": "yellow rust",
+      "label": "Disease",
+      "start": 74,
+      "end": 85,
+      "tag": "NER_LABELLED",
+      "labelled_by": "NER Model",
+      "source": "model",
+      "status": "accepted",
+      "confidence": 0.9415
+    }
+  ],
+  "labelled_summary": {
+    "ner_labelled_count": 2,
+    "manually_labelled_count": 1,
+    "total_entities": 3
+  }
+}
+```
+
+### 2. Label Studio Export (`.json`)
+```json
+[
+  {
+    "id": 1,
+    "data": {
+      "text": "Wheat crop requires nitrogen fertilizer...",
+      "segment_index": 0,
+      "page": 1,
+      "section": "Crop Specific Advisory",
+      "filename": "punjab_wheat_advisory.jsonl"
+    },
+    "predictions": [
+      {
+        "model_version": "AgNER-BERTa",
+        "result": [
+          {
+            "id": "pred_0_0",
+            "from_name": "label",
+            "to_name": "text",
+            "type": "labels",
+            "value": { "start": 0, "end": 5, "text": "Wheat", "labels": ["Crop"] },
+            "score": 0.9842,
+            "tag": "NER_LABELLED",
+            "labelled_by": "NER Model"
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "ann_0_0",
+            "from_name": "label",
+            "to_name": "text",
+            "type": "labels",
+            "value": { "start": 0, "end": 5, "text": "Wheat", "labels": ["Crop"] },
+            "score": 0.9842,
+            "tag": "NER_LABELLED",
+            "labelled_by": "NER Model"
+          },
+          {
+            "id": "ann_0_1",
+            "from_name": "label",
+            "to_name": "text",
+            "type": "labels",
+            "value": { "start": 19, "end": 38, "text": "nitrogen fertilizer", "labels": ["Chemical"] },
+            "score": 1.0,
+            "tag": "MANUALLY_LABELLED",
+            "labelled_by": "Manual Annotator"
+          }
+        ]
+      }
+    ]
+  }
+]
+```
 
 ---
 
 ## API Reference
 
-### Document & Model Operations
-* `POST /api/documents` — Upload JSON document and execute model inference.
-* `GET /api/documents` — List all saved documents and entity counts.
-* `GET /api/documents/:id` — Retrieve document with all segments and annotations.
-* `DELETE /api/documents/:id` — Remove document.
+### Document Management
+* `POST /api/documents` — Upload `.json` or `.jsonl` document, execute NER inference, and save to MongoDB.
+* `GET /api/documents` — List uploaded documents with entity statistics.
+* `GET /api/documents/:id` — Retrieve document details, segments, and annotations.
+* `DELETE /api/documents/:id` — Delete document and all annotations.
 
-### Manual Annotation Endpoints
-* `PUT /api/documents/:id/segments/:segmentIndex/entities` — Batch save/update entities for a segment/line.
-* `POST /api/documents/:id/segments/:segmentIndex/entities` — Add a new manual entity.
-* `PATCH /api/documents/:id/segments/:segmentIndex/entities/:entityId` — Update or review a single entity.
-* `POST /api/documents/:id/segments/:segmentIndex/reset` — Reset segment back to original model output.
+### Annotation Operations
+* `PUT /api/documents/:id/segments/:segmentIndex/line-entities` — Save/update entities for a specific sentence.
+* `POST /api/documents/:id/segments/:segmentIndex/reset-line` — Revert a single sentence back to original model predictions.
+* `PUT /api/documents/:id/segments/:segmentIndex/entities` — Batch save/update entities for an entire segment.
+* `POST /api/documents/:id/segments/:segmentIndex/reset` — Reset full segment to original model output.
+* `PATCH /api/documents/:id/segments/:segmentIndex/entities/:entityId` — Update individual entity status or label.
 
-### Export Endpoints
-* `GET /api/documents/:id/label-studio` — Export document as a **Label Studio** task JSON with pre-annotations and human annotations.
-* `GET /api/documents/:id/training-data` — Export deduplicated, normalized dataset for model fine-tuning.
+### Dataset Export
+* `GET /api/documents/:id/training-data` — Download verified training data with `tag: NER_LABELLED` vs `MANUALLY_LABELLED`.
+  * Query parameters:
+    * `format=lines`: Exports sentence-by-sentence dataset.
+    * `as=jsonl`: Exports as newline-delimited JSON Lines.
+    * `download=false`: Returns raw JSON response for API integrations.
+* `GET /api/documents/:id/label-studio` — Download official Label Studio tasks and annotations JSON.
 
 ---
 
-## Quick Start (Local Development)
+## Local Development Setup
 
 ### Prerequisites
 * **Node.js** v18+ and `npm`
 * **Python** 3.10+ with `pip`
-* **MongoDB** (local or MongoDB Atlas connection string in `backend/.env`)
+* **MongoDB** (local community edition or MongoDB Atlas URI)
 
-### 1. Setup Environment Variables
-In `NER-App/backend/.env`:
+### 1. Environment Configuration
+Create `NER-App/backend/.env`:
 ```env
 PORT=5000
-MONGO_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/ner_annotation
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/ner_annotation
 AI_SERVICE_URL=http://127.0.0.1:8000
 CONFIDENCE_THRESHOLD=0.75
 ```
 
-### 2. Run All Services
-From the `NER-App` root directory:
+### 2. Run All Services Concurrently
+From `NER-App/`:
 ```bash
-# Install dependencies
-npm run install:all
-
-# Launch Backend, Frontend, and AI Service concurrently
-npm run dev
+npm run dev:all
 ```
+This simultaneously starts:
+* **Python AI Service**: `http://127.0.0.1:8000`
+* **Express Backend**: `http://localhost:5000`
+* **Vite Frontend**: `http://localhost:5173`
 
-Alternatively, run in 3 separate terminals:
-
-* **Terminal 1 (Python AI Service)**:
+Or run separately across 3 terminals:
+* **Terminal 1 (AI Service)**:
   ```bash
   cd NER-App/python-ai-service
   pip install -r requirements.txt
   python -m uvicorn app:app --port 8000
   ```
-
-* **Terminal 2 (Node.js Backend)**:
+* **Terminal 2 (Backend)**:
   ```bash
   cd NER-App/backend
   npm install
   npm run dev
   ```
-
-* **Terminal 3 (React Frontend)**:
+* **Terminal 3 (Frontend)**:
   ```bash
   cd NER-App/frontend
   npm install
   npm run dev
   ```
-Open `http://localhost:5173` in your browser.
 
 ---
 
-## Label Studio Integration
+## Production Deployment & Stability Optimizations
 
-To import your annotations into Label Studio:
-1. Complete manual reviews and additions in the 1-Line Focus Mode.
-2. Click **Export Label Studio JSON** in the bottom bar or header.
-3. Open Label Studio, create/open a project with a NER Labeling Interface:
+The system is containerized via a **unified single-container Dockerfile** (`NER-App/Dockerfile`) running both the Node.js backend and FastAPI AI service, optimized for cloud platforms like **Railway.app**:
+
+1. **PyTorch CPU Optimization**:
+   * Thread pool throttled via `torch.set_num_threads(2)` and `torch.set_num_interop_threads(1)` to eliminate vCPU contention in container environments.
+   * Model inference switched to `@torch.inference_mode()` for lower memory consumption.
+2. **Micro-Batching**:
+   * Segment inference is processed in chunks of 5 segments, ensuring execution times stay well under reverse proxy 60-second timeouts to prevent `502 Bad Gateway` errors.
+3. **Hardened CORS**:
+   * Configured with dynamic origin reflection (`origin: true`), global preflight handling (`app.options('*')`), and error-middleware header persistence so cross-origin requests from frontends never drop `Access-Control-Allow-Origin`.
+
+---
+
+## Label Studio Integration Guide
+
+To import annotated datasets into Label Studio:
+1. Review sentences and make annotations in **1-Line Focus Mode**.
+2. Click **Download Training Data → Label Studio Tasks (.json)** in the bottom deck.
+3. Open Label Studio, create a new project, and configure the labeling interface:
    ```xml
    <View>
      <Labels name="label" toName="text">
@@ -161,4 +303,4 @@ To import your annotations into Label Studio:
      <Text name="text" value="$text"/>
    </View>
    ```
-4. Click **Import** in Label Studio and upload the downloaded JSON file. Both model predictions and manual annotations are imported with exact character spans.
+4. Click **Import** in Label Studio and upload the downloaded file. Both model pre-annotations and manual human tags will load with character-exact offsets.
