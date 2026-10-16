@@ -1,31 +1,6 @@
 const mongoose = require('mongoose');
-
-const entitySchema = new mongoose.Schema({
-  text: String,
-  label: String,
-  start: Number,
-  end: Number,
-  confidence: Number,
-  // accepted: auto (>= threshold) | review: low confidence, awaiting LLM/human
-  // approved / edited / deleted: human decisions
-  status: {
-    type: String,
-    enum: ['accepted', 'review', 'approved', 'edited', 'deleted'],
-    default: 'review',
-  },
-  source: { type: String, enum: ['model', 'llm', 'human'], default: 'model' },
-});
-
-const segmentSchema = new mongoose.Schema({
-  index: Number,
-  page: Number,
-  paragraph: Number,
-  path: String,
-  section: String,
-  heading: String,
-  text: String,
-  entities: [entitySchema],
-});
+const segmentSchema = require('./Segment');
+const entitySchema = require('./Entity');
 
 const documentSchema = new mongoose.Schema(
   {
@@ -42,4 +17,10 @@ const documentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Document', documentSchema);
+const Document = mongoose.model('Document', documentSchema);
+
+module.exports = Document;
+module.exports.Document = Document;
+module.exports.documentSchema = documentSchema;
+module.exports.segmentSchema = segmentSchema;
+module.exports.entitySchema = entitySchema;

@@ -35,4 +35,40 @@ export const reviewEntity = (docId, segIndex, entId, body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
+export const addEntity = (docId, segIndex, body) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/entities`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+export const saveSegmentEntities = (docId, segIndex, entities) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/entities`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entities }),
+  });
+
+export const saveLineEntities = (docId, segIndex, body) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/line-entities`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+export const resetLine = (docId, segIndex, body) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/reset-line`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+export const resetSegment = (docId, segIndex) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/reset`, {
+    method: 'POST',
+  });
+
 export const trainingDataUrl = (id) => (id ? `${BASE}/${id}/training-data` : `${BASE}/training-data`);
+export const labelStudioExportUrl = (id) => `${BASE}/${id}/label-studio`;
+

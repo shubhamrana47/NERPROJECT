@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { getConfidenceThresholdClass } from '../utils/textUtils.jsx';
 
 export const ENTITY_TYPES = [
   'Agri_Method',
@@ -39,18 +40,15 @@ export const ENTITY_TYPES = [
   'Weather',
 ];
 
-const statusStyle = {
+export const statusStyle = {
   accepted: 'bg-green-100 border-green-400 text-green-950',
   approved: 'bg-green-200 border-green-600 text-green-950',
   edited: 'bg-blue-100 border-blue-400 text-blue-950',
   review: 'bg-amber-100 border-amber-400 text-amber-950',
 };
 
-/**
- * Splits section text into sentences with exact character offsets.
- * Preserves decimal numbers (e.g. 1.5 litre, 0.5%) and abbreviations.
- */
-function splitSentencesWithOffsets(txt) {
+
+export function splitSentencesWithOffsets(txt) {
   const sentences = [];
   let start = 0;
   for (let i = 0; i < txt.length; i++) {
@@ -93,10 +91,8 @@ function splitSentencesWithOffsets(txt) {
   return sentences;
 }
 
-/**
- * Renders highlighted text for a specific range [startOffset, endOffset]
- */
-function renderHighlightedSpan(rawText, startOffset, endOffset, entities) {
+
+export function renderHighlightedSpan(rawText, startOffset, endOffset, entities) {
   const relevant = entities
     .filter((e) => e.start >= startOffset && e.start < endOffset)
     .sort((a, b) => a.start - b.start);
@@ -110,14 +106,15 @@ function renderHighlightedSpan(rawText, startOffset, endOffset, entities) {
       parts.push(rawText.slice(pos, e.start));
     }
     const chunkEnd = Math.min(e.end, endOffset);
+    const colorClass = getConfidenceThresholdClass(e.confidence);
     parts.push(
       <mark
         key={e._id || `${e.start}-${e.end}`}
-        className={`mx-0.5 rounded border px-1 py-0.5 font-medium ${statusStyle[e.status] || 'bg-slate-100'}`}
-        title={`${e.label} (${(e.confidence * 100).toFixed(1)}%)`}
+        className={`mx-0.5 rounded border px-1 py-0.5 font-medium ${colorClass}`}
+        title={`${e.label} (${(Number(e.confidence ?? 1) * 100).toFixed(1)}%)`}
       >
         {rawText.slice(e.start, chunkEnd)}
-        <sup className="ml-1 text-[10px] font-bold uppercase tracking-wider">{e.label}</sup>
+        <sup className="ml-1 text-[10px] font-bold uppercase tracking-wider opacity-85">{e.label}</sup>
       </mark>
     );
     pos = chunkEnd;
@@ -289,12 +286,14 @@ function EntityRow({ e, onAction }) {
   const [label, setLabel] = useState(e.label);
   const [text, setText] = useState(e.text);
   const pct = (e.confidence * 100).toFixed(1);
+  const conf = Number(e.confidence ?? 1);
   const bar =
-    e.confidence >= 0.75
+    conf > 0.75
       ? 'bg-green-500'
-      : e.confidence >= 0.5
-      ? 'bg-amber-500'
+      : conf >= 0.5
+      ? 'bg-yellow-400'
       : 'bg-red-500';
+  const tagColor = getConfidenceThresholdClass(e.confidence);
 
   return (
     <tr className="hover:bg-slate-50/70">
@@ -324,7 +323,7 @@ function EntityRow({ e, onAction }) {
             ))}
           </select>
         ) : (
-          <span className="inline-block rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+          <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-semibold ${tagColor}`}>
             {e.label}
           </span>
         )}
