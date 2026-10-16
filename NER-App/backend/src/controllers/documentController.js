@@ -8,19 +8,73 @@ const { parseDocument } = require('../services/jsonParser');
 const { runNER, routeEntity, computeStats } = require('../services/nerService');
 
 // POST /api/documents
-// Upload JSON document, run model inference, and store in MongoDB
+// Upload JSON or JSONL document, run model inference, and store in MongoDB
 exports.upload = async (req, res, next) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No JSON file uploaded' });
+    if (!req.file) return res.status(400).json({ error: 'No JSON or JSONL file uploaded' });
+
+    const rawContent = req.file.buffer.toString('utf-8').trim();
+    if (!rawContent) return res.status(400).json({ error: 'Uploaded file is empty' });
+
     let json;
-    try {
-      json = JSON.parse(req.file.buffer.toString('utf-8'));
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON file' });
+    const isJsonlExt = req.file.originalname.toLowerCase().endsWith('.jsonl');
+
+    if (isJsonlExt) {
+      // Parse as JSON Lines (one JSON object per line)
+      const lines = rawContent
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith('//') && !l.startsWith('#'));
+
+      const records = [];
+      for (let i = 0; i < lines.length; i++) {
+        try {
+          records.push(JSON.parse(lines[i]));
+        } catch (err) {
+          return res.status(400).json({
+            error: `Invalid JSONL format at line ${i + 1}: ${err.message}`,
+          });
+        }
+      }
+      if (records.length === 0) {
+        return res.status(400).json({ error: 'No valid JSON records found in JSONL file' });
+      }
+      json = records;
+    } else {
+      // First attempt standard single JSON.parse
+      try {
+        json = JSON.parse(rawContent);
+      } catch (jsonErr) {
+        // Auto-fallback: attempt JSON Lines parsing in case user uploaded a .jsonl with .json or other extension
+        const lines = rawContent
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('//') && !l.startsWith('#'));
+
+        let fallbackSuccess = true;
+        const records = [];
+        for (const line of lines) {
+          try {
+            records.push(JSON.parse(line));
+          } catch (_) {
+            fallbackSuccess = false;
+            break;
+          }
+        }
+
+        if (fallbackSuccess && records.length > 0) {
+          json = records;
+        } else {
+          return res.status(400).json({
+            error: 'Invalid file format: unable to parse as JSON or JSONL.',
+          });
+        }
+      }
     }
+
     const threshold = Number(process.env.CONFIDENCE_THRESHOLD || 0.85);
     const parsed = parseDocument(json);
-    if (!parsed.length) return res.status(400).json({ error: 'No text found in JSON' });
+    if (!parsed.length) return res.status(400).json({ error: 'No text found in JSON or JSONL file' });
 
     const results = await runNER(parsed);
     const byId = Object.fromEntries(results.map((r) => [r.id, r.entities]));

@@ -60,6 +60,7 @@ function normalizeAndDeduplicateEntities(entities, segmentText = '') {
       end,
       confidence: Number(ent.confidence ?? 1.0),
       status: ent.status || 'accepted',
+      source: ent.source || 'model',
     });
   }
 
@@ -86,11 +87,21 @@ function normalizeAndDeduplicateEntities(entities, segmentText = '') {
     seenSpans.add(spanKey);
     seenEntities.add(entityKey);
 
+    const isManual = e.source === 'human' || e.status === 'edited';
+    const tag = isManual ? 'MANUALLY_LABELLED' : 'NER_LABELLED';
+    const labelledBy = isManual ? 'Manual Annotator' : 'NER Model';
+    const source = isManual ? 'human' : 'model';
+
     unique.push({
       text: e.text,
       label: e.label,
       start: e.start,
       end: e.end,
+      tag: tag, // Explicit tag distinguishing NER model vs manually added/corrected tags
+      labelled_by: labelledBy, // Human-readable origin label
+      source: source, // 'human' or 'model'
+      status: e.status || (isManual ? 'approved' : 'accepted'),
+      confidence: Number((e.confidence ?? (isManual ? 1.0 : 0.85)).toFixed(4)),
     });
   }
 

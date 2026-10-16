@@ -227,7 +227,25 @@ function parseDocument(json) {
 
   if (segments.length > 0) return segments;
 
-  // Fallback 3: Walk general JSON collecting candidate string values
+  // Fallback 3: JSONL & Array of text records e.g. [{ text: "..." }, { sentence: "..." }]
+  let usedRecords = false;
+  root.forEach((item, i) => {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const candidate =
+        item.text || item.sentence || item.line_text || item.content || item.advisory || item.passage;
+      if (typeof candidate === 'string' && candidate.trim() && candidate.trim().split(/\s+/).length >= 2) {
+        add(candidate.trim(), {
+          section: item.section || item.heading || (item.document ? `${item.document} (Line ${i + 1})` : `Record ${i + 1}`),
+          page: item.page ?? Math.floor(i / 10) + 1,
+        });
+        usedRecords = true;
+      }
+    }
+  });
+
+  if (usedRecords && segments.length > 0) return segments;
+
+  // Fallback 4: Walk general JSON collecting candidate string values
   const walk = (node, path) => {
     if (typeof node === 'string') {
       const trimmed = node.trim();

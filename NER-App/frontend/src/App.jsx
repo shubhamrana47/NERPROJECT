@@ -68,14 +68,14 @@ export default function App() {
             <aside className="space-y-4">
               <label className="block cursor-pointer rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/40 p-5 text-center transition hover:bg-blue-50 hover:border-blue-400">
                 <span className="block text-sm font-bold text-blue-700">
-                  {loading ? 'Running NER model… please wait' : '+ Upload Document JSON'}
+                  {loading ? 'Running NER model… please wait' : '+ Upload Document (JSON / JSONL)'}
                 </span>
                 <span className="mt-1 block text-xs text-slate-500">
-                  Upload json file 
+                  Upload .json or .jsonl file
                 </span>
                 <input
                   type="file"
-                  accept=".json,application/json"
+                  accept=".json,.jsonl,application/json,application/x-jsonlines,text/plain"
                   className="hidden"
                   onChange={onFile}
                   disabled={loading}
@@ -94,16 +94,16 @@ export default function App() {
                    <Upload/>
                 </div>
                 <h3 className="text-base font-bold text-slate-900 mb-1">
-            
+                  Start Document Annotation
                 </h3>
                 <p className="text-sm text-slate-500 max-w-md mb-6">
-                  Upload a JSON file  to start line-by-line annotation.
+                  Upload a JSON or JSONL file to start line-by-line annotation.
                 </p>
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition">
-                  Upload json Document 
+                  Upload JSON / JSONL Document
                   <input
                     type="file"
-                    accept=".json,application/json"
+                    accept=".json,.jsonl,application/json,application/x-jsonlines,text/plain"
                     className="hidden"
                     onChange={onFile}
                     disabled={loading}

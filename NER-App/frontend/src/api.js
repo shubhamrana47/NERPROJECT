@@ -78,6 +78,56 @@ export const resetSegment = (docId, segIndex) =>
     method: 'POST',
   });
 
-export const trainingDataUrl = (id) => (id ? `${BASE}/${id}/training-data` : `${BASE}/training-data`);
+export const trainingDataUrl = (id, options = {}) => {
+  const params = new URLSearchParams();
+  if (options.download !== false) params.set('download', 'true');
+  if (options.format) params.set('format', options.format);
+  if (options.as) params.set('as', options.as);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return id ? `${BASE}/${id}/training-data${qs}` : `${BASE}/training-data${qs}`;
+};
+
 export const labelStudioExportUrl = (id) => `${BASE}/${id}/label-studio`;
+
+/**
+ * Triggers a real browser file download for training data (.json or .jsonl).
+ */
+export const downloadTrainingDataFile = async (docId, format = 'json', docFilename = 'document') => {
+  const url = trainingDataUrl(docId, {
+    download: true,
+    as: format,
+    format: 'lines',
+  });
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Export download failed with status ${res.status}`);
+  const blob = await res.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  const baseName = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
+  link.download = `${baseName}_training_data.${format === 'jsonl' ? 'jsonl' : 'json'}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(blobUrl);
+};
+
+/**
+ * Triggers a real browser file download for Label Studio tasks JSON.
+ */
+export const downloadLabelStudioFile = async (docId, docFilename = 'document') => {
+  const url = labelStudioExportUrl(docId);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Export download failed with status ${res.status}`);
+  const blob = await res.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  const baseName = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
+  link.download = `${baseName}_label_studio.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(blobUrl);
+};
 
