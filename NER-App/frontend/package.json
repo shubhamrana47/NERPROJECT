@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "lucide-react": "^1.57.0",
+    "ner-app": "file:..",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
-import { getConfidenceThresholdClass } from '../utils/textUtils.jsx';
+import { getEntityColorStyle } from '../utils/textUtils.jsx';
 
 /**
  * Label Studio-style Interactive Text Annotator.
@@ -96,12 +96,12 @@ export default function LabelStudioAnnotator({
     }
   };
 
-  // Render tokens/spans with interactive entity highlights
+  // Render tokens/spans with interactive entity highlights matching design.png
   const renderAnnotatedText = () => {
     const pieces = [];
     let currentPos = sentenceStart;
 
-    sentenceEntities.forEach((ent) => {
+    sentenceEntities.forEach((ent, entIdx) => {
       // Normal non-entity text before this entity
       if (ent.start > currentPos) {
         const textBefore = sentenceText.slice(currentPos - sentenceStart, ent.start - sentenceStart);
@@ -112,53 +112,65 @@ export default function LabelStudioAnnotator({
         );
       }
 
-      // Entity span
+      // Entity span — exact styling from design.png
       const entEndInSent = Math.min(ent.end, sentenceEnd);
       const entText = sentenceText.slice(ent.start - sentenceStart, entEndInSent - sentenceStart) || ent.text;
-      const colorCls = getConfidenceThresholdClass(ent.confidence);
-      const isManual = ent.source === 'human';
-      const isEditing = activeEditingEntity && activeEditingEntity._id === ent._id;
+      const colorStyle = getEntityColorStyle(ent.label);
+      const isManual = ent.source === 'human' || ent.status === 'edited' || ent._id?.toString().startsWith('temp_');
+      const isEditing = activeEditingEntity && ((activeEditingEntity._id && activeEditingEntity._id === ent._id) || (activeEditingEntity.start === ent.start && activeEditingEntity.end === ent.end));
 
       pieces.push(
         <span
-          key={ent._id || `${ent.start}-${ent.end}`}
-          className={`group relative inline-flex items-center gap-1.5 px-2 py-0.5 mx-1 my-0.5 rounded-md border font-medium text-sm transition-all duration-150 select-text cursor-pointer ${colorCls} ${
-            isEditing ? 'ring-2 ring-blue-500 shadow-sm' : 'hover:brightness-95'
+          key={ent._id || `${ent.start}-${ent.end}-${entIdx}`}
+          className={`group relative inline-flex flex-col items-center mx-1 align-baseline select-text cursor-pointer transition-all ${
+            isEditing ? 'ring-2 ring-blue-500 rounded' : ''
           }`}
           onClick={(e) => {
             e.stopPropagation();
             if (setActiveEditingEntity) setActiveEditingEntity(ent);
             if (clearSelection) clearSelection();
           }}
-          title={`Click to edit · ${ent.label} · ${isManual ? 'Manual Annotation' : `Confidence: ${(Number(ent.confidence ?? 1) * 100).toFixed(1)}%`}`}
+          title={`Click to edit · ${ent.label} · ${isManual ? 'Manual Addition' : `Model Prediction (${(Number(ent.confidence ?? 1) * 100).toFixed(0)}%)`}`}
         >
-          <span className="font-semibold">{entText}</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10">
-            {ent.label}
-          </span>
-          {isManual ? (
-            <span className="text-[9px] px-1 rounded bg-emerald-600 text-white font-semibold">
-              Manual
-            </span>
-          ) : (
-            <span className="text-[10px] font-mono opacity-85 font-semibold">
-              {(Number(ent.confidence ?? 1) * 100).toFixed(0)}%
-            </span>
-          )}
-          <button
-            type="button"
-            className="ml-0.5 text-xs font-bold text-slate-500 hover:text-red-700 opacity-60 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteEntity(ent);
-              if (activeEditingEntity && activeEditingEntity._id === ent._id) {
-                if (setActiveEditingEntity) setActiveEditingEntity(null);
-              }
+          {/* Main Entity Text with Background and Underline */}
+          <span
+            className={`inline-block px-1.5 py-0.5 rounded text-[16px] font-medium leading-snug transition ${
+              isManual
+                ? 'border-b-2 border-dashed'
+                : 'border-b-2 border-solid'
+            }`}
+            style={{
+              backgroundColor: colorStyle.bg,
+              color: colorStyle.text,
+              borderColor: colorStyle.border,
             }}
-            title="Remove entity tag"
           >
-            ×
-          </button>
+            {entText}
+            {/* Quick delete button visible on hover */}
+            <button
+              type="button"
+              className="ml-1 inline-flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+              style={{ color: colorStyle.border }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteEntity(ent);
+                if (activeEditingEntity && activeEditingEntity._id === ent._id) {
+                  if (setActiveEditingEntity) setActiveEditingEntity(null);
+                }
+              }}
+              title="Remove entity tag"
+            >
+              ×
+            </button>
+          </span>
+
+          {/* Subtext Label Underneath */}
+          <span
+            className="block text-[9px] font-bold uppercase tracking-wider text-center mt-0.5 leading-none select-none"
+            style={{ color: colorStyle.border }}
+          >
+            {isManual ? `${ent.label.toUpperCase()} · manual` : ent.label.toUpperCase()}
+          </span>
         </span>
       );
 
@@ -184,27 +196,13 @@ export default function LabelStudioAnnotator({
       <div
         ref={containerRef}
         onMouseUp={handleMouseUp}
-        className={`relative rounded-xl border bg-white p-6 shadow-sm leading-8 text-base text-slate-900 transition ${
+        className={`relative rounded-xl border bg-white p-6 shadow-xs leading-[2.85rem] text-[17px] text-slate-800 transition ${
           selectedSpan
-            ? 'border-emerald-400 ring-2 ring-emerald-100'
+            ? 'border-emerald-400 ring-2 ring-emerald-100 bg-emerald-50/20'
             : 'border-slate-200 focus-within:border-blue-400'
         }`}
       >
-        <div className="mb-2.5 flex items-center justify-between gap-2 text-xs border-b border-slate-100 pb-2">
-          <div className="font-semibold text-slate-700">Sentence Text:</div>
-          <div className="text-slate-500 font-medium">
-            {selectedSpan ? (
-              <span className="text-emerald-700 font-bold inline-flex items-center gap-1.5 animate-fadeIn">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Selected: "{selectedSpan.text}" → Pick an entity tag from the sidebar
-              </span>
-            ) : (
-              'Highlight words with cursor to tag directly from the sidebar'
-            )}
-          </div>
-        </div>
-
-        <div className="p-1 min-h-[3.5rem] text-[17px] leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
+        <div className="min-h-[4rem] text-[17px] leading-[2.85rem] selection:bg-emerald-200 selection:text-emerald-950 font-normal">
           {renderAnnotatedText()}
         </div>
       </div>

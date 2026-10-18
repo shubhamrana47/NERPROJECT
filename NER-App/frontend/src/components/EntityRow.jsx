@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ENTITY_TYPES, getConfidenceThresholdClass } from '../utils/textUtils.jsx';
+import { ENTITY_TYPES, getEntityColorStyle } from '../utils/textUtils.jsx';
 
 export default function EntityRow({ e, onAction }) {
   const [editing, setEditing] = useState(false);
@@ -13,7 +13,7 @@ export default function EntityRow({ e, onAction }) {
       : conf >= 0.5
       ? 'bg-yellow-400'
       : 'bg-red-500';
-  const tagColor = getConfidenceThresholdClass(e.confidence);
+  const colorStyle = getEntityColorStyle(e.label);
 
   return (
     <tr className="hover:bg-slate-50/70">
@@ -43,7 +43,10 @@ export default function EntityRow({ e, onAction }) {
             ))}
           </select>
         ) : (
-          <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-semibold ${tagColor}`}>
+          <span
+            className="inline-block rounded border px-2 py-0.5 text-[11px] font-semibold"
+            style={colorStyle}
+          >
             {e.label}
           </span>
         )}

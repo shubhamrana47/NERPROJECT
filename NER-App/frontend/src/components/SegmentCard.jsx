@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { getConfidenceThresholdClass } from '../utils/textUtils.jsx';
+import { getEntityColorStyle } from '../utils/textUtils.jsx';
 
 export const ENTITY_TYPES = [
   'Agri_Method',
@@ -106,11 +106,12 @@ export function renderHighlightedSpan(rawText, startOffset, endOffset, entities)
       parts.push(rawText.slice(pos, e.start));
     }
     const chunkEnd = Math.min(e.end, endOffset);
-    const colorClass = getConfidenceThresholdClass(e.confidence);
+    const colorStyle = getEntityColorStyle(e.label);
     parts.push(
       <mark
         key={e._id || `${e.start}-${e.end}`}
-        className={`mx-0.5 rounded border px-1 py-0.5 font-medium ${colorClass}`}
+        className="mx-0.5 rounded border px-1 py-0.5 font-medium"
+        style={colorStyle}
         title={`${e.label} (${(Number(e.confidence ?? 1) * 100).toFixed(1)}%)`}
       >
         {rawText.slice(e.start, chunkEnd)}
@@ -293,7 +294,7 @@ function EntityRow({ e, onAction }) {
       : conf >= 0.5
       ? 'bg-yellow-400'
       : 'bg-red-500';
-  const tagColor = getConfidenceThresholdClass(e.confidence);
+  const tagColorStyle = getEntityColorStyle(e.label);
 
   return (
     <tr className="hover:bg-slate-50/70">
@@ -323,7 +324,7 @@ function EntityRow({ e, onAction }) {
             ))}
           </select>
         ) : (
-          <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-semibold ${tagColor}`}>
+          <span className="inline-block rounded border px-2 py-0.5 text-[11px] font-semibold" style={tagColorStyle}>
             {e.label}
           </span>
         )}

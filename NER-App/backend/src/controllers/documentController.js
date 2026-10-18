@@ -76,16 +76,28 @@ exports.upload = async (req, res, next) => {
     const parsed = parseDocument(json);
     if (!parsed.length) return res.status(400).json({ error: 'No text found in JSON or JSONL file' });
 
-    const results = await runNER(parsed);
-    const byId = Object.fromEntries(results.map((r) => [r.id, r.entities]));
-    const segments = parsed.map((s) => {
-      const routed = (byId[s.index] || []).map((e) => routeEntity(e, threshold));
-      return {
+    const skipNer = req.query.skipNer === 'true' || req.body.skipNer === 'true';
+    let segments;
+
+    if (skipNer) {
+      // User opted to start without NER model predictions (fresh manual annotation)
+      segments = parsed.map((s) => ({
         ...s,
-        entities: routed,
-        originalEntities: JSON.parse(JSON.stringify(routed)),
-      };
-    });
+        entities: [],
+        originalEntities: [],
+      }));
+    } else {
+      const results = await runNER(parsed);
+      const byId = Object.fromEntries(results.map((r) => [r.id, r.entities]));
+      segments = parsed.map((s) => {
+        const routed = (byId[s.index] || []).map((e) => routeEntity(e, threshold));
+        return {
+          ...s,
+          entities: routed,
+          originalEntities: JSON.parse(JSON.stringify(routed)),
+        };
+      });
+    }
 
     const doc = await Document.create({
       filename: req.file.originalname,

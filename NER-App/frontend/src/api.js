@@ -35,6 +35,12 @@ export const uploadDocument = (file) => {
   fd.append('file', file);
   return req(BASE, { method: 'POST', body: fd });
 };
+
+export const uploadDocumentWithoutNER = (file) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  return req(`${BASE}?skipNer=true`, { method: 'POST', body: fd });
+};
 export const listDocuments = () => req(BASE);
 export const getDocument = (id) => req(`${BASE}/${id}`);
 export const deleteDocument = (id) => req(`${BASE}/${id}`, { method: 'DELETE' });

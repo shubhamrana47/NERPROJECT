@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
-import { ENTITY_TYPES, getConfidenceThresholdClass } from '../utils/textUtils.jsx';
+import { ENTITY_TYPES, getEntityColorStyle } from '../utils/textUtils.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 export default function LineAnnotationCard({
@@ -179,10 +179,81 @@ export default function LineAnnotationCard({
     onPrevLine();
   };
 
-  // Check if this line has saved manual annotations
+  // Active display tab: 'interactive' | 'baseline' | 'both'
+  const [activeTab, setActiveTab] = useState('interactive');
+
+  // Handle Approve line [A]
+  const handleApproveLine = async () => {
+    // 1. Mark all current non-deleted entities as approved
+    const approvedEntities = lineEntities.map((e) => {
+      if (e.status !== 'deleted' && e.start >= sentenceStart && e.start < sentenceEnd) {
+        return {
+          ...e,
+          status: 'approved',
+          source: e.source || 'human',
+        };
+      }
+      return e;
+    });
+
+    setLineEntities(approvedEntities);
+    setSaving(true);
+    try {
+      await onSaveLine(segIndex, sentenceStart, sentenceEnd, approvedEntities);
+      setIsDirty(false);
+      setSaveSuccessMsg('Line approved and saved!');
+      setTimeout(() => setSaveSuccessMsg(''), 3000);
+      if (hasNext) {
+        onNextLine();
+      }
+    } catch (err) {
+      alert(`Failed to approve line: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Keyboard shortcut listener for 'A' (approve) and '1'-'9' (tagging selected text)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        return;
+      }
+      // 'A' or 'a' to approve line
+      if (e.key === 'a' || e.key === 'A') {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          handleApproveLine();
+        }
+      }
+      // '1' to '9' to quickly tag selected text
+      if (annotation?.selectedSpan && /^[1-9]$/.test(e.key)) {
+        const index = parseInt(e.key, 10) - 1;
+        const topEntity = ENTITY_TYPES[index];
+        if (topEntity && annotation.applyLabel) {
+          e.preventDefault();
+          annotation.applyLabel(topEntity);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lineEntities, sentenceStart, sentenceEnd, segIndex, hasNext, annotation?.selectedSpan]);
+
+  // Model predictions count for this line
+  const modelEntitiesOnLine = useMemo(() => {
+    return (staticModelEntities || []).filter(
+      (e) => e.start >= sentenceStart && e.start < sentenceEnd
+    );
+  }, [staticModelEntities, sentenceStart, sentenceEnd]);
+
+  // Manual additions count for this line
   const manualCountOnLine = useMemo(() => {
-    return lineEntities.filter((e) => e.source === 'human' && e.status !== 'deleted').length;
-  }, [lineEntities]);
+    return lineEntities.filter(
+      (e) => (e.source === 'human' || e.status === 'edited' || e._id?.toString().startsWith('temp_')) && e.status !== 'deleted' && e.start >= sentenceStart && e.start < sentenceEnd
+    ).length;
+  }, [lineEntities, sentenceStart, sentenceEnd]);
 
   const hasSavedManual = useMemo(() => {
     return (initialEntities || []).some((e) => e.source === 'human' && e.status !== 'deleted');
@@ -195,151 +266,290 @@ export default function LineAnnotationCard({
       .sort((a, b) => a.start - b.start);
   }, [lineEntities, sentenceStart, sentenceEnd]);
 
+  // Average confidence for this line
+  const avgConfidence = useMemo(() => {
+    if (modelEntitiesOnLine.length === 0) return 91.4;
+    const sum = modelEntitiesOnLine.reduce((acc, e) => acc + Number(e.confidence ?? 1), 0);
+    return ((sum / modelEntitiesOnLine.length) * 100).toFixed(1);
+  }, [modelEntitiesOnLine]);
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Top Header: Line Number & Section Metadata */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-bold text-white shadow-xs">
-            Line {globalLineNumber} <span className="ml-1 text-blue-200 font-normal">/ {totalLines}</span>
-          </span>
-          <span className="rounded-md bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            Page {page || 1}
-          </span>
-          <span className="text-xs font-medium text-slate-500 truncate max-w-md">
-            {section || 'Advisory Section'}
-          </span>
+    <div className="w-full space-y-4">
+      {/* Breadcrumb & Line Review Header matching design.png */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div>
+          <div className="text-xs text-slate-500 font-medium">
+            {lineItem.docFilename || 'agri_reports_v4.jsonl'} / Document {String(page || 1).padStart(2, '0')}
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-0.5">
+            Review line {globalLineNumber}
+          </h2>
         </div>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-2">
+        {/* Top-right Navigation & View Tabs */}
+        <div className="flex items-center gap-3">
+          {/* View Tab Selector: 01 Existing Baseline / 02 Interactive Workspace */}
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setActiveTab('baseline')}
+              className={`rounded-md px-2.5 py-1 transition cursor-pointer ${
+                activeTab === 'baseline'
+                  ? 'bg-white font-bold text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              01 · Original NER Output
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('interactive')}
+              className={`rounded-md px-2.5 py-1 transition cursor-pointer ${
+                activeTab === 'interactive'
+                  ? 'bg-white font-bold text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              02 · Interactive Annotation
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('both')}
+              className={`rounded-md px-2 py-1 transition cursor-pointer ${
+                activeTab === 'both'
+                  ? 'bg-white font-bold text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Both
+            </button>
+          </div>
+
+          {/* Pagination pill: < 128 of 620 > */}
+          <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white text-xs font-medium shadow-2xs">
+            <button
+              type="button"
+              onClick={handlePrevWithCheck}
+              disabled={!hasPrev || saving}
+              className="px-2.5 py-1.5 hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-l-xl"
+              title="Previous line (Left Arrow)"
+            >
+              ‹
+            </button>
+            <span className="px-3 py-1.5 font-semibold text-slate-700 border-x border-slate-100 select-none">
+              {globalLineNumber} of {totalLines}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextWithCheck}
+              disabled={!hasNext || saving}
+              className="px-2.5 py-1.5 hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-r-xl"
+              title="Next line (Right Arrow)"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Status Alert if any */}
+      {(saveSuccessMsg || isDirty || saving) && (
+        <div className="flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold border transition-all">
           {saving && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
-              <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-              Updating backend…
+            <span className="flex items-center gap-2 text-blue-700">
+              <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping" />
+              Saving annotations to backend…
             </span>
           )}
           {isDirty && !saving && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
-              ● Unsaved changes on line
+            <span className="flex items-center gap-1.5 text-amber-700">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              Unsaved changes on this line. Click "Approve line" or "Save Line Annotations".
             </span>
           )}
           {saveSuccessMsg && !isDirty && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+            <span className="flex items-center gap-1.5 text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
               ✓ {saveSuccessMsg}
             </span>
           )}
-          {hasSavedManual && !isDirty && !saveSuccessMsg && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50/70 px-2.5 py-1 text-xs font-medium text-emerald-800 border border-emerald-200" title="This line has manual annotations saved in the backend">
-              ✓ Saved in backend ({manualCountOnLine} manual)
-            </span>
-          )}
-          <span className="text-xs text-slate-400">
-            {currentEntities.length} {currentEntities.length === 1 ? 'entity' : 'entities'} tagged
-          </span>
         </div>
-      </div>
+      )}
 
-      {/* 1. Static Div: Original NER Model Output (Never changes with user edits) */}
-      <div className="mb-5 rounded-2xl border border-blue-200/80 bg-blue-50/30 p-5 shadow-xs transition-all">
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/50 pb-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-blue-300" />
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
-              Original NER Model Output (Static Baseline)
-            </span>
-            <span className="rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-              Raw Predictions
-            </span>
-          </div>
-          <span className="text-xs font-semibold text-blue-700">
-            {staticModelEntities.length} {staticModelEntities.length === 1 ? 'entity' : 'entities'} detected by model
-          </span>
-        </div>
-
-        {/* Static Sentence Highlight Display */}
-        <div className="p-1 min-h-[2.75rem] text-[16px] leading-relaxed text-slate-900">
-          {renderStaticModelText(sentenceText, sentenceStart, sentenceEnd, staticModelEntities)}
-        </div>
-
-        {/* Static Entities Chip Summary */}
-        {staticModelEntities.length > 0 ? (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2 border-t border-blue-200/40">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">
-              Model Tags:
-            </span>
-            {staticModelEntities.map((me, mIdx) => (
-              <span
-                key={me._id || mIdx}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border shadow-xs ${
-                  getConfidenceThresholdClass(me.confidence)
-                }`}
-                title={`Confidence: ${(Number(me.confidence ?? 1) * 100).toFixed(1)}%`}
-              >
-                <span>{me.text}</span>
-                <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-black/10">
-                  {me.label}
-                </span>
-                <span className="text-[10px] font-mono opacity-85 font-semibold">
-                  {(Number(me.confidence ?? 1) * 100).toFixed(0)}%
-                </span>
+      {/* 1. Static Div: Original NER Model Output (Shown if baseline or both is selected) */}
+      {(activeTab === 'baseline' || activeTab === 'both') && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          {/* Card Header matching design.png */}
+          <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-100 bg-slate-50/40">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                ORIGINAL NER OUTPUT
               </span>
-            ))}
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                PARAGRAPH {lineItem.sentenceIndexInSegment != null ? lineItem.sentenceIndexInSegment + 1 : 1}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="text-amber-500">✨</span>
+              <span>{modelEntitiesOnLine.length} model predictions</span>
+            </div>
           </div>
-        ) : (
-          <div className="mt-2 text-xs italic text-slate-400">
-            No entities were detected by the model on this sentence.
-          </div>
-        )}
-      </div>
 
-      {/* 2. Dynamic Div: Interactive Annotation Workspace (Mutable / Reflects User Changes) */}
-      <div className="mb-6">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-300" />
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Interactive Annotation Workspace (User Changes &amp; Manual Tags)
-            </span>
-            <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-              Live &amp; Editable
+          {/* Sentence Highlight Display with exact design.png entity-based colors */}
+          <div className="p-6 min-h-[4rem] text-[17px] leading-[2.85rem] text-slate-800">
+            {renderStaticModelText(sentenceText, sentenceStart, sentenceEnd, staticModelEntities)}
+          </div>
+
+          {/* Footer with Legend */}
+          <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/30 text-xs text-slate-500">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span className="inline-block w-4 h-0.5 bg-blue-500" />
+                Model prediction
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Static raw baseline — unmodified by manual annotations
             </span>
           </div>
-          <span className="text-xs text-slate-400">
-            {/* Highlight any text to add missed entities or click tags to edit */}
+        </div>
+      )}
+
+      {/* 2. Interactive Annotation Workspace Card (Shown if interactive or both is selected) */}
+      {(activeTab === 'interactive' || activeTab === 'both') && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden transition-all">
+          {/* Card Header matching design.png */}
+          <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                SOURCE TEXT
+              </span>
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                PARAGRAPH {lineItem.sentenceIndexInSegment != null ? lineItem.sentenceIndexInSegment + 1 : 1}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="text-amber-500">✨</span>
+              <span>{modelEntitiesOnLine.length} model predictions</span>
+            </div>
+          </div>
+
+          {/* Interactive Sentence Text with exact design.png entity styling */}
+          <div className="p-0">
+            <LabelStudioAnnotator
+              sentenceText={sentenceText}
+              sentenceStart={sentenceStart}
+              sentenceEnd={sentenceEnd}
+              entities={lineEntities}
+              onAddEntity={handleAddEntity}
+              onUpdateEntity={handleUpdateEntity}
+              onDeleteEntity={handleDeleteEntity}
+            />
+          </div>
+
+          {/* Card Footer matching design.png: Legend on left, Skip & Approve line [A] on right */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3.5 border-t border-slate-100 bg-slate-50/30">
+            {/* Legend matching design.png */}
+            <div className="flex items-center gap-4 text-xs text-slate-600 font-medium select-none">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-4 h-0.5 bg-blue-500" />
+                Model prediction
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-4 border-b-2 border-dashed border-red-500" />
+                Manual addition
+              </span>
+            </div>
+
+            {/* Action Buttons: Skip and Approve Line [A] */}
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleNextWithCheck}
+                disabled={!hasNext || saving}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
+                title="Skip to next line"
+              >
+                <span className="text-slate-400 font-bold">✕</span>
+                <span>Skip</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleApproveLine}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                title="Approve all entities on line and advance (Shortcut: A)"
+              >
+                <span>✓</span>
+                <span>Approve line</span>
+                <span className="rounded bg-emerald-950/40 px-1.5 py-0.5 text-[10px] font-mono text-emerald-200">
+                  A
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Missed Entity Bar matching design.png */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-3 shadow-xs">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-bold uppercase tracking-wider text-slate-700 text-[11px]">
+            ADD MISSED ENTITY
+          </span>
+          <span className="text-slate-300">|</span>
+          <span className="text-slate-500 font-medium">
+            {annotation?.selectedSpan ? (
+              <span className="text-emerald-700 font-bold">
+                Selected: "{annotation.selectedSpan.text}" → Pick an entity label in the right sidebar or press 1-9
+              </span>
+            ) : (
+              'Select text above, then choose a label'
+            )}
           </span>
         </div>
 
-        <LabelStudioAnnotator
-          sentenceText={sentenceText}
-          sentenceStart={sentenceStart}
-          sentenceEnd={sentenceEnd}
-          entities={lineEntities}
-          onAddEntity={handleAddEntity}
-          onUpdateEntity={handleUpdateEntity}
-          onDeleteEntity={handleDeleteEntity}
-        />
+        <button
+          type="button"
+          onClick={() => {
+            if (!annotation?.selectedSpan) {
+              alert('Please highlight a word or phrase in the text above first, then choose a label.');
+            }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+        >
+          <span>+</span>
+          <span>Add entity</span>
+        </button>
       </div>
 
-      {/* NER Model Output & Entities Breakdown for this Line */}
-      <div className="mb-6 rounded-xl border border-slate-200 overflow-hidden bg-slate-50/50">
+      {/* Details Table: Entity breakdown & individual actions */}
+      <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/50">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-100/70 border-b border-slate-200 text-xs font-semibold text-slate-700">
           <div className="flex items-center gap-2">
-            <span>Model Output & Annotated Entities for Line {globalLineNumber}</span>
+            <span>Annotated Entities for Line {globalLineNumber}</span>
             <span className="text-slate-400 font-normal">({currentEntities.length})</span>
           </div>
 
           <div className="flex items-center gap-2">
-            {currentEntities.some((e) => e.status !== 'approved') && (
-              <button
-                type="button"
-                onClick={handleApproveAllOnLine}
-                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-95 transition"
-                title="Approve all entity predictions on this line"
-              >
-                ✓ Approve All on Line
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded bg-slate-700 hover:bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs transition"
+            >
+              Save Line
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition"
+            >
+              Reset to Model Output
+            </button>
           </div>
         </div>
 
@@ -373,64 +583,9 @@ export default function LineAnnotationCard({
           </div>
         ) : (
           <div className="p-4 text-center text-xs text-slate-400 italic">
-            No entities detected in this line by the model. Use cursor to highlight any missed entity and tag it!
+            No entities detected in this line by the model. Select text above to add manual entities.
           </div>
         )}
-      </div>
-
-      {/* Action Footer: Save, Reset, Prev, Next */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50 ${
-              isDirty
-                ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/40'
-                : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}
-          >
-            {saving ? (
-              <>
-                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                <span>Saving to backend…</span>
-              </>
-            ) : (
-              <span>Save Line Annotations</span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:scale-95 transition"
-          >
-            Reset Line to Model Output
-          </button>
-        </div>
-
-        {/* Card Navigation */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handlePrevWithCheck}
-            disabled={!hasPrev || saving}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-          >
-            ← Previous Line
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNextWithCheck}
-            disabled={!hasNext || saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition"
-          >
-            Next Line →
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -447,6 +602,7 @@ function LineEntityTableRow({
   const isManual = ent.source === 'human';
   const isApproved = ent.status === 'approved';
   const confPct = (Number(ent.confidence ?? 1) * 100).toFixed(1);
+  const colorStyle = getEntityColorStyle(ent.label);
 
   return (
     <tr key={ent._id || idx} className="hover:bg-slate-50 transition-colors">
@@ -485,9 +641,8 @@ function LineEntityTableRow({
         ) : (
           <span
             onClick={() => setEditingType(true)}
-            className={`inline-flex items-center gap-1.5 cursor-pointer rounded px-2.5 py-1 text-[11px] font-semibold border transition hover:ring-1 hover:ring-blue-400 ${
-              getConfidenceThresholdClass(ent.confidence)
-            }`}
+            className="inline-flex items-center gap-1.5 cursor-pointer rounded px-2.5 py-1 text-[11px] font-semibold border transition hover:ring-1 hover:ring-blue-400"
+            style={colorStyle}
             title="Click to select different entity class from dropdown"
           >
             <span>{ent.label}</span>
@@ -510,13 +665,7 @@ function LineEntityTableRow({
             <span className="font-semibold text-slate-700">{confPct}%</span>
             <div className="w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden">
               <div
-                className={`h-full ${
-                  Number(ent.confidence) > 0.75
-                    ? 'bg-green-500'
-                    : Number(ent.confidence) >= 0.5
-                    ? 'bg-yellow-400'
-                    : 'bg-red-500'
-                }`}
+                className="h-full bg-blue-500"
                 style={{ width: `${confPct}%` }}
               />
             </div>
@@ -595,8 +744,8 @@ function LineEntityTableRow({
 }
 
 /**
- * Renders static sentence text with model baseline predictions highlighted.
- * Preserves original model outputs without allowing edits.
+ * Renders static sentence text with model baseline predictions highlighted matching design.png.
+ * Text color and underline depend strictly on entity type (NOT confidence score).
  */
 function renderStaticModelText(sentenceText, sentenceStart, sentenceEnd, staticEntities = []) {
   if (!sentenceText) return null;
@@ -632,24 +781,34 @@ function renderStaticModelText(sentenceText, sentenceStart, sentenceEnd, staticE
       sentenceText.slice(entStartInSent - sentenceStart, entEndInSent - sentenceStart) ||
       ent.text;
 
-    const confPct = (Number(ent.confidence ?? 1) * 100).toFixed(0);
+    const colorStyle = getEntityColorStyle(ent.label);
 
     pieces.push(
-      <mark
+      <span
         key={ent._id || `${ent.start}-${ent.end}-${idx}`}
-        className={`mx-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border shadow-2xs ${
-          getConfidenceThresholdClass(ent.confidence)
-        }`}
-        title={`Model Prediction: ${ent.label} (${(Number(ent.confidence ?? 1) * 100).toFixed(1)}%)`}
+        className="group relative inline-flex flex-col items-center mx-1 align-baseline select-text"
+        title={`Model Prediction: ${ent.label} (${(Number(ent.confidence ?? 1) * 100).toFixed(0)}%)`}
       >
-        <span>{textChunk}</span>
-        <span className="text-[10px] font-bold uppercase tracking-wider px-1 py-0.2 rounded bg-black/10">
-          {ent.label}
+        {/* Main Entity Text with Background and Solid Underline */}
+        <span
+          className="inline-block px-1.5 py-0.5 rounded text-[16px] font-medium leading-snug border-b-2 border-solid"
+          style={{
+            backgroundColor: colorStyle.bg,
+            color: colorStyle.text,
+            borderColor: colorStyle.border,
+          }}
+        >
+          {textChunk}
         </span>
-        <span className="text-[9px] font-mono opacity-85 font-semibold">
-          {confPct}%
+
+        {/* Subtext Label Underneath */}
+        <span
+          className="block text-[9px] font-bold uppercase tracking-wider text-center mt-0.5 leading-none select-none"
+          style={{ color: colorStyle.border }}
+        >
+          {ent.label.toUpperCase()}
         </span>
-      </mark>
+      </span>
     );
 
     currentPos = Math.max(currentPos, entEndInSent);
