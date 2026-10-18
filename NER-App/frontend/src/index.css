@@ -1,1 +1,102 @@
 @import "tailwindcss";
+
+/*
+  Fieldnote — annotation workbench tokens.
+
+  The 36 entity hues (see utils/textUtils.jsx) are the only chromatic element in
+  the product. Everything structural is ink on paper, so a span's colour always
+  means "entity type" and never "decoration". The two remaining colours are
+  borrowed from proof correction and carry provenance: machine blue for model
+  predictions, red pencil for anything a person added or changed.
+*/
+@theme {
+  --color-paper: #f3f5f1;
+  --color-sheet: #ffffff;
+  --color-ink: #1c2621;
+  --color-ink-soft: #54625a;
+  --color-ink-faint: #8b968f;
+  --color-rule: #dce1da;
+  --color-rule-strong: #c2cac1;
+  --color-machine: #2f5fa8;
+  --color-hand: #b5403a;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: #dbe6d2;
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Thin scrollbars inside the label list and span tables. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-strong) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--color-rule-strong);
+  border-radius: 99px;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+  The single moment of motion in the app: a span you have just tagged writes its
+  caption in. Saved spans never replay it, so movement always means "this is the
+  thing you just did".
+*/
+@keyframes mark-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mark-in {
+  animation: mark-in 0.18s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
