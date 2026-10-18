@@ -3,7 +3,6 @@ import { uploadDocument, uploadDocumentWithoutNER } from './api.js';
 import DocumentView from './pages/DocumentView.jsx';
 import TopHeaderBar from './components/TopHeaderBar.jsx';
 import { AnnotationProvider } from './context/AnnotationContext.jsx';
-import { Upload, Cpu, PenTool } from 'lucide-react';
 
 export default function App() {
   const [current, setCurrent] = useState(null);
@@ -53,8 +52,7 @@ export default function App() {
 
   return (
     <AnnotationProvider>
-      <div className="min-h-screen bg-[#FBFBFA] text-slate-900 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-950">
-        {/* Hidden file input for header/sidebar upload buttons */}
+      <div className="flex min-h-screen flex-col">
         <input
           ref={fileInputRef}
           type="file"
@@ -64,7 +62,6 @@ export default function App() {
           disabled={loading}
         />
 
-        {/* Top Header Bar matching design.png */}
         <TopHeaderBar
           doc={current}
           onOpenUpload={triggerUploadModal}
@@ -72,105 +69,109 @@ export default function App() {
           isPreviewOpen={previewMode}
         />
 
-        {/* Main Content Area */}
-        <div className="mx-auto max-w-[1560px] p-6 lg:p-8">
-          {error && (
-            <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800">
+        {error && (
+          <div className="mx-auto w-full max-w-[1560px] px-5 pt-5 lg:px-8">
+            <div className="rounded-md border-l-2 border-hand bg-sheet px-4 py-3 text-[13px] text-ink">
               {error}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Upload Choice Modal */}
-          {pendingFile && !loading && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-              <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl">
-                <h3 className="text-lg font-bold text-slate-900 mb-1">Processing Option</h3>
-                <p className="text-sm text-slate-500 mb-6">
-                  Choose how to process <span className="font-semibold text-slate-700">{pendingFile.name}</span>
+        {pendingFile && !loading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md overflow-hidden rounded-md border border-rule bg-sheet shadow-[0_24px_60px_-24px_rgba(28,38,33,0.45)]">
+              <div className="border-b border-rule px-5 py-4">
+                <h2 className="font-serif text-[20px] leading-tight text-ink">
+                  How should this file start?
+                </h2>
+                <p className="mt-1 truncate text-[12.5px] text-ink-faint" title={pendingFile.name}>
+                  {pendingFile.name}
                 </p>
+              </div>
 
-                <div className="grid grid-cols-1 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleUploadChoice(true)}
-                    className="flex items-center gap-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/60 p-4 text-left transition hover:border-emerald-400 hover:bg-emerald-50 cursor-pointer group"
-                  >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-800 text-white shadow-xs">
-                      <Cpu className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-900">Run NER Model</div>
-                      <div className="text-xs text-slate-500">Auto-detect entities using the trained model, then review and correct</div>
-                    </div>
-                  </button>
+              <button
+                type="button"
+                onClick={() => handleUploadChoice(true)}
+                className="block w-full border-b border-rule px-5 py-4 text-left transition hover:bg-paper"
+              >
+                <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
+                  <span className="inline-block h-0 w-4 border-b-2 border-solid border-machine" />
+                  Let the model read it first
+                </span>
+                <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
+                  Every sentence arrives pre-marked, and you correct what it got wrong.
+                </span>
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleUploadChoice(false)}
-                    className="flex items-center gap-4 rounded-xl border-2 border-slate-200 bg-slate-50/60 p-4 text-left transition hover:border-slate-400 hover:bg-slate-100 cursor-pointer group"
-                  >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-white shadow-xs">
-                      <PenTool className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-slate-900 group-hover:text-slate-950">Without NER Model</div>
-                      <div className="text-xs text-slate-500">Skip auto-detection and annotate all entities manually from scratch</div>
-                    </div>
-                  </button>
-                </div>
+              <button
+                type="button"
+                onClick={() => handleUploadChoice(false)}
+                className="block w-full border-b border-rule px-5 py-4 text-left transition hover:bg-paper"
+              >
+                <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
+                  <span className="inline-block h-0 w-4 border-b-2 border-dashed border-hand" />
+                  Start from a clean sheet
+                </span>
+                <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
+                  No predictions. You mark every span yourself.
+                </span>
+              </button>
 
+              <div className="px-5 py-3">
                 <button
                   type="button"
                   onClick={cancelUpload}
-                  className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  className="text-[12.5px] text-ink-faint underline-offset-2 transition hover:text-ink hover:underline"
                 >
                   Cancel
                 </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Loading overlay */}
-          {loading && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-              <div className="rounded-2xl bg-white p-8 shadow-2xl border border-slate-200 text-center">
-                <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-emerald-800 border-t-transparent" />
-                <p className="text-sm font-bold text-slate-900">Processing document…</p>
-                <p className="text-xs text-slate-500 mt-1">Extracting sentences and detecting entities</p>
-              </div>
+        {loading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4 backdrop-blur-sm">
+            <div className="rounded-md border border-rule bg-sheet px-6 py-5 text-center">
+              <p className="font-serif text-[17px] text-ink">Reading the document</p>
+              <p className="mt-1 text-[12.5px] text-ink-soft">
+                Splitting it into sentences and marking entities. Large files take a minute.
+              </p>
             </div>
-          )}
+          </div>
+        )}
 
-          {current ? (
-            /* Document Loaded: 3-Column Studio Workspace */
-            <DocumentView
-              doc={current}
-              onChange={handleDocChange}
-              onOpenUpload={triggerUploadModal}
-              previewMode={previewMode}
-            />
-          ) : (
-            /* Empty State: Clean upload prompt matching Fieldnote aesthetic */
-            <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white p-16 text-center shadow-xs max-w-xl mx-auto my-12">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 text-2xl font-bold">
-                <Upload className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1">
-                Start Document Annotation
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mb-6 leading-relaxed">
-                Upload agricultural research papers or advisories in JSON / JSONL format to start interactive line-by-line precision curation.
+        {current ? (
+          <DocumentView
+            doc={current}
+            onChange={handleDocChange}
+            onOpenUpload={triggerUploadModal}
+            previewMode={previewMode}
+          />
+        ) : (
+          <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-5 py-16">
+            <div className="rounded-md border border-rule bg-sheet px-7 py-9">
+              <h1 className="font-serif text-[28px] leading-tight tracking-tight text-ink">
+                Mark up an advisory, one line at a time
+              </h1>
+              <p className="mt-2.5 max-w-[46ch] text-[13.5px] leading-relaxed text-ink-soft">
+                Open a JSON or JSONL file of agricultural text. Each sentence comes up on its own,
+                with 36 entity labels a keystroke away.
               </p>
               <button
                 type="button"
                 onClick={triggerUploadModal}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-emerald-800 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-900 transition"
+                className="mt-6 rounded-md bg-ink px-4 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
               >
-                Upload JSON / JSONL Document
+                Open a file
               </button>
+              <p className="mt-3 text-[11.5px] text-ink-faint">
+                Takes <span className="font-mono">.json</span> and{' '}
+                <span className="font-mono">.jsonl</span> files.
+              </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </AnnotationProvider>
   );

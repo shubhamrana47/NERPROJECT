@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { EyeOff } from 'lucide-react';
 import { reviewEntity, saveLineEntities, resetLine } from '../api.js';
 import SegmentCard, { splitSentencesWithOffsets } from '../components/SegmentCard.jsx';
 import LineAnnotationCard from '../components/LineAnnotationCard.jsx';
@@ -7,7 +6,7 @@ import LeftAnnotationSidebar from '../components/LeftAnnotationSidebar.jsx';
 import EntityPaletteSidebar from '../components/EntityPaletteSidebar.jsx';
 import AnnotationBottomBar from '../components/AnnotationBottomBar.jsx';
 
-export default function DocumentView({ doc, onChange, onClose, onOpenUpload, previewMode = false }) {
+export default function DocumentView({ doc, onChange, onOpenUpload, previewMode = false }) {
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState(previewMode ? 'overview' : 'focus');
@@ -29,9 +28,10 @@ export default function DocumentView({ doc, onChange, onClose, onOpenUpload, pre
         const sentEnts = (seg.entities || []).filter(
           (e) => e.start >= sent.start && e.start < sent.end
         );
-        const originalList = (seg.originalEntities && seg.originalEntities.length > 0)
-          ? seg.originalEntities
-          : (seg.entities || []).filter((e) => e.source !== 'human');
+        const originalList =
+          seg.originalEntities && seg.originalEntities.length > 0
+            ? seg.originalEntities
+            : (seg.entities || []).filter((e) => e.source !== 'human');
         const staticModelEnts = originalList.filter(
           (e) => e.start >= sent.start && e.start < sent.end
         );
@@ -39,7 +39,7 @@ export default function DocumentView({ doc, onChange, onClose, onOpenUpload, pre
           globalLineNumber: globalCount,
           segIndex: seg.index,
           page: seg.page || 1,
-          section: seg.section || (seg.heading ? seg.heading : `Advisory Section ${seg.index + 1}`),
+          section: seg.section || (seg.heading ? seg.heading : `Advisory section ${seg.index + 1}`),
           sentenceText: sent.text,
           sentenceStart: sent.start,
           sentenceEnd: sent.end,
@@ -128,37 +128,46 @@ export default function DocumentView({ doc, onChange, onClose, onOpenUpload, pre
     }
   };
 
-  // Metrics calculation
   const totalLines = allLines.length;
   const currentLine = allLines[currentLineIndex] || null;
   const currentPage = currentLine?.page || (doc.segments?.[0]?.page ?? 1);
   const totalPages = Math.max(1, ...(doc.segments || []).map((s) => s.page || 1));
 
   const allActiveEntities = useMemo(() => {
-    return (doc.segments || []).flatMap((s) => s.entities || []).filter((e) => e.status !== 'deleted');
+    return (doc.segments || [])
+      .flatMap((s) => s.entities || [])
+      .filter((e) => e.status !== 'deleted');
   }, [doc]);
 
   const annotationsDone = allActiveEntities.length;
   const manualAnnotationsCount = allActiveEntities.filter((e) => e.source === 'human').length;
   const modelAnnotationsCount = allActiveEntities.filter((e) => e.source !== 'human').length;
 
-  // Active line counts for Right Sidebar LINE SUMMARY
-  const currentLineModelCount = useMemo(() => {
-    return (currentLine?.staticModelEntities || []).length || 5;
+  // Lines a person has actually touched: anything human-sourced, approved or edited.
+  const reviewedLines = useMemo(() => {
+    return allLines.filter((l) =>
+      (l.initialEntities || []).some(
+        (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited'
+      )
+    ).length;
+  }, [allLines]);
+
+  const lineModelSpans = currentLine?.staticModelEntities?.length || 0;
+
+  const lineManualSpans = useMemo(() => {
+    return (currentLine?.initialEntities || []).filter(
+      (e) => e.source === 'human' || e.status === 'edited'
+    ).length;
   }, [currentLine]);
 
-  const currentLineManualCount = useMemo(() => {
-    return (currentLine?.initialEntities || []).filter((e) => e.source === 'human' || e.status === 'approved').length || 1;
-  }, [currentLine]);
-
-  const currentLineAvgConfidence = useMemo(() => {
+  const lineMeanConfidence = useMemo(() => {
     const ents = currentLine?.staticModelEntities || [];
-    if (ents.length === 0) return 91.4;
+    if (ents.length === 0) return null;
     const sum = ents.reduce((acc, e) => acc + Number(e.confidence ?? 1), 0);
-    return ((sum / ents.length) * 100).toFixed(1);
+    return (sum / ents.length) * 100;
   }, [currentLine]);
 
-  // Entity counts mapping across whole document
+  // Entity counts across the whole document, used by the label list
   const docEntityCounts = useMemo(() => {
     const counts = {};
     allActiveEntities.forEach((e) => {
@@ -168,98 +177,95 @@ export default function DocumentView({ doc, onChange, onClose, onOpenUpload, pre
   }, [allActiveEntities]);
 
   return (
-    <div className="w-full">
-      {error && (
-        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800">
-          {error}
-        </div>
-      )}
-
-      {/* Main View Area */}
-      {viewMode === 'focus' ? (
-        totalLines > 0 && currentLine ? (
-          /* 3-Column Studio Workspace Layout matching design.png */
-          <div className="grid grid-cols-1 md:grid-cols-[16rem_1fr] lg:grid-cols-[17rem_1fr_21rem] gap-8 items-start">
-            {/* 1. Left Navigation Sidebar matching design.png */}
-            <aside className="hidden md:block sticky top-6">
-              <LeftAnnotationSidebar
-                doc={doc}
-                totalLines={totalLines}
-                currentLineNumber={currentLineIndex + 1}
-                reviewedLinesCount={Math.max(currentLineIndex + 1, manualAnnotationsCount)}
-                activeFilter={filter}
-                onFilterChange={setFilter}
-                onUploadClick={onOpenUpload}
-              />
-            </aside>
-
-            {/* 2. Central Annotation Workspace matching design.png */}
-            <main className="min-w-0">
-              <LineAnnotationCard
-                lineItem={currentLine}
-                totalLines={totalLines}
-                onSaveLine={handleSaveLine}
-                onResetLine={handleResetLine}
-                onNextLine={() => setCurrentLineIndex((i) => Math.min(totalLines - 1, i + 1))}
-                onPrevLine={() => setCurrentLineIndex((i) => Math.max(0, i - 1))}
-                hasPrev={currentLineIndex > 0}
-                hasNext={currentLineIndex < totalLines - 1}
-              />
-            </main>
-
-            {/* 3. Right Entity Palette & Line Summary Sidebar matching design.png */}
-            <aside className="sticky top-6">
-              <EntityPaletteSidebar
-                predictedCount={currentLineModelCount}
-                addedCount={currentLineManualCount}
-                avgConfidence={currentLineAvgConfidence}
-                entityCounts={docEntityCounts}
-              />
-            </aside>
+    <div className="flex min-h-[calc(100vh-3.3rem)] flex-col">
+      <div className="mx-auto w-full max-w-[1560px] flex-1 px-5 pb-8 pt-6 lg:px-8">
+        {error && (
+          <div className="mb-5 rounded-md border-l-2 border-hand bg-sheet px-4 py-3 text-[13px] text-ink">
+            {error}
           </div>
+        )}
+
+        {viewMode === 'focus' ? (
+          totalLines > 0 && currentLine ? (
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_21rem] lg:grid-cols-[16rem_1fr_23rem] lg:gap-7">
+              <aside className="scroll-slim hidden lg:sticky lg:top-[4.25rem] lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+                <LeftAnnotationSidebar
+                  doc={doc}
+                  totalLines={totalLines}
+                  currentLineNumber={currentLineIndex + 1}
+                  reviewedLines={reviewedLines}
+                  activeFilter={filter}
+                  onFilterChange={setFilter}
+                  onUploadClick={onOpenUpload}
+                  onJumpToLine={(n) => setCurrentLineIndex(Math.min(Math.max(0, n - 1), totalLines - 1))}
+                />
+              </aside>
+
+              <main className="min-w-0">
+                <LineAnnotationCard
+                  lineItem={currentLine}
+                  totalLines={totalLines}
+                  onSaveLine={handleSaveLine}
+                  onResetLine={handleResetLine}
+                  onNextLine={() => setCurrentLineIndex((i) => Math.min(totalLines - 1, i + 1))}
+                  onPrevLine={() => setCurrentLineIndex((i) => Math.max(0, i - 1))}
+                  hasPrev={currentLineIndex > 0}
+                  hasNext={currentLineIndex < totalLines - 1}
+                />
+              </main>
+
+              {/* Entity labels stay in the right-hand column from tablet width up,
+                  always open, filling the column and scrolling on their own. */}
+              <aside className="md:sticky md:top-[4.25rem] md:h-[calc(100vh-6rem)]">
+                <EntityPaletteSidebar
+                  modelSpans={lineModelSpans}
+                  manualSpans={lineManualSpans}
+                  meanConfidence={lineMeanConfidence}
+                  entityCounts={docEntityCounts}
+                />
+              </aside>
+            </div>
+          ) : (
+            <p className="rounded-md border border-rule bg-sheet px-5 py-10 text-center text-[13px] text-ink-faint">
+              This document has no sentences to annotate.
+            </p>
+          )
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-            No lines found in this document.
-          </div>
-        )
-      ) : (
-        /* Overview Mode: Full Document Sections */
-        <div className="space-y-4 max-w-6xl mx-auto">
-          <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm border border-slate-200 text-xs">
-            <span className="font-medium text-slate-600">
-              Full Document Overview · {doc.segments?.length || 0} advisory sections
-            </span>
-            <button
-              type="button"
-              onClick={() => setViewMode('focus')}
-              className="rounded-lg bg-emerald-800 text-white font-bold px-3 py-1.5 hover:bg-emerald-900 transition"
-            >
-              Return to Line Focus
-            </button>
-          </div>
+          <div className="mx-auto max-w-5xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-sheet px-4 py-2.5">
+              <p className="text-[12.5px] text-ink-soft">
+                {doc.segments?.length || 0} advisory sections, {totalLines.toLocaleString()} lines
+                {filter === 'review' ? ' — showing low confidence only' : ''}
+              </p>
+              <button
+                type="button"
+                onClick={() => setViewMode('focus')}
+                className="rounded-md bg-ink px-2.5 py-1.5 text-[12.5px] font-medium text-paper transition hover:bg-ink/90"
+              >
+                Back to one line
+              </button>
+            </div>
 
-          {doc.segments.map((seg) => (
-            <SegmentCard key={seg.index} seg={seg} filter={filter} onAction={act} />
-          ))}
-        </div>
-      )}
-
-      {/* Bottom Sticky Status Deck */}
-      <div className="mt-8">
-        <AnnotationBottomBar
-          docId={doc._id}
-          docFilename={doc.filename}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          currentLineNumber={currentLineIndex + 1}
-          totalLines={totalLines}
-          annotationsDone={annotationsDone}
-          manualAnnotationsCount={manualAnnotationsCount}
-          modelAnnotationsCount={modelAnnotationsCount}
-          viewMode={viewMode}
-          onToggleViewMode={() => setViewMode((m) => (m === 'focus' ? 'overview' : 'focus'))}
-        />
+            {doc.segments.map((seg) => (
+              <SegmentCard key={seg.index} seg={seg} filter={filter} onAction={act} />
+            ))}
+          </div>
+        )}
       </div>
+
+      <AnnotationBottomBar
+        docId={doc._id}
+        docFilename={doc.filename}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        currentLineNumber={currentLineIndex + 1}
+        totalLines={totalLines}
+        annotationsDone={annotationsDone}
+        manualAnnotationsCount={manualAnnotationsCount}
+        modelAnnotationsCount={modelAnnotationsCount}
+        viewMode={viewMode}
+        onToggleViewMode={() => setViewMode((m) => (m === 'focus' ? 'overview' : 'focus'))}
+      />
     </div>
   );
 }

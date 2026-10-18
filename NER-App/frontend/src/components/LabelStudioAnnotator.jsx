@@ -1,11 +1,14 @@
 import React, { useRef, useMemo } from 'react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
-import { getEntityColorStyle } from '../utils/textUtils.jsx';
+import { getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
 
 /**
- * Label Studio-style Interactive Text Annotator.
- * Allows user to highlight any span of text to manually annotate new entities via the dedicated sidebar,
- * or click on existing entities to change their label or remove them.
+ * Interactive span annotator.
+ *
+ * Marks follow proof-correction convention: a solid underline is the model's
+ * reading, a dashed one is a person's. The caption sits under the span so the
+ * sentence keeps reading as a sentence, and the character-offset maths is
+ * unchanged from the original implementation.
  */
 export default function LabelStudioAnnotator({
   sentenceText,
@@ -96,61 +99,74 @@ export default function LabelStudioAnnotator({
     }
   };
 
-  // Render tokens/spans with interactive entity highlights matching design.png
   const renderAnnotatedText = () => {
     const pieces = [];
     let currentPos = sentenceStart;
 
     sentenceEntities.forEach((ent, entIdx) => {
-      // Normal non-entity text before this entity
       if (ent.start > currentPos) {
-        const textBefore = sentenceText.slice(currentPos - sentenceStart, ent.start - sentenceStart);
         pieces.push(
-          <span key={`text-${currentPos}`} className="text-slate-800 select-text">
-            {textBefore}
+          <span key={`text-${currentPos}`} className="select-text">
+            {sentenceText.slice(currentPos - sentenceStart, ent.start - sentenceStart)}
           </span>
         );
       }
 
-      // Entity span — exact styling from design.png
       const entEndInSent = Math.min(ent.end, sentenceEnd);
-      const entText = sentenceText.slice(ent.start - sentenceStart, entEndInSent - sentenceStart) || ent.text;
+      const entText =
+        sentenceText.slice(ent.start - sentenceStart, entEndInSent - sentenceStart) || ent.text;
       const colorStyle = getEntityColorStyle(ent.label);
-      const isManual = ent.source === 'human' || ent.status === 'edited' || ent._id?.toString().startsWith('temp_');
-      const isEditing = activeEditingEntity && ((activeEditingEntity._id && activeEditingEntity._id === ent._id) || (activeEditingEntity.start === ent.start && activeEditingEntity.end === ent.end));
+      const isManual =
+        ent.source === 'human' ||
+        ent.status === 'edited' ||
+        ent._id?.toString().startsWith('temp_');
+      const isFresh = String(ent._id || '').startsWith('temp_');
+      const isEditing =
+        activeEditingEntity &&
+        ((activeEditingEntity._id && activeEditingEntity._id === ent._id) ||
+          (activeEditingEntity.start === ent.start && activeEditingEntity.end === ent.end));
 
       pieces.push(
         <span
           key={ent._id || `${ent.start}-${ent.end}-${entIdx}`}
-          className={`group relative inline-flex flex-col items-center mx-1 align-baseline select-text cursor-pointer transition-all ${
-            isEditing ? 'ring-2 ring-blue-500 rounded' : ''
-          }`}
+          className="group relative mr-1 inline-flex cursor-pointer select-text flex-col items-start align-baseline"
           onClick={(e) => {
             e.stopPropagation();
             if (setActiveEditingEntity) setActiveEditingEntity(ent);
             if (clearSelection) clearSelection();
           }}
-          title={`Click to edit · ${ent.label} · ${isManual ? 'Manual Addition' : `Model Prediction (${(Number(ent.confidence ?? 1) * 100).toFixed(0)}%)`}`}
+          title={
+            isManual
+              ? `${formatEntityLabel(ent.label)} · added by hand`
+              : `${formatEntityLabel(ent.label)} · model, ${(
+                  Number(ent.confidence ?? 1) * 100
+                ).toFixed(0)}% confident`
+          }
         >
-          {/* Main Entity Text with Background and Underline */}
           <span
-            className={`inline-block px-1.5 py-0.5 rounded text-[16px] font-medium leading-snug transition ${
-              isManual
-                ? 'border-b-2 border-dashed'
-                : 'border-b-2 border-solid'
+            className={`inline px-[1px] pb-[2px] transition-colors ${
+              isEditing ? 'bg-ink/[0.07]' : 'group-hover:bg-ink/[0.04]'
             }`}
             style={{
-              backgroundColor: colorStyle.bg,
-              color: colorStyle.text,
-              borderColor: colorStyle.border,
+              borderBottom: `2px ${isManual ? 'dashed' : 'solid'} ${colorStyle.border}`,
+              backgroundColor: isEditing ? undefined : isManual ? colorStyle.bg : undefined,
             }}
           >
             {entText}
-            {/* Quick delete button visible on hover */}
+          </span>
+
+          <span
+            className={`flex items-center gap-1 pt-[3px] text-[10px] leading-none ${
+              isFresh ? 'mark-in' : ''
+            }`}
+          >
+            {isManual && (
+              <span className="h-[3px] w-[3px] rounded-full bg-hand" aria-hidden="true" />
+            )}
+            <span style={{ color: colorStyle.border }}>{formatEntityLabel(ent.label)}</span>
             <button
               type="button"
-              className="ml-1 inline-flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
-              style={{ color: colorStyle.border }}
+              className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-hand"
               onClick={(e) => {
                 e.stopPropagation();
                 onDeleteEntity(ent);
@@ -158,18 +174,10 @@ export default function LabelStudioAnnotator({
                   if (setActiveEditingEntity) setActiveEditingEntity(null);
                 }
               }}
-              title="Remove entity tag"
+              title="Remove this span"
             >
               ×
             </button>
-          </span>
-
-          {/* Subtext Label Underneath */}
-          <span
-            className="block text-[9px] font-bold uppercase tracking-wider text-center mt-0.5 leading-none select-none"
-            style={{ color: colorStyle.border }}
-          >
-            {isManual ? `${ent.label.toUpperCase()} · manual` : ent.label.toUpperCase()}
           </span>
         </span>
       );
@@ -177,12 +185,10 @@ export default function LabelStudioAnnotator({
       currentPos = entEndInSent;
     });
 
-    // Remainder of the sentence after the last entity
     if (currentPos < sentenceEnd) {
-      const textAfter = sentenceText.slice(currentPos - sentenceStart);
       pieces.push(
-        <span key={`text-end-${currentPos}`} className="text-slate-800 select-text">
-          {textAfter}
+        <span key={`text-end-${currentPos}`} className="select-text">
+          {sentenceText.slice(currentPos - sentenceStart)}
         </span>
       );
     }
@@ -191,21 +197,14 @@ export default function LabelStudioAnnotator({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Interactive Sentence Text Box */}
-      <div
-        ref={containerRef}
-        onMouseUp={handleMouseUp}
-        className={`relative rounded-xl border bg-white p-6 shadow-xs leading-[2.85rem] text-[17px] text-slate-800 transition ${
-          selectedSpan
-            ? 'border-emerald-400 ring-2 ring-emerald-100 bg-emerald-50/20'
-            : 'border-slate-200 focus-within:border-blue-400'
-        }`}
-      >
-        <div className="min-h-[4rem] text-[17px] leading-[2.85rem] selection:bg-emerald-200 selection:text-emerald-950 font-normal">
-          {renderAnnotatedText()}
-        </div>
-      </div>
+    <div
+      ref={containerRef}
+      onMouseUp={handleMouseUp}
+      className={`font-serif text-[20px] leading-[2.5] text-ink transition-colors ${
+        selectedSpan ? 'selection:bg-[#f0d9d6]' : ''
+      }`}
+    >
+      {renderAnnotatedText()}
     </div>
   );
 }
