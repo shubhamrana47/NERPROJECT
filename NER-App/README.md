@@ -4,7 +4,7 @@ Full-stack Named Entity Recognition (NER) pipeline and human-in-the-loop annotat
 
 ```
 NER-App/
-├── frontend/          # React 18 + Vite + Tailwind CSS (1-Line Focus Mode & Label Studio Annotator)
+├── frontend/          # React 18 + Vite + Tailwind CSS (passage annotation workbench)
 ├── backend/           # Node.js + Express + Mongoose (REST API & MongoDB Persistence)
 └── python-ai-service/ # FastAPI + AgNER-BERTa (RoBERTa token classification)
 ```
@@ -14,13 +14,10 @@ NER-App/
 ## Key Capabilities
 
 * **Multi-Format Ingestion**: Upload `.json` documents or `.jsonl` (JSON Lines) files with automatic detection and format fallback.
-* **1-Line Focus Mode**: Review and annotate sentence-by-sentence with clear progress indicators (`Line X of Y`), page numbers, and section headings.
+* **One passage at a time**: Review and annotate a whole advisory passage with every sentence in view, crops and stages shown beside it, and the model predicting a window ahead on demand.
 * **Compact All-36 Entity Palette**: Highlight any word or phrase with cursor to select from all 36 canonical agricultural classes in an ultra-compact palette with real-time filter search.
-* **Save & Reset Controls**: Save line changes directly to MongoDB (`PUT .../line-entities`) or reset single sentences back to raw model predictions (`POST .../reset-line`).
-* **Direct File Download Station**: Export training datasets with one click directly to disk as:
-  * **Training Data (`.json`)**: Sentence-level training dataset with character offsets and provenance tags.
-  * **Training Data (`.jsonl`)**: Newline-delimited JSON Lines for transformer fine-tuning.
-  * **Label Studio Tasks (`.json`)**: Official Label Studio schema with pre-annotations and human ground-truth.
+* **Save & Reset Controls**: Approving a passage writes it (`PUT .../segments/:i/entities`); **Reset passage** restores the model's own reading (`POST .../segments/:i/reset`). Writes happen behind the interface, so a click never waits on the network.
+* **One export**: the uploaded file handed back with annotations appended — same records, same order, every original field untouched, `entities` and `annotation` added at the end. An exported file can be uploaded again to carry on where it left off. See the root [README](../README.md#annotation-output) and the [Annotator's Guide](../USER_GUIDE.md).
 * **Entity Provenance Tagging**: Exported datasets distinguish NER model predictions (`tag: "NER_LABELLED"`, `labelled_by: "NER Model"`) from human annotations (`tag: "MANUALLY_LABELLED"`, `labelled_by: "Manual Annotator"`).
 * **Bottom Metrics Deck**: Sticky dock displaying current page, lines remaining, total annotations done (manual vs. model breakdown), progress bar, and the export station.
 
