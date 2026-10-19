@@ -3,7 +3,8 @@
  */
 
 const CANONICAL_TYPES = [
-  'Agri_Method', 'Agri_Pollution', 'Agri_Process', 'Agri_Waste', 'Chemical', 'Citation',
+  'Agri_Equipment', 'Agri_Method', 'Agri_Pollution', 'Agri_Process', 'Agri_Waste',
+  'Chemical', 'Citation',
   'Crop', 'Date_and_Time', 'Disease', 'Duration', 'Event', 'Field_Area',
   'Food_Item', 'Fruit', 'Humidity', 'Location', 'ML_Model', 'Money',
   'Natural_Disaster', 'Natural_Resource', 'Nutrient', 'Organism', 'Organization', 'Other',

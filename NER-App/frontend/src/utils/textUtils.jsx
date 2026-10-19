@@ -1,6 +1,7 @@
 import React from 'react';
 
 export const ENTITY_TYPES = [
+  'Agri_Equipment',
   'Agri_Method',
   'Agri_Pollution',
   'Agri_Process',
@@ -56,6 +57,7 @@ export const ENTITY_COLOR_MAP = {
   Disease:           { bg: '#FFE4E6', text: '#881337', border: '#F43F5E', dot: '#F43F5E' },
   Soil:              { bg: '#F5EFEB', text: '#574127', border: '#92791A', dot: '#92791A' },
   Weather:           { bg: '#E0F2FE', text: '#0369A1', border: '#0284C7', dot: '#0284C7' },
+  Agri_Equipment:    { bg: '#F0E6DA', text: '#5C3B17', border: '#8A5A2B', dot: '#9A6B34' },
   Agri_Method:       { bg: '#FEF3C7', text: '#854D0E', border: '#D97706', dot: '#F59E0B' },
   Agri_Pollution:    { bg: '#FEE2E2', text: '#991B1B', border: '#EF4444', dot: '#EF4444' },
   Agri_Process:      { bg: '#FDF6B2', text: '#723B13', border: '#B45309', dot: '#D97706' },
@@ -174,7 +176,7 @@ export const ENTITY_GROUPS = [
   {
     name: 'Methods & Technology',
     icon: '⚙️',
-    types: ['Agri_Method', 'Agri_Process', 'Technology', 'ML_Model', 'Citation', 'Other'],
+    types: ['Agri_Equipment', 'Agri_Method', 'Agri_Process', 'Technology', 'ML_Model', 'Citation', 'Other'],
   },
 ];
 

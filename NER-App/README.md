@@ -15,7 +15,7 @@ NER-App/
 
 * **Multi-Format Ingestion**: Upload `.json` documents or `.jsonl` (JSON Lines) files with automatic detection and format fallback.
 * **One passage at a time**: Review and annotate a whole advisory passage with every sentence in view, crops and stages shown beside it, and the model predicting a window ahead on demand.
-* **Compact All-36 Entity Palette**: Highlight any word or phrase with cursor to select from all 36 canonical agricultural classes in an ultra-compact palette with real-time filter search.
+* **Full Entity Palette**: Highlight any word or phrase to pick from all 37 canonical agricultural classes, grouped by domain and always open, with real-time search. The model predicts 36 of them; `Agri_Equipment` is annotator-only.
 * **Save & Reset Controls**: Approving a passage writes it (`PUT .../segments/:i/entities`); **Reset passage** restores the model's own reading (`POST .../segments/:i/reset`). Writes happen behind the interface, so a click never waits on the network.
 * **One export**: the uploaded file handed back with annotations appended — same records, same order, every original field untouched, `entities` and `annotation` added at the end. An exported file can be uploaded again to carry on where it left off. See the root [README](../README.md#annotation-output) and the [Annotator's Guide](../USER_GUIDE.md).
 * **Entity Provenance Tagging**: Exported datasets distinguish NER model predictions (`tag: "NER_LABELLED"`, `labelled_by: "NER Model"`) from human annotations (`tag: "MANUALLY_LABELLED"`, `labelled_by: "Manual Annotator"`).
