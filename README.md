@@ -1,8 +1,22 @@
 # AgNER: Agricultural Named Entity Recognition & Human-in-the-Loop Annotation Suite
 
-A full-stack, enterprise-grade Named Entity Recognition (NER) pipeline and interactive annotation workbench purpose-built for agricultural advisories, pest/disease reports, and agronomic research documents.
+A full-stack Named Entity Recognition pipeline and annotation workbench for
+agricultural advisories, pest and disease reports, and agronomic research
+documents.
 
-The system pairs fine-tuned **RoBERTa-base (AgNER-BERTa)** with a **1-Line Focus Mode Annotation Workbench**, offering full compatibility with **Label Studio** and training dataset exports. Reviewers can inspect model predictions sentence-by-sentence, tag missed entities across **all 36 canonical agricultural classes**, and export verified ground-truth datasets distinguishing model predictions from manual human annotations.
+It pairs a fine-tuned **RoBERTa-base checkpoint (AgNER-BERTa)** with a
+**passage annotation workbench**: one advisory passage on screen at a time with
+all of its sentences in view, the model's proposals marked for review, and all
+36 canonical agricultural classes a keystroke away. The model runs **on demand**
+a window ahead of the annotator, so a large file is ready to work on
+immediately. Exports hand back the uploaded file with annotations appended, each
+span recording whether a person verified it — the distinction a training set and
+a gold benchmark both depend on.
+
+> **Going to annotate with it?** Read the **[Annotator's Guide](USER_GUIDE.md)** —
+> what the platform does, how to mark up a passage, the keyboard shortcuts, how to
+> read the exported file, and what to do when something looks wrong.
+> This README covers the architecture, the API and deployment.
 
 ---
 
@@ -12,7 +26,7 @@ The system pairs fine-tuned **RoBERTa-base (AgNER-BERTa)** with a **1-Line Focus
 NERPROJECT/
 ├── NER-roberta-base_512/      # Fine-tuned RoBERTa token classification checkpoint
 ├── NER-App/
-│   ├── frontend/              # React 18 + Vite + Tailwind CSS (Focus Mode UI & Annotator)
+│   ├── frontend/              # React 18 + Vite + Tailwind CSS (passage annotation workbench)
 │   ├── backend/               # Node.js + Express + Mongoose (REST API & Persistence)
 │   ├── python-ai-service/     # FastAPI + PyTorch + Hugging Face Transformers
 │   ├── Dockerfile             # Unified production container (Node + FastAPI + PyTorch)
@@ -393,8 +407,8 @@ The system is containerized via a **unified single-container Dockerfile** (`NER-
 ## Label Studio Integration Guide
 
 To import annotated datasets into Label Studio:
-1. Review sentences and make annotations in **1-Line Focus Mode**.
-2. Click **Download Training Data → Label Studio Tasks (.json)** in the bottom deck.
+1. Review and annotate passages in the workbench.
+2. Fetch `GET /api/documents/:id/dataset?format=jsonl` (the Label Studio task format is at `/:id/label-studio`).
 3. Open Label Studio, create a new project, and configure the labeling interface:
    ```xml
    <View>
