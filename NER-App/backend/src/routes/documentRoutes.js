@@ -5,6 +5,7 @@ const {
   documentController,
   entityController,
   lineController,
+  predictController,
   exportController,
 } = require('../controllers');
 
@@ -16,6 +17,12 @@ const upload = multer({
 // Document lifecycle routes
 router.post('/', upload.single('file'), documentController.upload);
 router.get('/', documentController.list);
+
+// Corpus-wide export routes. These must be declared before '/:id', which would
+// otherwise match 'dataset' and 'training-data' as document ids.
+router.get('/dataset', exportController.datasetExport);
+router.get('/training-data', exportController.trainingData);
+
 router.get('/:id', documentController.get);
 router.delete('/:id', documentController.remove);
 
@@ -25,12 +32,15 @@ router.post('/:id/segments/:segmentIndex/entities', entityController.addEntity);
 router.put('/:id/segments/:segmentIndex/entities', entityController.saveSegmentEntities);
 router.post('/:id/segments/:segmentIndex/reset', entityController.resetSegment);
 
+// On-demand inference for a window of passages
+router.post('/:id/predict', predictController.predictSegments);
+
 // Sentence line-level annotation routes
 router.put('/:id/segments/:segmentIndex/line-entities', lineController.saveLineEntities);
 router.post('/:id/segments/:segmentIndex/reset-line', lineController.resetLine);
 
-// Export & training dataset routes
-router.get('/training-data', exportController.trainingData);
+// Per-document export routes
+router.get('/:id/dataset', exportController.datasetExport);
 router.get('/:id/training-data', exportController.trainingData);
 router.get('/:id/label-studio', exportController.labelStudioExport);
 

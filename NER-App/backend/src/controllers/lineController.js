@@ -7,6 +7,18 @@ const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const { computeStats } = require('../services/nerService');
 
+/**
+ * Echoing the saved document back costs megabytes on a large file (a 5,000
+ * segment advisory serialises to ~12MB), and the client already knows what it
+ * just sent. With ?lean=1 we reply with the counts and the refreshed stats
+ * only. Callers that do not pass it still get the full document, so old and
+ * new clients both work.
+ */
+function isLeanRequest(req) {
+  const lean = req.query.lean;
+  return lean === '1' || lean === 'true';
+}
+
 // PUT /api/documents/:id/segments/:segmentIndex/line-entities
 // Save / replace entities for a SINGLE sentence line within a segment
 exports.saveLineEntities = async (req, res, next) => {
@@ -65,7 +77,14 @@ exports.saveLineEntities = async (req, res, next) => {
 
     res.json({
       ok: true,
-      doc,
+      ...(isLeanRequest(req)
+        ? {
+            stats: doc.stats,
+            // Just this line's stored spans, so the client can swap the
+            // placeholder ids it generated for the real ones.
+            savedEntities: seg.entities.filter((e) => e.start >= sStart && e.start < sEnd),
+          }
+        : { doc }),
       savedCount: normalizedLineEntities.length,
       lineSummary: {
         segIndex: Number(segmentIndex),
@@ -133,7 +152,7 @@ exports.resetLine = async (req, res, next) => {
 
     res.json({
       ok: true,
-      doc,
+      ...(isLeanRequest(req) ? { stats: doc.stats } : { doc }),
       resetCount: origLineEntities.length,
       lineSummary: {
         segIndex: Number(segmentIndex),

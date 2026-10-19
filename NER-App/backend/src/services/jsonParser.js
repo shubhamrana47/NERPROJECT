@@ -39,6 +39,31 @@ const KNOWN_ADVISORY_TITLES = [
 
 const DUMMY_VALUES = new Set(['no impact', 'no warning', 'none', 'nil', 'n/a', '-']);
 
+/** Accepts a string, a list, or a comma/semicolon separated string. */
+function toStringList(value) {
+  if (value == null) return [];
+  const list = Array.isArray(value) ? value : String(value).split(/[;,]/);
+  return list
+    .map((v) => String(v ?? '').trim())
+    .filter((v) => v && !isDummyText(v));
+}
+
+function firstString(...values) {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+/** "WHEAT (Sowing)" from crops and stages, when no subject line was supplied. */
+function describeSubject(crops, stages) {
+  if (!crops.length && !stages.length) return '';
+  const crop = crops.join(' / ');
+  const stage = stages.join(' / ');
+  if (crop && stage) return `${crop} (${stage})`;
+  return crop || stage;
+}
+
 function isDummyText(str) {
   if (!str) return true;
   return DUMMY_VALUES.has(String(str).trim().toLowerCase());
@@ -108,9 +133,9 @@ function parseSectionContent(section) {
 
 function parseDocument(json) {
   const segments = [];
-  const add = (text, meta) => {
+  const add = (text, meta, minWords = 3) => {
     text = String(text || '').trim();
-    if (text && text.split(/\s+/).length >= 3) {
+    if (text && text.split(/\s+/).length >= minWords) {
       segments.push({ index: segments.length, text, ...meta });
     }
   };
@@ -227,20 +252,57 @@ function parseDocument(json) {
 
   if (segments.length > 0) return segments;
 
-  // Fallback 3: JSONL & Array of text records e.g. [{ text: "..." }, { sentence: "..." }]
+  // Passage records: one object per advisory passage, as produced by the
+  // passage/header extraction pipeline. A `text` field is the only
+  // requirement; crops, stages and tags are carried through when present so
+  // the annotator can see what the passage is about.
   let usedRecords = false;
   root.forEach((item, i) => {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      const candidate =
-        item.text || item.sentence || item.line_text || item.content || item.advisory || item.passage;
-      if (typeof candidate === 'string' && candidate.trim() && candidate.trim().split(/\s+/).length >= 2) {
-        add(candidate.trim(), {
-          section: item.section || item.heading || (item.document ? `${item.document} (Line ${i + 1})` : `Record ${i + 1}`),
-          page: item.page ?? Math.floor(i / 10) + 1,
-        });
-        usedRecords = true;
-      }
-    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+
+    const candidate =
+      item.text ||
+      item.sentence ||
+      item.line_text ||
+      item.content ||
+      item.advisory ||
+      item.passage;
+    if (typeof candidate !== 'string' || !candidate.trim()) return;
+
+    const crops = toStringList(item.crops ?? item.crop);
+    const stages = toStringList(item.stages ?? item.stage);
+    const subjects = toStringList(item.subjects ?? item.subject);
+    const passageTag = firstString(item.passage_tag, item.passageTag, item.tag);
+    const passageId = firstString(item.passage_id, item.passageId, item.id, item.uid);
+
+    // What to call this passage on screen, in order of usefulness.
+    const label =
+      firstString(item.section, item.heading) ||
+      (subjects.length ? subjects.join('; ') : '') ||
+      describeSubject(crops, stages) ||
+      passageTag ||
+      `Passage ${i + 1}`;
+
+    add(
+      candidate.trim(),
+      {
+        sourceRecord: item,
+        // An annotated file can be uploaded again to carry on where it was
+        // left off; these are restored rather than re-predicted.
+        importedEntities: Array.isArray(item.entities) ? item.entities : undefined,
+        passageId,
+        passageTag,
+        crops,
+        stages,
+        subjects,
+        section: label,
+        heading: passageTag || label,
+        // Page numbers are not fabricated: a passage file has no pagination.
+        page: typeof item.page === 'number' ? item.page : undefined,
+      },
+      1
+    );
+    usedRecords = true;
   });
 
   if (usedRecords && segments.length > 0) return segments;
@@ -263,4 +325,4 @@ function parseDocument(json) {
   return segments;
 }
 
-module.exports = { parseDocument };
+module.exports = { parseDocument, toStringList, describeSubject };

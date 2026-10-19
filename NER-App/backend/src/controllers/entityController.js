@@ -4,6 +4,9 @@ const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const { computeStats } = require('../services/nerService');
 
+/** With ?lean=1 the reply carries counts instead of the whole document. */
+const isLean = (req) => req.query.lean === '1' || req.query.lean === 'true';
+
 
 exports.reviewEntity = async (req, res, next) => {
   try {
@@ -34,6 +37,9 @@ exports.reviewEntity = async (req, res, next) => {
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
     await doc.save();
+    if (isLean(req)) {
+      return res.json({ ok: true, stats: doc.stats, savedEntities: seg.entities });
+    }
     res.json(doc);
   } catch (err) {
     next(err);
@@ -105,6 +111,15 @@ exports.saveSegmentEntities = async (req, res, next) => {
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
     await doc.save();
+    if (isLean(req)) {
+      return res.json({
+        ok: true,
+        stats: doc.stats,
+        savedCount: seg.entities.length,
+        // The segment's stored spans, so the client can pick up real ids.
+        savedEntities: seg.entities,
+      });
+    }
     res.json(doc);
   } catch (err) {
     next(err);

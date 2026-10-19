@@ -18,7 +18,14 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  exposedHeaders: ['Content-Disposition'],
+  exposedHeaders: [
+    'Content-Disposition',
+    // Without these listed, a browser silently hides them from fetch().
+    'X-Dataset-Rows',
+    'X-Dataset-Entities',
+    'X-Dataset-Verified-Entities',
+    'X-Dataset-Quality',
+  ],
   preflightContinue: false,
   optionsSuccessStatus: 204,
 };
@@ -33,6 +40,10 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
   res.header('Access-Control-Allow-Credentials', 'true');
+  res.header(
+    'Access-Control-Expose-Headers',
+    'Content-Disposition, X-Dataset-Rows, X-Dataset-Entities, X-Dataset-Verified-Entities, X-Dataset-Quality'
+  );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }

@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, Download, Eye, FileText } from 'lucide-react';
-import { downloadTrainingDataFile, downloadLabelStudioFile } from '../api.js';
+import { downloadAnnotatedFile } from '../api.js';
+import { describeExport } from '../utils/annotatedFile.js';
 
 /**
  * Wordmark: three marked-up lines of text. The blue rule is a model prediction,
@@ -16,44 +17,25 @@ function Wordmark() {
   );
 }
 
-const EXPORT_OPTIONS = [
-  { id: 'jsonl', name: 'Training data', ext: '.jsonl' },
-  { id: 'json', name: 'Training data', ext: '.json' },
-  { id: 'labelstudio', name: 'Label Studio tasks', ext: '.json' },
-];
-
 export default function TopHeaderBar({
   doc,
   onOpenUpload,
   onTogglePreview,
   isPreviewOpen = false,
 }) {
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const dropdownRef = useRef(null);
+  const [exportNote, setExportNote] = useState('');
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setExportMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleExport = async (format) => {
+  const handleExport = async () => {
     if (!doc?._id) return;
     setExporting(true);
-    setExportMenuOpen(false);
+    setExportNote('');
     try {
-      if (format === 'labelstudio') {
-        await downloadLabelStudioFile(doc._id, doc.filename);
-      } else {
-        await downloadTrainingDataFile(doc._id, format, doc.filename);
-      }
+      const saved = await downloadAnnotatedFile(doc._id, doc.filename);
+      setExportNote(describeExport(saved.filename, saved));
+      setTimeout(() => setExportNote(''), 10000);
     } catch (e) {
-      alert(`Export failed: ${e.message}`);
+      setExportNote(`Export failed: ${e.message}`);
     } finally {
       setExporting(false);
     }
@@ -113,37 +95,25 @@ export default function TopHeaderBar({
           )}
 
           {doc && (
-            <div className="relative" ref={dropdownRef}>
-              <button
-                type="button"
-                disabled={exporting}
-                onClick={() => setExportMenuOpen(!exportMenuOpen)}
-                className="flex items-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-medium text-paper transition hover:bg-ink/90 disabled:opacity-50"
-              >
-                <Download className="h-3.5 w-3.5" />
-                {exporting ? 'Exporting' : 'Export'}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
-
-              {exportMenuOpen && (
-                <div className="absolute right-0 z-50 mt-1.5 w-60 overflow-hidden rounded-md border border-rule bg-sheet shadow-[0_12px_32px_-16px_rgba(28,38,33,0.35)]">
-                  {EXPORT_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => handleExport(opt.id)}
-                      className="flex w-full items-center justify-between gap-3 border-b border-rule/70 px-3 py-2.5 text-left text-[13px] text-ink transition last:border-0 hover:bg-paper"
-                    >
-                      <span>{opt.name}</span>
-                      <span className="font-mono text-[11px] text-ink-faint">{opt.ext}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              disabled={exporting}
+              onClick={handleExport}
+              className="flex items-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-medium text-paper transition hover:bg-ink/90 disabled:opacity-50"
+              title="Download the file with annotations appended"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exporting ? 'Exporting' : 'Export'}
+            </button>
           )}
         </div>
       </div>
+
+      {exportNote && (
+        <p className="border-t border-rule bg-sheet px-5 py-1.5 text-[12px] text-ink-soft lg:px-8">
+          {exportNote}
+        </p>
+      )}
     </header>
   );
 }

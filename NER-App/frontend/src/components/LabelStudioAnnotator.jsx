@@ -18,6 +18,7 @@ export default function LabelStudioAnnotator({
   onAddEntity,
   onUpdateEntity,
   onDeleteEntity,
+  readOnly = false,
 }) {
   const containerRef = useRef(null);
   const annotation = useAnnotation();
@@ -37,6 +38,7 @@ export default function LabelStudioAnnotator({
 
   // Handle user selecting text with mouse
   const handleMouseUp = () => {
+    if (readOnly) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       return;
@@ -129,8 +131,11 @@ export default function LabelStudioAnnotator({
       pieces.push(
         <span
           key={ent._id || `${ent.start}-${ent.end}-${entIdx}`}
-          className="group relative mr-1 inline-flex cursor-pointer select-text flex-col items-start align-baseline"
+          className={`group relative mr-1 inline-flex select-text flex-col items-start align-baseline ${
+            readOnly ? '' : 'cursor-pointer'
+          }`}
           onClick={(e) => {
+            if (readOnly) return;
             e.stopPropagation();
             if (setActiveEditingEntity) setActiveEditingEntity(ent);
             if (clearSelection) clearSelection();
@@ -164,20 +169,22 @@ export default function LabelStudioAnnotator({
               <span className="h-[3px] w-[3px] rounded-full bg-hand" aria-hidden="true" />
             )}
             <span style={{ color: colorStyle.border }}>{formatEntityLabel(ent.label)}</span>
-            <button
-              type="button"
-              className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-hand"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteEntity(ent);
-                if (activeEditingEntity && activeEditingEntity._id === ent._id) {
-                  if (setActiveEditingEntity) setActiveEditingEntity(null);
-                }
-              }}
-              title="Remove this span"
-            >
-              ×
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-hand"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteEntity(ent);
+                  if (activeEditingEntity && activeEditingEntity._id === ent._id) {
+                    if (setActiveEditingEntity) setActiveEditingEntity(null);
+                  }
+                }}
+                title="Remove this span"
+              >
+                ×
+              </button>
+            )}
           </span>
         </span>
       );
