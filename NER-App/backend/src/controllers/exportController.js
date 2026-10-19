@@ -8,6 +8,15 @@ const {
   splitSentencesWithOffsets,
   normalizeAndDeduplicateEntities,
 } = require('../utils/exportUtils');
+const {
+  buildAnnotatedRecords,
+  buildRows,
+  buildManifest,
+  toJsonl,
+  toHuggingFace,
+  toCoNLL,
+  toSpacy,
+} = require('../services/datasetBuilder');
 
 // GET /api/documents/:id/label-studio
 // Export in standard Label Studio tasks + annotations JSON format
@@ -182,6 +191,131 @@ exports.trainingData = async (req, res, next) => {
       );
     }
     return res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/documents/:id/dataset  (and /api/documents/dataset for every document)
+ *
+ * The uploaded file, handed back with annotations appended: one line per record
+ * exactly as it arrived, in its original field order, with `entities` and
+ * `annotation` added at the end. Every record is included, and every span
+ * states its source and whether a person verified it, so the single file serves
+ * both training and benchmarking.
+ *
+ * Query parameters:
+ *   format=annotated (default) — the source file plus annotations
+ *   format=jsonl|json|conll|hf|spacy|manifest — sentence-level derivatives,
+ *     available for pipelines that want them; not surfaced in the interface
+ *   verified=1          only spans a person signed off (gold benchmark)
+ *   include_empty=0     drop sentences with no entities (default: keep them)
+ *   low_confidence=1    also include unreviewed spans below the threshold
+ *   min_confidence=0.9  floor for unverified model spans
+ *   overlaps=keep       leave overlapping spans in place (default: resolve)
+ *   split=1             add a deterministic train/dev/test assignment
+ *   download=false      render in the browser instead of saving to a file
+ */
+exports.datasetExport = async (req, res, next) => {
+  try {
+    const filter = req.params.id ? { _id: req.params.id } : {};
+    const docs = await Document.find(filter);
+    if (req.params.id && docs.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const format = String(req.query.format || 'annotated').toLowerCase();
+    const isTruthy = (v) => v === '1' || v === 'true';
+    const needsTokens = format === 'conll' || format === 'hf';
+
+    const selection = {
+      verifiedOnly: isTruthy(req.query.verified),
+      includeLowConfidence: req.query.low_confidence !== '0' && req.query.low_confidence !== 'false',
+      minConfidence: Number(req.query.min_confidence || 0),
+      resolveOverlaps: req.query.overlaps !== 'keep',
+    };
+
+    if (format === 'annotated') {
+      // Every span the annotation holds travels, flagged, so the consumer can
+      // filter rather than needing a second export.
+      const { records, issues } = buildAnnotatedRecords(docs, selection);
+      const spans = records.reduce((n, r) => n + r.entities.length, 0);
+      const verified = records.reduce((n, r) => n + r.annotation.verified_spans, 0);
+      const base = docs.length === 1
+        ? docs[0].filename.replace(/\.(json|jsonl)$/i, '')
+        : 'dataset';
+
+      res.setHeader('Content-Type', 'application/x-jsonlines; charset=utf-8');
+      if (req.query.download !== 'false') {
+        res.setHeader('Content-Disposition', `attachment; filename="${base}_annotated.jsonl"`);
+      }
+      res.setHeader('X-Dataset-Rows', String(records.length));
+      res.setHeader('X-Dataset-Entities', String(spans));
+      res.setHeader('X-Dataset-Verified-Entities', String(verified));
+      res.setHeader('X-Dataset-Quality', JSON.stringify(issues));
+      return res.send(records.map((r) => JSON.stringify(r)).join('\n'));
+    }
+
+    const built = buildRows(docs, {
+      verifiedOnly: isTruthy(req.query.verified),
+      includeEmpty: req.query.include_empty !== '0' && req.query.include_empty !== 'false',
+      includeLowConfidence: isTruthy(req.query.low_confidence),
+      minConfidence: Number(req.query.min_confidence || 0),
+      resolveOverlaps: req.query.overlaps !== 'keep',
+      split: isTruthy(req.query.split),
+      withTokens: needsTokens,
+    });
+
+    const manifest = buildManifest(docs, built);
+    const base = docs.length === 1
+      ? docs[0].filename.replace(/\.(json|jsonl)$/i, '')
+      : 'dataset';
+    const kind = built.options.verifiedOnly ? 'gold' : 'train';
+    const isDownload = req.query.download !== 'false';
+
+    const send = (body, contentType, extension) => {
+      res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
+      if (isDownload) {
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${base}_${kind}.${extension}"`
+        );
+      }
+      // The manifest travels in a header too, so a downloaded file can always
+      // be traced back to the selection that produced it.
+      res.setHeader('X-Dataset-Rows', String(manifest.counts.rows));
+      res.setHeader('X-Dataset-Entities', String(manifest.counts.entities));
+      res.setHeader('X-Dataset-Verified-Entities', String(manifest.counts.verified_entities));
+      return res.send(body);
+    };
+
+    switch (format) {
+      case 'manifest':
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        if (isDownload) {
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${base}_${kind}_manifest.json"`
+          );
+        }
+        return res.send(JSON.stringify(manifest, null, 2));
+      case 'json':
+        return send(
+          JSON.stringify({ manifest, rows: built.rows }, null, 2),
+          'application/json',
+          'json'
+        );
+      case 'conll':
+        return send(toCoNLL(built.rows), 'text/plain', 'conll');
+      case 'hf':
+        return send(toHuggingFace(built.rows), 'application/x-jsonlines', 'jsonl');
+      case 'spacy':
+        return send(toSpacy(built.rows), 'application/x-jsonlines', 'jsonl');
+      case 'jsonl':
+      default:
+        return send(toJsonl(built.rows), 'application/x-jsonlines', 'jsonl');
+    }
   } catch (err) {
     next(err);
   }

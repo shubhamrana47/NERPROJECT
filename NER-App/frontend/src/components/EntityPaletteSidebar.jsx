@@ -49,15 +49,20 @@ function LabelRow({ type, count, shortcut, armed, onPick }) {
   );
 }
 
-/** The nine keyed labels, as big targets, for the spans you place all day. */
-function QuickKeys({ armed, onPick, counts }) {
+/**
+ * The quick block: labels you have actually used, most recent first, topped up
+ * with the keyed defaults. A digit shows only where one is really bound, since
+ * the key mapping never moves.
+ */
+function QuickLabels({ labels, shortcutMap, armed, onPick, counts }) {
   return (
     <div className="grid grid-cols-3 gap-1.5">
-      {ENTITY_SHORTCUTS.map(({ key, label }) => {
+      {labels.map((label) => {
         const { border } = getEntityColorStyle(label);
+        const key = shortcutMap[label];
         return (
           <button
-            key={key}
+            key={label}
             type="button"
             onClick={() => onPick(label)}
             className={`flex flex-col items-start gap-1 rounded border px-2 py-1.5 text-left transition ${
@@ -65,14 +70,18 @@ function QuickKeys({ armed, onPick, counts }) {
                 ? 'border-rule-strong bg-sheet hover:border-ink hover:bg-paper'
                 : 'border-rule bg-sheet hover:bg-paper'
             }`}
-            title={`${formatEntityLabel(label)} — press ${key}`}
+            title={
+              key
+                ? `${formatEntityLabel(label)} — press ${key}`
+                : formatEntityLabel(label)
+            }
           >
             <span className="flex w-full items-center justify-between gap-1">
               <span
                 className="h-[3px] w-3.5 shrink-0 rounded-full"
                 style={{ backgroundColor: border }}
               />
-              <span className="font-mono text-[10.5px] text-ink-faint">{key}</span>
+              <span className="font-mono text-[10.5px] text-ink-faint">{key || ''}</span>
             </span>
             <span className="w-full truncate text-[11.5px] leading-tight text-ink">
               {formatEntityLabel(label)}
@@ -101,6 +110,8 @@ export default function EntityPaletteSidebar({
 
   const selectedSpan = annotation?.selectedSpan;
   const activeEditingEntity = annotation?.activeEditingEntity;
+  const recentLabels = annotation?.recentLabels || [];
+  const quickLabels = annotation?.quickLabels || [];
   const applyLabel = annotation?.applyLabel;
   const clearSelection = annotation?.clearSelection;
   const setActiveEditingEntity = annotation?.setActiveEditingEntity;
@@ -238,7 +249,7 @@ export default function EntityPaletteSidebar({
           </div>
         ) : (
           <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
-            Drag across any words in the sentence, then choose the label that fits. Click a span
+            Drag across any words in the passage, then choose the label that fits. Click a span
             you have already marked to change or remove it.
           </p>
         )}
@@ -283,10 +294,18 @@ export default function EntityPaletteSidebar({
           <p className="mt-2.5 text-[12px] leading-snug text-ink-soft">{notice}</p>
         )}
 
-        {!matches && (
+        {!matches && quickLabels.length > 0 && (
           <div className="mt-3.5">
-            <p className="mb-1.5 text-[11.5px] text-ink-faint">Keys 1 to 9</p>
-            <QuickKeys armed={armed} onPick={handlePick} counts={entityCounts} />
+            <p className="mb-1.5 text-[11.5px] text-ink-faint">
+              {recentLabels.length > 0 ? 'Recently used' : 'Common labels'}
+            </p>
+            <QuickLabels
+              labels={quickLabels}
+              shortcutMap={shortcutMap}
+              armed={armed}
+              onPick={handlePick}
+              counts={entityCounts}
+            />
           </div>
         )}
       </div>

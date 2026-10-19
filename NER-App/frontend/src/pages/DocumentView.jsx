@@ -1,240 +1,546 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { reviewEntity, saveLineEntities, resetLine } from '../api.js';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { reviewEntity, saveSegmentEntities, resetSegment, predictSegments } from '../api.js';
 import SegmentCard, { splitSentencesWithOffsets } from '../components/SegmentCard.jsx';
-import LineAnnotationCard from '../components/LineAnnotationCard.jsx';
+import PassageAnnotationCard from '../components/PassageAnnotationCard.jsx';
+import SpanListPanel from '../components/SpanListPanel.jsx';
 import LeftAnnotationSidebar from '../components/LeftAnnotationSidebar.jsx';
 import EntityPaletteSidebar from '../components/EntityPaletteSidebar.jsx';
 import AnnotationBottomBar from '../components/AnnotationBottomBar.jsx';
+import { useAnnotation } from '../context/AnnotationContext.jsx';
+import { computeStatsLocal, sameSpans, stripTempId } from '../utils/annotationState.js';
+
+/** How far ahead of the annotator the model is kept. */
+const PREDICT_AHEAD = 10;
 
 export default function DocumentView({ doc, onChange, onOpenUpload, previewMode = false }) {
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState(previewMode ? 'overview' : 'focus');
-  const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [passageIndex, setPassageIndex] = useState(0);
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [predicting, setPredicting] = useState(false);
 
-  // Sync previewMode with viewMode
+  // The spans of the passage on screen, shared by the text and the span list.
+  const [working, setWorking] = useState([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [message, setMessage] = useState('');
+  const [focusedSpan, setFocusedSpan] = useState(null);
+
+  const annotation = useAnnotation();
+
+  const docRef = useRef(doc);
+  const onChangeRef = useRef(onChange);
+  const pendingRef = useRef(0);
+  const queueRef = useRef(Promise.resolve());
+  const splitCacheRef = useRef({ docId: null, byText: new Map() });
+  const requestedRef = useRef(new Set());
+  const messageTimerRef = useRef(null);
+  const isDirtyRef = useRef(false);
+
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
   useEffect(() => {
     setViewMode(previewMode ? 'overview' : 'focus');
   }, [previewMode]);
+  useEffect(() => () => window.clearTimeout(messageTimerRef.current), []);
 
-  // Extract all lines/sentences across all segments in the document
-  const allLines = useMemo(() => {
-    const lines = [];
-    let globalCount = 0;
-    (doc.segments || []).forEach((seg) => {
-      const sents = splitSentencesWithOffsets(seg.text);
-      sents.forEach((sent, sIdx) => {
-        globalCount++;
-        const sentEnts = (seg.entities || []).filter(
-          (e) => e.start >= sent.start && e.start < sent.end
-        );
-        const originalList =
-          seg.originalEntities && seg.originalEntities.length > 0
-            ? seg.originalEntities
-            : (seg.entities || []).filter((e) => e.source !== 'human');
-        const staticModelEnts = originalList.filter(
-          (e) => e.start >= sent.start && e.start < sent.end
-        );
-        lines.push({
-          globalLineNumber: globalCount,
-          segIndex: seg.index,
-          page: seg.page || 1,
-          section: seg.section || (seg.heading ? seg.heading : `Advisory section ${seg.index + 1}`),
-          sentenceText: sent.text,
-          sentenceStart: sent.start,
-          sentenceEnd: sent.end,
-          initialEntities: sentEnts,
-          staticModelEntities: staticModelEnts,
-          sentenceIndexInSegment: sIdx,
-          docFilename: doc.filename,
-        });
-      });
-    });
-    return lines;
-  }, [doc]);
+  const passages = doc.segments || [];
+  const totalPassages = passages.length;
+  const passage = passages[passageIndex] || null;
 
-  // Keep line index in bounds if document changes
   useEffect(() => {
-    if (currentLineIndex >= allLines.length && allLines.length > 0) {
-      setCurrentLineIndex(allLines.length - 1);
+    if (passageIndex >= totalPassages && totalPassages > 0) setPassageIndex(totalPassages - 1);
+  }, [passageIndex, totalPassages]);
+
+  const applyDoc = useCallback((nextDoc) => {
+    docRef.current = nextDoc;
+    onChangeRef.current(nextDoc);
+  }, []);
+
+  const flash = useCallback((text) => {
+    setMessage(text);
+    window.clearTimeout(messageTimerRef.current);
+    messageTimerRef.current = window.setTimeout(() => setMessage(''), 2500);
+  }, []);
+
+  // Sentence offsets depend only on the text, so each passage is split once.
+  const sentencesFor = useCallback((text) => {
+    const cache = splitCacheRef.current;
+    if (cache.docId !== doc._id) {
+      cache.docId = doc._id;
+      cache.byText = new Map();
     }
-  }, [allLines.length, currentLineIndex]);
+    const key = text || '';
+    let sentences = cache.byText.get(key);
+    if (!sentences) {
+      sentences = splitSentencesWithOffsets(key);
+      cache.byText.set(key, sentences);
+    }
+    return sentences;
+  }, [doc._id]);
 
-  // Keyboard navigation for fast line switching
+  const sentences = useMemo(
+    () => (passage ? sentencesFor(passage.text) : []),
+    [passage, sentencesFor]
+  );
+
+  /*
+   * Documents stored before nerStatus existed take the schema default of
+   * 'pending' when loaded, even though their spans are right there. Treat a
+   * passage that holds spans as read, so it is never described as waiting.
+   */
+  const effectiveNerStatus = useMemo(() => {
+    if (!passage) return 'pending';
+    if (passage.nerStatus === 'pending' && (passage.entities || []).length > 0) return 'done';
+    return passage.nerStatus || 'done';
+  }, [passage]);
+
+  /* ----------------------------- on-demand model ---------------------------- */
+
+  /**
+   * Keeps the model a window ahead of the annotator. Nothing is predicted at
+   * upload, so this is what puts spans on the screen; a passage already
+   * predicted, skipped or in flight is never asked for twice.
+   */
+  const requestWindow = useCallback(
+    async (from, { force = false } = {}) => {
+      const current = docRef.current;
+      const segs = current.segments || [];
+      const wanted = [];
+
+      for (let i = from; i < Math.min(from + PREDICT_AHEAD, segs.length); i++) {
+        const seg = segs[i];
+        if (!seg) continue;
+        const key = `${current._id}:${seg.index}`;
+        // Already has spans? Then it has been read, whatever the status says.
+        if ((seg.entities || []).length > 0) continue;
+        const retryable = seg.nerStatus === 'pending' || (force && seg.nerStatus === 'error');
+        if (!retryable) continue;
+        if (!force && requestedRef.current.has(key)) continue;
+        requestedRef.current.add(key);
+        wanted.push(seg.index);
+      }
+
+      if (wanted.length === 0) return;
+
+      setPredicting(true);
+      try {
+        const res = await predictSegments(current._id, { indexes: wanted });
+        const byIndex = new Map((res.predicted || []).map((p) => [p.index, p]));
+        if (byIndex.size === 0) return;
+
+        const base = docRef.current;
+        const segments = (base.segments || []).map((seg) => {
+          const got = byIndex.get(seg.index);
+          if (!got) return seg;
+          // A passage being annotated right now keeps what is on screen.
+          if (seg.index === passage?.index && isDirtyRef.current) {
+            return { ...seg, nerStatus: got.nerStatus };
+          }
+          return {
+            ...seg,
+            nerStatus: got.nerStatus,
+            entities: got.entities || [],
+            originalEntities: got.originalEntities || [],
+          };
+        });
+        applyDoc({ ...base, segments, stats: res.stats || base.stats });
+      } catch (e) {
+        // Let the window be asked for again after a failure.
+        wanted.forEach((i) => requestedRef.current.delete(`${current._id}:${i}`));
+        setError(`The model could not read this passage: ${e.message}`);
+      } finally {
+        setPredicting(false);
+      }
+    },
+    [applyDoc, passage]
+  );
+
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    if (viewMode !== 'focus' || totalPassages === 0) return;
+    requestWindow(passageIndex);
+  }, [passageIndex, viewMode, totalPassages, requestWindow]);
+
+  /* ------------------------------ passage state ----------------------------- */
+
+  // Re-sync when the passage changes, or when the document refreshes while
+  // nothing is being edited here.
+  useEffect(() => {
+    const incoming = passage?.entities || [];
+    setWorking(incoming);
+    setIsDirty(false);
+    setFocusedSpan(null);
+    annotation?.clearSelection?.();
+    annotation?.setActiveEditingEntity?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passage?.index, doc._id]);
+
+  useEffect(() => {
+    if (!isDirtyRef.current) setWorking(passage?.entities || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passage?.entities]);
+
+  const addEntity = useCallback((newEnt) => {
+    setWorking((prev) => [
+      ...prev,
+      {
+        ...newEnt,
+        _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        confidence: 1.0,
+        source: 'human',
+        status: 'approved',
+      },
+    ]);
+    setIsDirty(true);
+    setMessage('');
+  }, []);
+
+  const updateEntity = useCallback((target, changes) => {
+    setWorking((prev) =>
+      prev.map((e) => {
+        const match =
+          (target._id && e._id === target._id) ||
+          (e.start === target.start && e.end === target.end);
+        return match ? { ...e, status: 'edited', source: 'human', ...changes } : e;
+      })
+    );
+    setIsDirty(true);
+    setMessage('');
+  }, []);
+
+  const deleteEntity = useCallback((target) => {
+    setWorking((prev) =>
+      prev.filter((e) => {
+        if (target._id && e._id === target._id) return false;
+        if (e.start === target.start && e.end === target.end) return false;
+        return true;
+      })
+    );
+    setIsDirty(true);
+    setMessage('');
+  }, []);
+
+  // The label sidebar applies to whichever passage is open.
+  useEffect(() => {
+    annotation?.registerLineAnnotator?.({
+      onAddEntity: addEntity,
+      onUpdateEntity: updateEntity,
+      onDeleteEntity: deleteEntity,
+    });
+  }, [annotation?.registerLineAnnotator, addEntity, updateEntity, deleteEntity]);
+
+  /* -------------------------------- persistence ------------------------------ */
+
+  const enqueue = useCallback((task) => {
+    pendingRef.current += 1;
+    setPendingSaves(pendingRef.current);
+    const run = queueRef.current.then(
+      () => task(),
+      () => task()
+    );
+    const settle = () => {
+      pendingRef.current -= 1;
+      setPendingSaves(pendingRef.current);
+    };
+    queueRef.current = run.then(settle, settle);
+    return run;
+  }, []);
+
+  /** Applies the edit at once and writes behind the interface. */
+  const persist = useCallback(
+    (segIndex, entities, note) => {
+      setError('');
+      setIsDirty(false);
+      if (note) flash(note);
+
+      const sorted = [...entities].sort((a, b) => a.start - b.start || a.end - b.end);
+      const base = docRef.current;
+      const segments = (base.segments || []).map((seg) =>
+        seg.index === segIndex ? { ...seg, entities: sorted } : seg
+      );
+      applyDoc({ ...base, segments, stats: computeStatsLocal(segments) });
+
+      const docId = base._id;
+      const payload = sorted.map(stripTempId);
+
+      return enqueue(async () => {
+        const res = await saveSegmentEntities(docId, segIndex, payload).catch((e) => {
+          setError(`That passage could not be saved: ${e.message}. Press Save to try again.`);
+          setIsDirty(true);
+          throw e;
+        });
+        // Pick up stored ids, but only while this passage is untouched since.
+        if (Array.isArray(res?.savedEntities) && pendingRef.current <= 1) {
+          const now = docRef.current;
+          const seg = (now.segments || []).find((s) => s.index === segIndex);
+          const stored = [...res.savedEntities].sort(
+            (a, b) => a.start - b.start || a.end - b.end
+          );
+          if (sameSpans(seg?.entities || [], stored)) {
+            const segments2 = (now.segments || []).map((s) =>
+              s.index === segIndex ? { ...s, entities: stored } : s
+            );
+            applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
+            if (segIndex === passage?.index && !isDirtyRef.current) setWorking(stored);
+          }
+        }
+        return res;
+      });
+    },
+    [applyDoc, enqueue, flash, passage]
+  );
+
+  const goTo = useCallback(
+    (nextIndex) => {
+      const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
+      if (isDirtyRef.current && passage) persist(passage.index, working, null);
+      setPassageIndex(clamped);
+    },
+    [passage, persist, totalPassages, working]
+  );
+
+  const handleSave = useCallback(() => {
+    if (passage) persist(passage.index, working, 'Saved');
+  }, [passage, persist, working]);
+
+  const approveAll = useCallback(() => {
+    const approved = working.map((e) =>
+      e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
+    );
+    setWorking(approved);
+    setIsDirty(true);
+    return approved;
+  }, [working]);
+
+  const handleApprove = useCallback(() => {
+    if (!passage) return;
+    const approved = working.map((e) =>
+      e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
+    );
+    setWorking(approved);
+    persist(passage.index, approved, passageIndex < totalPassages - 1 ? null : 'Passage approved');
+    if (passageIndex < totalPassages - 1) setPassageIndex(passageIndex + 1);
+  }, [passage, passageIndex, persist, totalPassages, working]);
+
+  const handleReset = useCallback(() => {
+    if (!passage) return;
+    if (
+      !window.confirm(
+        'Put this passage back to what the model proposed? Anything you added here is dropped.'
+      )
+    ) {
+      return;
+    }
+    const baseline = (passage.originalEntities || []).map((e) => ({ ...e }));
+    setWorking(baseline);
+    setIsDirty(false);
+    flash('Back to model output');
+    const docId = docRef.current._id;
+    const segments = (docRef.current.segments || []).map((seg) =>
+      seg.index === passage.index ? { ...seg, entities: baseline } : seg
+    );
+    applyDoc({ ...docRef.current, segments, stats: computeStatsLocal(segments) });
+    enqueue(() =>
+      resetSegment(docId, passage.index).catch((e) => {
+        setError(`That passage could not be reset: ${e.message}`);
+      })
+    );
+  }, [applyDoc, enqueue, flash, passage]);
+
+  // Keys: A approves, arrows move, 1-9 label the selection (handled in context).
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (viewMode !== 'focus') return;
+      if (e.key === 'ArrowRight') {
+        if (passageIndex < totalPassages - 1) {
+          e.preventDefault();
+          goTo(passageIndex + 1);
+        }
         return;
       }
-      if (e.key === 'ArrowRight' && currentLineIndex < allLines.length - 1) {
-        setCurrentLineIndex((i) => i + 1);
-      } else if (e.key === 'ArrowLeft' && currentLineIndex > 0) {
-        setCurrentLineIndex((i) => i - 1);
+      if (e.key === 'ArrowLeft') {
+        if (passageIndex > 0) {
+          e.preventDefault();
+          goTo(passageIndex - 1);
+        }
+        return;
+      }
+      if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleApprove();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentLineIndex, allLines.length]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [goTo, handleApprove, passageIndex, totalPassages, viewMode]);
 
-  // Save entities for a specific sentence/line directly to the backend
-  const handleSaveLine = async (segIndex, sentStart, sentEnd, lineEntities) => {
-    try {
-      setError('');
-      const cleanLineEntities = lineEntities.map((e) => {
-        if (e._id && String(e._id).startsWith('temp_')) {
-          const { _id, ...rest } = e;
-          return rest;
-        }
-        return e;
-      });
-
-      const res = await saveLineEntities(doc._id, segIndex, {
-        sentenceStart: sentStart,
-        sentenceEnd: sentEnd,
-        entities: cleanLineEntities,
-      });
-
-      const updatedDoc = res.doc || res;
-      onChange(updatedDoc);
-      return res;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    }
-  };
-
-  // Reset only the current line back to original model output
-  const handleResetLine = async (segIndex, sentStart, sentEnd) => {
-    try {
-      setError('');
-      const res = await resetLine(doc._id, segIndex, {
-        sentenceStart: sentStart,
-        sentenceEnd: sentEnd,
-      });
-      const updatedDoc = res.doc || res;
-      onChange(updatedDoc);
-      return res;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    }
-  };
+  // Warn if the tab closes with a write still going out.
+  useEffect(() => {
+    if (pendingSaves === 0) return undefined;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [pendingSaves]);
 
   const act = async (seg, ent, body) => {
     try {
-      onChange(await reviewEntity(doc._id, seg.index, ent._id, body));
+      applyDoc(await reviewEntity(docRef.current._id, seg.index, ent._id, body));
     } catch (e) {
       setError(e.message);
     }
   };
 
-  const totalLines = allLines.length;
-  const currentLine = allLines[currentLineIndex] || null;
-  const currentPage = currentLine?.page || (doc.segments?.[0]?.page ?? 1);
-  const totalPages = Math.max(1, ...(doc.segments || []).map((s) => s.page || 1));
+  /* --------------------------------- counts --------------------------------- */
 
-  const allActiveEntities = useMemo(() => {
-    return (doc.segments || [])
-      .flatMap((s) => s.entities || [])
-      .filter((e) => e.status !== 'deleted');
+  const docTotals = useMemo(() => {
+    const counts = {};
+    let active = 0;
+    let manual = 0;
+    let reviewedPassages = 0;
+    let awaitingModel = 0;
+
+    (doc.segments || []).forEach((seg) => {
+      if (seg.nerStatus === 'pending') awaitingModel += 1;
+      let touched = false;
+      (seg.entities || []).forEach((e) => {
+        if (e.status === 'deleted') return;
+        active += 1;
+        if (e.source === 'human') manual += 1;
+        if (e.source === 'human' || e.status === 'approved' || e.status === 'edited') touched = true;
+        counts[e.label] = (counts[e.label] || 0) + 1;
+      });
+      if (touched) reviewedPassages += 1;
+    });
+
+    return { active, manual, model: active - manual, counts, reviewedPassages, awaitingModel };
   }, [doc]);
 
-  const annotationsDone = allActiveEntities.length;
-  const manualAnnotationsCount = allActiveEntities.filter((e) => e.source === 'human').length;
-  const modelAnnotationsCount = allActiveEntities.filter((e) => e.source !== 'human').length;
+  const workingSpans = useMemo(
+    () => [...working].filter((e) => e.status !== 'deleted').sort((a, b) => a.start - b.start),
+    [working]
+  );
 
-  // Lines a person has actually touched: anything human-sourced, approved or edited.
-  const reviewedLines = useMemo(() => {
-    return allLines.filter((l) =>
-      (l.initialEntities || []).some(
-        (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited'
-      )
-    ).length;
-  }, [allLines]);
+  const lineNumberFor = useCallback(
+    (span) => {
+      const i = sentences.findIndex((s) => span.start >= s.start && span.start < s.end);
+      return i >= 0 ? i + 1 : null;
+    },
+    [sentences]
+  );
 
-  const lineModelSpans = currentLine?.staticModelEntities?.length || 0;
-
-  const lineManualSpans = useMemo(() => {
-    return (currentLine?.initialEntities || []).filter(
-      (e) => e.source === 'human' || e.status === 'edited'
-    ).length;
-  }, [currentLine]);
-
-  const lineMeanConfidence = useMemo(() => {
-    const ents = currentLine?.staticModelEntities || [];
-    if (ents.length === 0) return null;
-    const sum = ents.reduce((acc, e) => acc + Number(e.confidence ?? 1), 0);
-    return (sum / ents.length) * 100;
-  }, [currentLine]);
-
-  // Entity counts across the whole document, used by the label list
-  const docEntityCounts = useMemo(() => {
-    const counts = {};
-    allActiveEntities.forEach((e) => {
-      counts[e.label] = (counts[e.label] || 0) + 1;
-    });
-    return counts;
-  }, [allActiveEntities]);
+  const meanConfidence = useMemo(() => {
+    const model = (passage?.originalEntities || []).filter((e) => e.confidence != null);
+    if (model.length === 0) return null;
+    return (model.reduce((a, e) => a + Number(e.confidence), 0) / model.length) * 100;
+  }, [passage]);
 
   return (
     <div className="flex min-h-[calc(100vh-3.3rem)] flex-col">
       <div className="mx-auto w-full max-w-[1560px] flex-1 px-5 pb-8 pt-6 lg:px-8">
         {error && (
-          <div className="mb-5 rounded-md border-l-2 border-hand bg-sheet px-4 py-3 text-[13px] text-ink">
-            {error}
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md border-l-2 border-hand bg-sheet px-4 py-3 text-[13px] text-ink">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="rounded border border-rule bg-sheet px-2 py-1 text-[12px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
         {viewMode === 'focus' ? (
-          totalLines > 0 && currentLine ? (
-            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_21rem] lg:grid-cols-[16rem_1fr_23rem] lg:gap-7">
-              <aside className="scroll-slim hidden lg:sticky lg:top-[4.25rem] lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-                <LeftAnnotationSidebar
-                  doc={doc}
-                  totalLines={totalLines}
-                  currentLineNumber={currentLineIndex + 1}
-                  reviewedLines={reviewedLines}
-                  activeFilter={filter}
-                  onFilterChange={setFilter}
-                  onUploadClick={onOpenUpload}
-                  onJumpToLine={(n) => setCurrentLineIndex(Math.min(Math.max(0, n - 1), totalLines - 1))}
-                />
+          totalPassages > 0 && passage ? (
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_21rem] lg:grid-cols-[21rem_1fr_23rem] lg:gap-7">
+              {/* The span list sits to the left of the text it describes. */}
+              <aside className="order-2 flex flex-col gap-4 md:order-none lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-6rem)]">
+                <div className="min-h-0 flex-1">
+                  <SpanListPanel
+                    spans={workingSpans}
+                    lineNumberFor={lineNumberFor}
+                    onUpdate={updateEntity}
+                    onDelete={deleteEntity}
+                    onApproveAll={approveAll}
+                    focusedSpan={focusedSpan}
+                    onFocusSpan={setFocusedSpan}
+                    nerStatus={effectiveNerStatus}
+                  />
+                </div>
+                <div className="shrink-0">
+                  <LeftAnnotationSidebar
+                    doc={doc}
+                    totalPassages={totalPassages}
+                    currentPassageNumber={passageIndex + 1}
+                    reviewedPassages={docTotals.reviewedPassages}
+                    awaitingModel={docTotals.awaitingModel}
+                    activeFilter={filter}
+                    onFilterChange={setFilter}
+                    onUploadClick={onOpenUpload}
+                    onJumpToPassage={(n) => goTo(n - 1)}
+                  />
+                </div>
               </aside>
 
-              <main className="min-w-0">
-                <LineAnnotationCard
-                  lineItem={currentLine}
-                  totalLines={totalLines}
-                  onSaveLine={handleSaveLine}
-                  onResetLine={handleResetLine}
-                  onNextLine={() => setCurrentLineIndex((i) => Math.min(totalLines - 1, i + 1))}
-                  onPrevLine={() => setCurrentLineIndex((i) => Math.max(0, i - 1))}
-                  hasPrev={currentLineIndex > 0}
-                  hasNext={currentLineIndex < totalLines - 1}
+              <main className="order-1 min-w-0 md:order-none">
+                <PassageAnnotationCard
+                  passage={passage}
+                  nerStatus={effectiveNerStatus}
+                  sentences={sentences}
+                  entities={working}
+                  passageNumber={passageIndex + 1}
+                  totalPassages={totalPassages}
+                  isDirty={isDirty}
+                  message={message}
+                  onApprove={handleApprove}
+                  onSave={handleSave}
+                  onReset={handleReset}
+                  onNext={() => goTo(passageIndex + 1)}
+                  onPrev={() => goTo(passageIndex - 1)}
+                  hasPrev={passageIndex > 0}
+                  hasNext={passageIndex < totalPassages - 1}
+                  onRetryPredict={() => requestWindow(passageIndex, { force: true })}
+                  onDeleteEntity={deleteEntity}
                 />
               </main>
 
-              {/* Entity labels stay in the right-hand column from tablet width up,
-                  always open, filling the column and scrolling on their own. */}
-              <aside className="md:sticky md:top-[4.25rem] md:h-[calc(100vh-6rem)]">
+              {/* Entity labels stay in the right-hand column from tablet width up. */}
+              <aside className="order-3 md:order-none md:sticky md:top-[4.25rem] md:h-[calc(100vh-6rem)]">
                 <EntityPaletteSidebar
-                  modelSpans={lineModelSpans}
-                  manualSpans={lineManualSpans}
-                  meanConfidence={lineMeanConfidence}
-                  entityCounts={docEntityCounts}
+                  modelSpans={(passage.originalEntities || []).length}
+                  manualSpans={
+                    workingSpans.filter((e) => e.source === 'human' || e.status === 'edited').length
+                  }
+                  meanConfidence={meanConfidence}
+                  entityCounts={docTotals.counts}
                 />
               </aside>
             </div>
           ) : (
             <p className="rounded-md border border-rule bg-sheet px-5 py-10 text-center text-[13px] text-ink-faint">
-              This document has no sentences to annotate.
+              This document has no passages to annotate.
             </p>
           )
         ) : (
           <div className="mx-auto max-w-5xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-sheet px-4 py-2.5">
               <p className="text-[12.5px] text-ink-soft">
-                {doc.segments?.length || 0} advisory sections, {totalLines.toLocaleString()} lines
+                {totalPassages.toLocaleString()} passages
+                {docTotals.awaitingModel > 0
+                  ? `, ${docTotals.awaitingModel.toLocaleString()} not read by the model yet`
+                  : ''}
                 {filter === 'review' ? ' — showing low confidence only' : ''}
               </p>
               <button
@@ -242,11 +548,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                 onClick={() => setViewMode('focus')}
                 className="rounded-md bg-ink px-2.5 py-1.5 text-[12.5px] font-medium text-paper transition hover:bg-ink/90"
               >
-                Back to one line
+                Back to one passage
               </button>
             </div>
 
-            {doc.segments.map((seg) => (
+            {passages.map((seg) => (
               <SegmentCard key={seg.index} seg={seg} filter={filter} onAction={act} />
             ))}
           </div>
@@ -256,13 +562,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       <AnnotationBottomBar
         docId={doc._id}
         docFilename={doc.filename}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        currentLineNumber={currentLineIndex + 1}
-        totalLines={totalLines}
-        annotationsDone={annotationsDone}
-        manualAnnotationsCount={manualAnnotationsCount}
-        modelAnnotationsCount={modelAnnotationsCount}
+        currentPassageNumber={passageIndex + 1}
+        totalPassages={totalPassages}
+        sentenceCount={sentences.length}
+        annotationsDone={docTotals.active}
+        manualAnnotationsCount={docTotals.manual}
+        modelAnnotationsCount={docTotals.model}
+        pendingSaves={pendingSaves}
+        predicting={predicting}
+        awaitingModel={docTotals.awaitingModel}
         viewMode={viewMode}
         onToggleViewMode={() => setViewMode((m) => (m === 'focus' ? 'overview' : 'focus'))}
       />

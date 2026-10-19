@@ -1,3 +1,5 @@
+import { summariseAnnotatedJsonl } from './utils/annotatedFile.js';
+
 function getApiBase() {
   // 1. Explicit build-time or env setting
   if (import.meta.env.VITE_API_URL) {
@@ -59,28 +61,42 @@ export const addEntity = (docId, segIndex, body) =>
   });
 
 export const saveSegmentEntities = (docId, segIndex, entities) =>
-  req(`${BASE}/${docId}/segments/${segIndex}/entities`, {
+  req(`${BASE}/${docId}/segments/${segIndex}/entities?lean=1`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ entities }),
   });
 
+/**
+ * Asks the model to read a window of passages: the one on screen plus the next
+ * few. Nothing is predicted at upload time, so annotation can start at once.
+ */
+export const predictSegments = (docId, window) =>
+  req(`${BASE}/${docId}/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(window),
+  });
+
+// lean=1 asks the API to reply with counts and stats instead of echoing the
+// whole document back, which on a large file is megabytes the client already
+// has. The client applies its own update, so the echo is dead weight.
 export const saveLineEntities = (docId, segIndex, body) =>
-  req(`${BASE}/${docId}/segments/${segIndex}/line-entities`, {
+  req(`${BASE}/${docId}/segments/${segIndex}/line-entities?lean=1`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
 export const resetLine = (docId, segIndex, body) =>
-  req(`${BASE}/${docId}/segments/${segIndex}/reset-line`, {
+  req(`${BASE}/${docId}/segments/${segIndex}/reset-line?lean=1`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
 export const resetSegment = (docId, segIndex) =>
-  req(`${BASE}/${docId}/segments/${segIndex}/reset`, {
+  req(`${BASE}/${docId}/segments/${segIndex}/reset?lean=1`, {
     method: 'POST',
   });
 
@@ -96,44 +112,60 @@ export const trainingDataUrl = (id, options = {}) => {
 export const labelStudioExportUrl = (id) => `${BASE}/${id}/label-studio`;
 
 /**
- * Triggers a real browser file download for training data (.json or .jsonl).
+ * Dataset exports for model training and for a gold benchmark. Sentences with
+ * no entities are kept unless asked otherwise, since those negative examples
+ * are a third of the corpus.
  */
-export const downloadTrainingDataFile = async (docId, format = 'json', docFilename = 'document') => {
-  const url = trainingDataUrl(docId, {
-    download: true,
-    as: format,
-    format: 'lines',
-  });
+export const datasetUrl = (id, options = {}) => {
+  const params = new URLSearchParams();
+  if (options.format) params.set('format', options.format);
+  if (options.verified) params.set('verified', '1');
+  if (options.lowConfidence) params.set('low_confidence', '1');
+  if (options.includeEmpty === false) params.set('include_empty', '0');
+  if (options.minConfidence) params.set('min_confidence', String(options.minConfidence));
+  if (options.split) params.set('split', '1');
+  if (options.download === false) params.set('download', 'false');
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return id ? `${BASE}/${id}/dataset${qs}` : `${BASE}/dataset${qs}`;
+};
+
+async function saveBlob(url, filename, { countLines = false } = {}) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Export download failed with status ${res.status}`);
-  const blob = await res.blob();
+  if (!res.ok) throw new Error(`Export failed with status ${res.status}`);
+
+  // Read the body as text first when we want to describe it: the same text is
+  // handed to the download, so nothing is fetched twice.
+  const text = countLines ? await res.text() : null;
+  const blob = countLines ? new Blob([text], { type: 'application/x-jsonlines' }) : await res.blob();
+
   const blobUrl = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = blobUrl;
-  const baseName = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
-  link.download = `${baseName}_training_data.${format === 'jsonl' ? 'jsonl' : 'json'}`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.URL.revokeObjectURL(blobUrl);
-};
+
+  if (!countLines) return { filename };
+
+  // Counting the file beats trusting headers the browser may have hidden.
+  const summary = summariseAnnotatedJsonl(text);
+  return { ...summary, filename, bytes: blob.size };
+}
 
 /**
- * Triggers a real browser file download for Label Studio tasks JSON.
+ * Downloads the annotated file: the uploaded records, each with its annotations
+ * appended, and reports what the saved file actually contains.
  */
-export const downloadLabelStudioFile = async (docId, docFilename = 'document') => {
-  const url = labelStudioExportUrl(docId);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Export download failed with status ${res.status}`);
-  const blob = await res.blob();
-  const blobUrl = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  const baseName = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
-  link.download = `${baseName}_label_studio.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(blobUrl);
+export const downloadAnnotatedFile = async (docId, docFilename = 'document') => {
+  const base = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
+  const filename = `${base}_annotated.jsonl`;
+  return saveBlob(datasetUrl(docId, {}), filename, { countLines: true });
 };
 
+/** Label Studio tasks, for review passes in Label Studio itself. */
+export const downloadLabelStudioFile = async (docId, docFilename = 'document') => {
+  const base = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
+  return saveBlob(labelStudioExportUrl(docId), `${base}_label_studio.json`);
+};

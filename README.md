@@ -24,15 +24,49 @@ NERPROJECT/
 
 ## Key Capabilities
 
-### 1. Multi-Format Document Ingestion (`.json` and `.jsonl`)
-* **Flexible Ingestion**: Upload standard `.json` documents or newline-delimited `.jsonl` files (common in modern NLP/NER training pipelines).
-* **Automatic Format Detection**: If a `.jsonl` file is uploaded with a `.json` or `.txt` extension, the backend automatically detects line-by-line JSON and parses it gracefully.
-* **Document Structure Support**: Handles nested advisory sections, PAU/Agromet bulletin formats, page-segmented reports, or flat sentence-record datasets (`{"text": "..."}`).
+### 1. Document Ingestion (`.jsonl` passage files, `.json`, and more)
+* **A `text` field is the only requirement.** One JSON object per line with a
+  `text` field is enough to start annotating. Anything else the file carries is
+  used if present and ignored if not.
+* **Advisory passage files, first class.** Files from the passage/header
+  extraction pipeline are read directly, and their metadata is carried through
+  to the screen and into exports:
 
-### 2. 1-Line Focus Mode (Sentence-by-Sentence Review)
-* **Distraction-Free Focus**: Displays exactly one sentence per screen (`Line X of Y`) with page numbers, advisory section tags, and document progress.
-* **Rapid Keyboard Navigation**: Advance or rewind through sentences with keyboard shortcuts (<kbd>ArrowRight</kbd> / <kbd>ArrowLeft</kbd>) or navigation buttons.
-* **Unsaved Changes Guard**: Built-in state guard (`isDirty`) prevents navigating away if manual edits on the active line have not been saved.
+  ```json
+  {"passage_id": "3817e6a6596d", "passage_tag": "PUN-0001",
+   "crops": ["WHEAT"], "stages": ["Sowing"], "subjects": ["WHEAT (Sowing)"],
+   "text": "Farmers are advised to sow varieties PBW 752 ..."}
+  ```
+
+  `crops` and `stages` are shown beside the passage so the annotator can see
+  what it is about; `passage_tag` identifies it. Alternative spellings
+  (`crop`, `stage`, a comma-separated string) are accepted, and a passage with
+  no crops or stages still annotates normally.
+* **Other shapes still work**: nested advisory `sections`, `{ pages: [...] }`,
+  `{ test_cases: [...] }`, flat `{"text": ...}` records, and arbitrary JSON as a
+  last resort. A `.jsonl` file uploaded with a `.json` extension is detected and
+  parsed line by line.
+
+### 2. One Passage at a Time, With the Model Running Ahead
+* **Annotation starts immediately.** Nothing is predicted at upload. Running the
+  model over a whole file is minutes of waiting before a single passage can be
+  looked at, and the annotator only ever needs the one in front of them.
+* **The model stays a window ahead.** As the annotator moves, the client asks
+  `POST /api/documents/:id/predict` for the current passage plus the next ten.
+  A passage already predicted, skipped, or in flight is never asked for twice,
+  and a window that fails can be retried from the passage itself.
+* **A whole passage on screen.** Every sentence of the advisory is shown
+  together, numbered down a gutter, so context is never cut in half. Spans are
+  marked by underline — solid for the model, dashed for a person — with the
+  label set beneath.
+* **Three columns**: the span list on the left, the passage in the middle, the
+  36 entity labels on the right.
+* **Keyboard first**: <kbd>1</kbd>–<kbd>9</kbd> label the selection,
+  <kbd>A</kbd> approves the passage and moves on, <kbd>←</kbd>/<kbd>→</kbd>
+  move between passages (saving anything unsaved on the way out), <kbd>/</kbd>
+  searches labels.
+* **Writes never block a click.** An edit applies locally at once and is written
+  behind the interface, one request at a time in order.
 
 ### 3. Compact All-36 Entity Annotation Palette
 * **Free-Form Text Highlighting**: Highlight any word or multi-word phrase with the cursor to tag missed entities.
@@ -195,13 +229,85 @@ The model and annotation interface categorize agronomic entities into 36 standar
 
 ---
 
+## Annotation Output
+
+`GET /api/documents/:id/dataset` gives back **the file you uploaded, with the
+annotations appended**. One line per record, the same records in the same order,
+every original field untouched and in its original order, with two fields added
+at the end:
+
+```json
+{
+  "passage_id": "3817e6a6596d", "passage_tag": "PUN-0001",
+  "crops": ["WHEAT"], "stages": ["Sowing"], "subjects": ["WHEAT (Sowing)"],
+  "n_subjects": 1, "n_crops": 1, "n_occurrences": 13, "n_chars": 1059,
+  "text": "Farmers are advised to sow varieties PBW 752 ...",
+
+  "entities": [
+    { "start": 37, "end": 44, "label": "Other", "text": "PBW 752",
+      "source": "human", "verified": true,  "status": "approved", "confidence": 1 },
+    { "start": 108, "end": 113, "label": "Crop", "text": "wheat",
+      "source": "model", "verified": false, "status": "accepted", "confidence": 0.93 }
+  ],
+  "annotation": {
+    "spans": 2, "model_spans": 1, "human_spans": 1, "verified_spans": 1,
+    "reviewed": true, "ner_status": "done"
+  }
+}
+```
+
+* **Offsets are character offsets into that record's own `text`**, verified
+  against it on the way out. A span whose text does not match the characters at
+  its offsets is realigned only on an exact nearby match and otherwise dropped
+  and counted, never emitted misaligned.
+* **`source` and `verified` separate judgement from confidence.** `source` says
+  who proposed the span; `verified` is true only where a person approved, edited
+  or added it. `status: "accepted"` means the model cleared its threshold and
+  nobody has checked it. Filter on `verified` to get a gold set — one file
+  serves both training and benchmarking.
+* **`ner_status`** says whether the model ever read that passage (`done`,
+  `pending`, `skipped`), so an unannotated record is never mistaken for one with
+  genuinely no entities.
+* **Every record is present**, including passages with no entities at all
+  (`"entities": []`). Those are the negative examples a model needs.
+* **Overlapping spans are resolved** (verified first, then longer, then higher
+  confidence), since overlaps cannot be expressed in BIO.
+* Counts come back as `X-Dataset-Rows`, `X-Dataset-Entities`,
+  `X-Dataset-Verified-Entities` and `X-Dataset-Quality` headers.
+
+### The file is the working copy
+
+An exported file can be **uploaded again to carry on where it was left off**.
+Its `entities` are restored as annotations, their provenance intact, and those
+passages are not queued for the model a second time. Spans that no longer match
+the text they claim are dropped on the way in, so an edited file cannot corrupt
+the annotation.
+
+### Derivatives, for pipelines that want them
+
+The same endpoint will also emit sentence-level shapes via `?format=`:
+`conll` (token/tag), `hf` (tokens plus BIO tag ids matching the checkpoint's
+73-label head), `spacy`, `jsonl`/`json` (one row per sentence) and `manifest`
+(counts, labels, provenance, quality). These are not in the interface — the
+export button produces the annotated file and nothing else.
+
+---
+
 ## API Reference
 
 ### Document Management
-* `POST /api/documents` — Upload `.json` or `.jsonl` document, execute NER inference, and save to MongoDB.
+* `POST /api/documents` — Upload a `.json` or `.jsonl` document, parse it into passages, and save to MongoDB. Inference is **not** run here; passages start as `pending` and are predicted on demand (`?skipNer=true` marks them `skipped` to annotate from scratch).
 * `GET /api/documents` — List uploaded documents with entity statistics.
 * `GET /api/documents/:id` — Retrieve document details, segments, and annotations.
 * `DELETE /api/documents/:id` — Delete document and all annotations.
+
+### Inference
+* `POST /api/documents/:id/predict` — Run the model over a window of passages.
+  Body is `{ "indexes": [0, 1, 2] }` or `{ "from": 0, "count": 10 }` (capped at
+  25 per request). Only passages that are `pending` or previously `error` are
+  run, so repeat calls are free, and a passage already annotated by hand is
+  never overwritten. Replies with just the predicted passages, never the whole
+  document.
 
 ### Annotation Operations
 * `PUT /api/documents/:id/segments/:segmentIndex/line-entities` — Save/update entities for a specific sentence.
@@ -211,12 +317,14 @@ The model and annotation interface categorize agronomic entities into 36 standar
 * `PATCH /api/documents/:id/segments/:segmentIndex/entities/:entityId` — Update individual entity status or label.
 
 ### Dataset Export
-* `GET /api/documents/:id/training-data` — Download verified training data with `tag: NER_LABELLED` vs `MANUALLY_LABELLED`.
+* `GET /api/documents/:id/dataset` — The uploaded file with annotations appended. See **Annotation Output** above.
+* `GET /api/documents/dataset` — The same, across every uploaded document.
+* `GET /api/documents/:id/label-studio` — Download official Label Studio tasks and annotations JSON.
+* `GET /api/documents/:id/training-data` — Earlier export format, unchanged for compatibility. Note that it omits sentences without entities and does not distinguish human-verified spans from confident model output.
   * Query parameters:
     * `format=lines`: Exports sentence-by-sentence dataset.
     * `as=jsonl`: Exports as newline-delimited JSON Lines.
     * `download=false`: Returns raw JSON response for API integrations.
-* `GET /api/documents/:id/label-studio` — Download official Label Studio tasks and annotations JSON.
 
 ---
 
