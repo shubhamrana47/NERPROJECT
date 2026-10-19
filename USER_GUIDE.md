@@ -68,7 +68,7 @@ for the model.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  Fieldnote   your_file.jsonl ▾            Whole document    Export        │
 ├────────────────┬───────────────────────────────┬─────────────────────────┤
-│  Spans here  12│  PUN-0001  WHEAT  Sowing      │  Entity labels      36  │
+│  Spans here  12│  PUN-0001  WHEAT  Sowing      │  Entity labels      37  │
 │  ─────────────│  WHEAT (Sowing)                │  ──────────────────────  │
 │  1 wheat      │  3 sentences                   │  "yellow rust"          │
 │    Crop  4:9  │                                │  pick a label           │
@@ -92,7 +92,7 @@ for the model.
   The number before each span is the sentence it sits in.
 * **Middle — the passage.** All of its sentences, numbered down the gutter, so
   you never lose the context a sentence sits in.
-* **Right — Entity labels.** All 36, always open and scrollable, grouped by
+* **Right — Entity labels.** All 37, always open and scrollable, grouped by
   domain. The block at the top follows the labels you have been using.
 * **Bottom.** Where you are, how many spans exist, and the export button. A
   quiet `saving` appears here while a change is being written.
@@ -107,7 +107,7 @@ for the model.
 | **Dashed underline** | you added or changed it |
 | Small label beneath | the entity type |
 | Red dot before the label | added by hand |
-| Colour | the entity type — each of the 36 has its own, and it is the only colour on the screen |
+| Colour | the entity type — each of the 37 has its own, and it is the only colour on the screen |
 
 ---
 
@@ -116,7 +116,8 @@ for the model.
 **1. Read it.** The model's spans are already marked.
 
 **2. Add what it missed.** Drag across the words — any words, in any sentence —
-then either press the label's number key or click a label on the right. The
+then either press the label's number key or click a label on the right. All 37
+are listed there; the search box finds one by name. The
 selected text appears in both the right panel and the bar under the passage, so
 you can see exactly what you are about to label.
 
@@ -259,7 +260,7 @@ versioned copy as you go.
 
 ---
 
-## The 36 entity labels
+## The 37 entity labels
 
 | Domain | Labels |
 | :--- | :--- |
@@ -269,7 +270,13 @@ versioned copy as you go.
 | **Weather & Environment** | Weather, Rainfall, Temp, Humidity, Season, Natural_Disaster, Natural_Resource, Soil |
 | **Quantities & Time** | Quantity, Other_Quantity, Field_Area, Duration, Money, Date_and_Time, Event |
 | **Actors & Policy** | Person, Organization, Location, Policy |
-| **Methods & Technology** | Agri_Method, Agri_Process, Technology, ML_Model, Citation, Other |
+| **Methods & Technology** | Agri_Equipment, Agri_Method, Agri_Process, Technology, ML_Model, Citation, Other |
+
+**`Agri_Equipment` is yours to apply.** It was added to the list after the model
+was trained, so the model will never propose it — machinery like `happy seeder`,
+`super seeder`, `rotavator`, `tractor` or `tensiometer` is only labelled when you
+do it. Everything about it works normally: it exports, it counts, and it carries
+`"source": "human"` so anyone using the data can see it came from a person.
 
 ---
 

@@ -7,7 +7,7 @@ documents.
 It pairs a fine-tuned **RoBERTa-base checkpoint (AgNER-BERTa)** with a
 **passage annotation workbench**: one advisory passage on screen at a time with
 all of its sentences in view, the model's proposals marked for review, and all
-36 canonical agricultural classes a keystroke away. The model runs **on demand**
+37 canonical agricultural classes a keystroke away. The model runs **on demand**
 a window ahead of the annotator, so a large file is ready to work on
 immediately. Exports hand back the uploaded file with annotations appended, each
 span recording whether a person verified it — the distinction a training set and
@@ -74,7 +74,7 @@ NERPROJECT/
   marked by underline — solid for the model, dashed for a person — with the
   label set beneath.
 * **Three columns**: the span list on the left, the passage in the middle, the
-  36 entity labels on the right.
+  37 entity labels on the right.
 * **Keyboard first**: <kbd>1</kbd>–<kbd>9</kbd> label the selection,
   <kbd>A</kbd> approves the passage and moves on, <kbd>←</kbd>/<kbd>→</kbd>
   move between passages (saving anything unsaved on the way out), <kbd>/</kbd>
@@ -82,9 +82,9 @@ NERPROJECT/
 * **Writes never block a click.** An edit applies locally at once and is written
   behind the interface, one request at a time in order.
 
-### 3. Compact All-36 Entity Annotation Palette
+### 3. The Full Entity Palette, Always Open
 * **Free-Form Text Highlighting**: Highlight any word or multi-word phrase with the cursor to tag missed entities.
-* **All 36 Classes Visible**: Displays all 36 canonical agricultural entity classes in a single, high-density, color-coded palette (~80–90px height) without arbitrary 10-item limits or hidden dropdowns.
+* **All 37 Classes Visible**: Every canonical agricultural entity class is listed in the right-hand column, grouped by domain with sticky headings, always open and scrollable — no 10-item limit and no hidden dropdown.
 * **Live Typeahead Search**: Filter entities in real time by typing (<kbd>Enter</kbd> to apply matching tag, <kbd>Esc</kbd> to cancel).
 * **In-Place Entity Editing**: Click any existing tag to reclassify its category, inspect confidence scores, or delete false positives.
 
@@ -114,9 +114,14 @@ Exported datasets explicitly record the provenance of every single entity:
 
 ---
 
-## 36 Canonical Agricultural Entity Classes
+## 37 Canonical Agricultural Entity Classes
 
-The model and annotation interface categorize agronomic entities into 36 standardized classes across 7 functional domains:
+The annotation interface offers 37 standardized classes across 7 functional
+domains. The model predicts 36 of them: `Agri_Equipment` was added after the
+checkpoint was trained, so the model never proposes it and it reaches a dataset
+only when an annotator applies it. Exports declare this in the manifest as
+`annotator_only_labels`, with `model_labels` listing what the checkpoint can
+actually emit.
 
 | Domain | Entity Classes | Typical Examples |
 | :--- | :--- | :--- |
@@ -126,7 +131,7 @@ The model and annotation interface categorize agronomic entities into 36 standar
 | **Meteorology & Climate**| `Weather`, `Rainfall`, `Temp`, `Humidity`, `Season`, `Natural_Disaster`, `Natural_Resource` | Monsoon, Frost, 28°C, 85% RH, Kharif, Drought, Groundwater |
 | **Quantities & Time** | `Quantity`, `Other_Quantity`, `Field_Area`, `Duration`, `Money`, `Date_and_Time`, `Event` | 50 kg/ha, 2.5 acres, 15 days, ₹1200, October 15, Sowing |
 | **Entities & Agents** | `Person`, `Organization`, `Location`, `Policy` | PAU Ludhiana, ICAR, Punjab, PM-KISAN, Extension Officer |
-| **Methods & Technology** | `Agri_Method`, `Agri_Process`, `Technology`, `ML_Model`, `Citation`, `Other` | Drip Irrigation, Tillering, Tensiometer, AgNER-BERTa |
+| **Methods & Technology** | `Agri_Equipment`, `Agri_Method`, `Agri_Process`, `Technology`, `ML_Model`, `Citation`, `Other` | Happy Seeder, Super Seeder, Rotavator, Drip Irrigation, Tillering, Tensiometer, AgNER-BERTa |
 
 ---
 
@@ -279,6 +284,9 @@ at the end:
   or added it. `status: "accepted"` means the model cleared its threshold and
   nobody has checked it. Filter on `verified` to get a gold set — one file
   serves both training and benchmarking.
+* **`Agri_Equipment` never appears from the model.** It was added to the
+  taxonomy after the checkpoint was trained, so it only ever carries
+  `"source": "human"`. The manifest's `annotator_only_labels` says so.
 * **`ner_status`** says whether the model ever read that passage (`done`,
   `pending`, `skipped`), so an unannotated record is never mistaken for one with
   genuinely no entities.
@@ -300,8 +308,9 @@ the annotation.
 ### Derivatives, for pipelines that want them
 
 The same endpoint will also emit sentence-level shapes via `?format=`:
-`conll` (token/tag), `hf` (tokens plus BIO tag ids matching the checkpoint's
-73-label head), `spacy`, `jsonl`/`json` (one row per sentence) and `manifest`
+`conll` (token/tag), `hf` (tokens plus BIO tag ids; read the mapping from the manifest's
+`bio_label_to_id` rather than hardcoding it, since ids shift when the taxonomy
+changes), `spacy`, `jsonl`/`json` (one row per sentence) and `manifest`
 (counts, labels, provenance, quality). These are not in the interface — the
 export button produces the annotated file and nothing else.
 

@@ -24,7 +24,15 @@
 
 const { CANONICAL_TYPES, normalizeLabel, splitSentencesWithOffsets } = require('../utils/exportUtils');
 
-const SCHEMA_VERSION = '1.0';
+const SCHEMA_VERSION = '1.1';
+
+/**
+ * Labels the checkpoint cannot produce. AgNER-BERTa has a fixed head of 73
+ * labels (O plus 36 types x B/I), so a type added to the taxonomy afterwards
+ * can only ever come from an annotator. Recorded in the manifest so whoever
+ * trains on an export is not left wondering why the model never predicts it.
+ */
+const ANNOTATOR_ONLY_LABELS = ['Agri_Equipment'];
 
 /**
  * Decimal numbers, percentages, degrees and ordinals hold together — "28.5",
@@ -492,6 +500,8 @@ function buildManifest(documents, built, extra = {}) {
     empty_rows_unverifiable: emptyUnverifiable,
     quality: issues,
     labels: CANONICAL_TYPES.slice(),
+    model_labels: CANONICAL_TYPES.filter((t) => !ANNOTATOR_ONLY_LABELS.includes(t)),
+    annotator_only_labels: ANNOTATOR_ONLY_LABELS.slice(),
     bio_labels: bioLabels,
     bio_label_to_id: Object.fromEntries(bioLabels.map((l, i) => [l, i])),
     splits: Object.keys(splits).length ? splits : undefined,
@@ -546,6 +556,7 @@ function toSpacy(rows) {
 
 module.exports = {
   SCHEMA_VERSION,
+  ANNOTATOR_ONLY_LABELS,
   buildAnnotatedRecords,
   buildRows,
   buildManifest,

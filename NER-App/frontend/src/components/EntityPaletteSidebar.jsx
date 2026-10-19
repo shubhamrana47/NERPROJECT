@@ -186,7 +186,7 @@ export default function EntityPaletteSidebar({
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[14px] font-semibold text-ink">Entity labels</h2>
           <span className="font-mono text-[11.5px] tabular-nums text-ink-faint">
-            {matches ? `${matches.length} of 36` : '36'}
+            {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : ENTITY_TYPES.length}
           </span>
         </div>
 
@@ -259,7 +259,7 @@ export default function EntityPaletteSidebar({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search all 36 labels"
+            placeholder={`Search all ${ENTITY_TYPES.length} labels`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -326,7 +326,8 @@ export default function EntityPaletteSidebar({
             ))
           ) : (
             <p className="px-2.5 py-4 text-[13px] text-ink-faint">
-              No label matches “{search}”. Clear the search to see all 36.
+              No label matches “{search}”. Clear the search to see all{' '}
+              {ENTITY_TYPES.length}.
             </p>
           )
         ) : (
