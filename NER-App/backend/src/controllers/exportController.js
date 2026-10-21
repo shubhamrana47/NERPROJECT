@@ -248,7 +248,10 @@ exports.datasetExport = async (req, res, next) => {
 
       res.setHeader('Content-Type', 'application/x-jsonlines; charset=utf-8');
       if (req.query.download !== 'false') {
-        res.setHeader('Content-Disposition', `attachment; filename="${base}_annotated.jsonl"`);
+        const pad = (n) => String(n).padStart(2, '0');
+        const now = new Date();
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        res.setHeader('Content-Disposition', `attachment; filename="annotated_${stamp}.jsonl"`);
       }
       res.setHeader('X-Dataset-Rows', String(records.length));
       res.setHeader('X-Dataset-Entities', String(spans));

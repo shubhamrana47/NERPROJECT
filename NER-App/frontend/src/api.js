@@ -158,9 +158,19 @@ async function saveBlob(url, filename, { countLines = false } = {}) {
  * Downloads the annotated file: the uploaded records, each with its annotations
  * appended, and reports what the saved file actually contains.
  */
-export const downloadAnnotatedFile = async (docId, docFilename = 'document') => {
-  const base = (docFilename || 'document').replace(/\.(json|jsonl)$/i, '');
-  const filename = `${base}_annotated.jsonl`;
+function getSmallTimestamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const h = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${y}-${m}-${d}_${h}-${min}-${s}`;
+}
+
+export const downloadAnnotatedFile = async (docId, _docFilename = 'document') => {
+  const filename = `annotated_${getSmallTimestamp()}.jsonl`;
   return saveBlob(datasetUrl(docId, {}), filename, { countLines: true });
 };
 
