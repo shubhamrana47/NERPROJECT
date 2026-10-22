@@ -113,6 +113,8 @@ export default function SpanListPanel({
   focusedSpan,
   onFocusSpan,
   nerStatus,
+  passageNumber,
+  pageNumber,
 }) {
   const unapproved = spans.filter((s) => s.status !== 'approved').length;
 
@@ -120,7 +122,14 @@ export default function SpanListPanel({
     <div className="flex max-h-[32rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet lg:h-full lg:max-h-none">
       <div className="shrink-0 border-b border-rule px-3.5 py-3">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-[13.5px] font-semibold text-ink">Spans here</h2>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[13.5px] font-semibold text-ink">Spans here</h2>
+            {passageNumber != null && (
+              <span className="font-mono text-[11px] tabular-nums text-ink-faint">
+                {pageNumber != null ? `p. ${pageNumber}` : `pass. ${passageNumber}`}
+              </span>
+            )}
+          </div>
           <span className="font-mono text-[12px] tabular-nums text-ink-faint">{spans.length}</span>
         </div>
         {spans.length > 0 && unapproved > 0 && (
