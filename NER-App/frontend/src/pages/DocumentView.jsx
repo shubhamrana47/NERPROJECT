@@ -36,6 +36,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   const requestedRef = useRef(new Set());
   const messageTimerRef = useRef(null);
   const isDirtyRef = useRef(false);
+  const currentPassageIndexRef = useRef(passageIndex);
+
+  useEffect(() => {
+    currentPassageIndexRef.current = passageIndex;
+  }, [passageIndex]);
 
   useEffect(() => {
     docRef.current = doc;
@@ -176,11 +181,12 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     const incoming = passage?.entities || [];
     setWorking(incoming);
     setIsDirty(false);
+    isDirtyRef.current = false;
     setFocusedSpan(null);
     annotation?.clearSelection?.();
     annotation?.setActiveEditingEntity?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [passage?.index, doc._id]);
+  }, [passageIndex, doc._id]);
 
   useEffect(() => {
     if (!isDirtyRef.current) setWorking(passage?.entities || []);
@@ -199,6 +205,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       },
     ]);
     setIsDirty(true);
+    isDirtyRef.current = true;
     setMessage('');
   }, []);
 
@@ -212,6 +219,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       })
     );
     setIsDirty(true);
+    isDirtyRef.current = true;
     setMessage('');
   }, []);
 
@@ -224,6 +232,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       })
     );
     setIsDirty(true);
+    isDirtyRef.current = true;
     setMessage('');
   }, []);
 
@@ -288,7 +297,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
               s.index === segIndex ? { ...s, entities: stored } : s
             );
             applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
-            if (segIndex === passage?.index && !isDirtyRef.current) setWorking(stored);
+            const activePassage = now.segments?.[currentPassageIndexRef.current];
+            const isStillActive =
+              activePassage &&
+              (activePassage.index === segIndex || currentPassageIndexRef.current === segIndex);
+            if (isStillActive && !isDirtyRef.current) setWorking(stored);
           }
         }
         return res;
@@ -300,15 +313,30 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   const goTo = useCallback(
     (nextIndex) => {
       const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
-      if (isDirtyRef.current && passage) persist(passage.index, working, null);
+      if (clamped === passageIndex) return;
+
+      if (isDirtyRef.current && passage) {
+        const segIdx = passage.index != null ? passage.index : passageIndex;
+        persist(segIdx, working, null);
+      }
+
+      currentPassageIndexRef.current = clamped;
       setPassageIndex(clamped);
+
+      const nextPassage = passages[clamped];
+      setWorking(nextPassage?.entities || []);
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      setFocusedSpan(null);
+      annotation?.clearSelection?.();
+      annotation?.setActiveEditingEntity?.(null);
     },
-    [passage, persist, totalPassages, working]
+    [passage, passageIndex, passages, persist, totalPassages, working, annotation]
   );
 
   const handleSave = useCallback(() => {
-    if (passage) persist(passage.index, working, 'Saved');
-  }, [passage, persist, working]);
+    if (passage) persist(passage.index != null ? passage.index : passageIndex, working, 'Saved');
+  }, [passage, passageIndex, persist, working]);
 
   const approveAll = useCallback(() => {
     const approved = working.map((e) =>
@@ -316,6 +344,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     );
     setWorking(approved);
     setIsDirty(true);
+    isDirtyRef.current = true;
     return approved;
   }, [working]);
 
@@ -324,10 +353,28 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     const approved = working.map((e) =>
       e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
     );
-    setWorking(approved);
-    persist(passage.index, approved, passageIndex < totalPassages - 1 ? null : 'Passage approved');
-    if (passageIndex < totalPassages - 1) setPassageIndex(passageIndex + 1);
-  }, [passage, passageIndex, persist, totalPassages, working]);
+    const segIdx = passage.index != null ? passage.index : passageIndex;
+    const hasNext = passageIndex < totalPassages - 1;
+    persist(segIdx, approved, hasNext ? null : 'Passage approved');
+
+    if (hasNext) {
+      const nextIdx = passageIndex + 1;
+      currentPassageIndexRef.current = nextIdx;
+      setPassageIndex(nextIdx);
+
+      const nextPassage = passages[nextIdx];
+      setWorking(nextPassage?.entities || []);
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      setFocusedSpan(null);
+      annotation?.clearSelection?.();
+      annotation?.setActiveEditingEntity?.(null);
+    } else {
+      setWorking(approved);
+      setIsDirty(false);
+      isDirtyRef.current = false;
+    }
+  }, [passage, passageIndex, passages, persist, totalPassages, working, annotation]);
 
   const handleReset = useCallback(() => {
     if (!passage) return;
@@ -427,10 +474,19 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     return { active, manual, model: active - manual, counts, reviewedPassages, awaitingModel };
   }, [doc]);
 
-  const workingSpans = useMemo(
-    () => [...working].filter((e) => e.status !== 'deleted').sort((a, b) => a.start - b.start),
-    [working]
-  );
+  const workingSpans = useMemo(() => {
+    const pText = passage?.text || '';
+    return [...working]
+      .filter((e) => {
+        if (!e || e.status === 'deleted') return false;
+        // Strict boundary check: ensure span belongs to current passage text
+        if (pText && (e.start < 0 || e.end > pText.length || e.start >= e.end)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.start - b.start);
+  }, [working, passage?.text]);
 
   const lineNumberFor = useCallback(
     (span) => {
@@ -477,6 +533,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                     focusedSpan={focusedSpan}
                     onFocusSpan={setFocusedSpan}
                     nerStatus={effectiveNerStatus}
+                    passageNumber={passageIndex + 1}
+                    pageNumber={passage?.page}
                   />
                 </div>
                 <div className="shrink-0">
