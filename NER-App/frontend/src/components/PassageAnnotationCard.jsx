@@ -103,7 +103,6 @@ export default function PassageAnnotationCard({
     window.clearTimeout(noteTimer.current);
     noteTimer.current = window.setTimeout(() => setSelectionNote(null), 6000);
   };
-  const noteSelectionBlocked = () => flashNote('blocked');
   const noteSelectionUnresolved = (reason) => flashNote(reason || 'unresolved');
 
   const modelSpans = (passage.originalEntities || []).length;
@@ -115,6 +114,7 @@ export default function PassageAnnotationCard({
     (e) => e.validationStatus && e.validationStatus !== 'unreviewed'
   ).length;
   const undecided = entities.length - decided;
+  const addedSpans = entities.filter((e) => e.validationStatus === 'added').length;
 
   const quickLabels = annotation?.quickLabels || ENTITY_SHORTCUTS.map((s) => s.label);
   const selectedSpan = annotation?.selectedSpan;
@@ -128,9 +128,7 @@ export default function PassageAnnotationCard({
       onAddEntity={() => {}}
       onUpdateEntity={() => {}}
       onDeleteEntity={onDeleteEntity}
-      allowSelection={!isValidation}
       onFocusEntity={onFocusEntity}
-      onSelectionBlocked={noteSelectionBlocked}
       onSelectionUnresolved={noteSelectionUnresolved}
     />
   );
@@ -269,7 +267,7 @@ export default function PassageAnnotationCard({
             isValidation
               ? `${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}${
                   decided > 0 ? `, ${decided} decided` : ''
-                }`
+                }${addedSpans > 0 ? `, ${addedSpans} added` : ''}`
               : `${entities.length} ${entities.length === 1 ? 'span' : 'spans'}${
                   yourSpans > 0 ? `, ${yourSpans} yours` : ''
                 }`
@@ -286,7 +284,7 @@ export default function PassageAnnotationCard({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-0 w-4 border-b-2 border-dashed border-hand" />
-                  {isValidation ? 'you changed it' : 'yours'}
+                  {isValidation ? 'you changed or added it' : 'yours'}
                 </span>
                 {isValidation && (
                   <span className="flex items-center gap-1.5">
@@ -345,43 +343,12 @@ export default function PassageAnnotationCard({
         />
       )}
 
-      {/* Validation has no selection step: entities are judged, not added. */}
-      {isValidation ? (
-        <div className="rounded-md border border-rule bg-sheet px-4 py-3">
-          {entities.length === 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
-                The pipeline tagged nothing here. If that is right, say so — an unopened passage
-                should never look like a checked one.
-              </p>
-              <button
-                type="button"
-                onClick={onNothingToValidate}
-                className="shrink-0 rounded-md bg-ink px-3.5 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
-              >
-                Nothing to validate
-              </button>
-            </div>
-          ) : selectionNote ? (
-            <div className="rounded border-l-2 border-hand bg-paper px-3 py-2">
-              <p className="text-[13px] leading-relaxed text-ink">
-                Selecting words does nothing in this file. It arrived already tagged, and
-                validation is for judging those tags, not adding new ones.
-              </p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-                Click an entity that is already marked to put it in focus, then say whether it is
-                correct, mark it wrong, or pick a different label for it.
-              </p>
-            </div>
-          ) : (
-            <p className="text-[13px] leading-relaxed text-ink-soft">
-              <span className="font-medium text-ink">Checking, not tagging:</span> click an entity
-              to put it in focus, then mark it correct or wrong in the list on the left. To fix a
-              label, press a number or pick one on the right. Entities cannot be added here.
-            </p>
-          )}
-        </div>
-      ) : (
+      {/*
+        The selection step, shared by both workflows. A validation passage is
+        judged rather than written, but the pipeline can still have missed an
+        entity, and adding one is the same act as anywhere else: select the
+        words, pick a label.
+      */}
       <div
         className={`rounded-md border px-4 py-3 ${
           selectedSpan ? 'border-hand/40 bg-sheet' : 'border-rule bg-sheet'
@@ -425,6 +392,28 @@ export default function PassageAnnotationCard({
               })}
             </div>
           </>
+        ) : isValidation && entities.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
+              The pipeline tagged nothing here. If that is right, say so — an unopened passage
+              should never look like a checked one. If it missed something, select those words and
+              give them a label.
+            </p>
+            <button
+              type="button"
+              onClick={onNothingToValidate}
+              className="shrink-0 rounded-md bg-ink px-3.5 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
+            >
+              Nothing to validate
+            </button>
+          </div>
+        ) : isValidation ? (
+          <p className="text-[13px] leading-relaxed text-ink-soft">
+            <span className="font-medium text-ink">Checking, and adding what is missing:</span>{' '}
+            click a tagged entity to put it in focus, then mark it correct or wrong in the list on
+            the left; press a number or pick a label on the right to fix its type. If the pipeline
+            missed an entity, drag across the words and give it a label.
+          </p>
         ) : (
           <p className="text-[13px] leading-relaxed text-ink-soft">
             <span className="font-medium text-ink">To add a span:</span> drag across the words in
@@ -455,8 +444,7 @@ export default function PassageAnnotationCard({
             </p>
           </div>
         )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -190,3 +190,60 @@ test('an annotation document is unaffected by the rejection rule', async () => {
   assert.deepEqual(texts.sort(), ['urea', 'wheat']);
   assert.equal(built.issues.rejected_excluded, 0);
 });
+
+/** Puts a span of the annotator's own on the first passage. */
+function addSpan(doc, phrase, label) {
+  const seg = doc.segments[0];
+  const start = seg.text.indexOf(phrase);
+  assert.ok(start >= 0, `"${phrase}" is not in the passage`);
+  seg.entities.push({
+    text: phrase,
+    label,
+    start,
+    end: start + phrase.length,
+    confidence: 1,
+    status: 'approved',
+    source: 'human',
+    validationStatus: 'added',
+  });
+  seg.entities.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+test('a span the annotator added reaches the training export as verified', async () => {
+  const doc = await decidedDoc();
+  // 'apply' is a word the pipeline tagged nothing on
+  addSpan(doc, 'apply', 'Agri_Method');
+
+  const built = buildRows([doc], { includeEmpty: true });
+  const all = built.rows.flatMap((r) => r.entities);
+  const added = all.find((e) => e.text === 'apply');
+
+  assert.ok(added, 'the addition is a label like any other');
+  assert.equal(added.label, 'Agri_Method');
+  assert.equal(added.verified, true, 'and a person stands behind it');
+  const unreviewed = all.find((e) => e.text === 'DAP');
+  assert.equal(unreviewed.verified, false, 'unlike one nobody has looked at');
+
+  const manifest = buildManifest([doc], built);
+  assert.equal(manifest.counts.by_label.Agri_Method, 1);
+  assert.ok(manifest.counts.human_entities >= 1, 'counted as a human span in the manifest');
+});
+
+test('where an addition overlaps a pipeline span, the training export keeps the human one', async () => {
+  const doc = await decidedDoc();
+  // '55 kg DAP' covers the pipeline's unreviewed '55 kg' and 'DAP'
+  addSpan(doc, '55 kg DAP', 'Chemical');
+
+  const built = buildRows([doc], { includeEmpty: true, includeLowConfidence: true });
+  const texts = built.rows.flatMap((r) => r.entities.map((e) => e.text));
+
+  assert.ok(texts.includes('55 kg DAP'), 'the reading a person vouched for survives');
+  assert.ok(!texts.includes('55 kg'), 'the pipeline guesses underneath it do not');
+  assert.ok(!texts.includes('DAP'));
+  assert.ok(built.issues.overlaps_removed >= 1, 'and the removal is counted, not silent');
+
+  // the validated file, by contrast, keeps every one of them
+  const { records } = buildValidatedRecords([doc]);
+  const kept = records[0].entities.map((e) => e.text);
+  assert.ok(kept.includes('55 kg') && kept.includes('DAP') && kept.includes('55 kg DAP'));
+});

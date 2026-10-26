@@ -162,8 +162,9 @@ export default function EntityPaletteSidebar({
   const armed = Boolean(selectedSpan);
 
   const handlePick = (type) => {
-    // Validation: a label corrects the entity in focus; nothing is ever added.
-    if (isValidation) {
+    // Validation, with nothing selected: a label corrects the entity in focus.
+    // With words selected, it adds a span, exactly as in annotation.
+    if (isValidation && !selectedSpan) {
       const target = focusedSpan || activeEditingEntity;
       if (!target) {
         setJustTagged('');
@@ -209,7 +210,9 @@ export default function EntityPaletteSidebar({
           </span>
         </div>
 
-        {isValidation ? (
+        {/* A live selection is what the labels will act on, so it is shown
+            first, in validation as in annotation. */}
+        {isValidation && !selectedSpan ? (
           focusedSpan || activeEditingEntity ? (
             <div className="rounded border-l-2 border-hand bg-paper px-3 py-2.5">
               <p className="font-serif text-[16px] leading-snug text-ink">
@@ -226,7 +229,7 @@ export default function EntityPaletteSidebar({
           ) : (
             <p className="px-0.5 text-[12.5px] leading-snug text-ink-soft">
               Click an entity in the passage to put it in focus, then pick a label here to correct
-              it. Entities cannot be added in validation.
+              it. To add one the pipeline missed, select the words first.
             </p>
           )
         ) : selectedSpan ? (

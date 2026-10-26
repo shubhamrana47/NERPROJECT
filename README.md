@@ -257,8 +257,8 @@ structure**, never from its name, when the file is uploaded.
 | :--- | :--- | :--- |
 | Triggered by | any file whose entities use `label`, or that has none | entities that use `type` with offsets, as the hybrid pipeline writes them |
 | The model | predicts on demand, a window ahead of the annotator | **never runs**; `POST /:id/predict` refuses with 409 |
-| The job | mark up entities | confirm, reject or relabel what the pipeline produced |
-| Adding entities | yes | no, refused by the interface and by the API |
+| The job | mark up entities | confirm, reject or relabel what the pipeline produced, and add what it missed |
+| Adding entities | yes | yes, recorded as `status: "added"` and kept apart from the pipeline's own spans |
 | Export | `annotated_<timestamp>.jsonl` | `validated_<timestamp>.jsonl` |
 
 Because classification happens on the server, the file is uploaded first and the
@@ -280,16 +280,30 @@ Each decision is recorded against the entity it belongs to:
 }
 ```
 
-* `status` is one of `confirmed`, `rejected` or `relabelled`. An entity nobody
-  has judged carries **no** `validation` block at all, which is what lets a
-  part-finished file be picked up again.
+* `status` is one of `confirmed`, `rejected`, `relabelled` or `added`. An entity
+  nobody has judged carries **no** `validation` block at all, which is what lets
+  a part-finished file be picked up again.
+* An **added** entity is one the pipeline missed and a person marked. It is
+  appended after the pipeline's own list, so nothing the pipeline wrote moves,
+  and it carries `score: 1.0`, `sources: ["human"]` and no `mean_logprob` or
+  `runner_up_token` — those describe a model's uncertainty, and there is none
+  here. On re-import it is restored as an addition and deliberately left **out**
+  of the baseline the interface compares against, so it is never mistaken for
+  something the pipeline proposed. An addition is removed rather than rejected:
+  rejecting one's own span records nothing useful.
+* An addition may **overlap** a pipeline entity. Both are kept in the validated
+  file, because they are two readings of the same words; a training export
+  resolves the overlap in favour of the span a person stands behind, counted as
+  `overlaps_removed`.
+* `n_entities` is left exactly as the pipeline wrote it, additions and all. The
+  current total is `validation_summary.entities`.
 * A **rejected** entity is kept, never deleted — "the pipeline tagged this and a
   person disagreed" is the most valuable signal in the file. It is struck
   through in the interface and can be restored.
 * **A rejected entity is excluded from every training-shaped export**, including
   `?low_confidence=1`, and the manifest counts the exclusions as
   `rejected_excluded`.
-* `confirmed` and `relabelled` entities count as human-verified, so
+* `confirmed`, `relabelled` and `added` entities count as human-verified, so
   `?verified=1` yields exactly the spans a person signed off.
 * Each record gains a `validation_summary` with counts and a `complete` flag. A
   passage the pipeline found nothing in needs an explicit acknowledgement, which

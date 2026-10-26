@@ -17,6 +17,7 @@ const DECISION_LABEL = {
   confirmed: 'confirmed',
   rejected: 'rejected',
   relabelled: 'relabelled',
+  added: 'you added this',
 };
 
 function LabelPicker({ span, onPick, onCancel }) {
@@ -128,13 +129,16 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
 }
 
 /** One row of the validation workflow's span list. */
-function ValidationRow({ span, lineNumber, onDecide, onFocus, isFocused }) {
+function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocused, overlaps }) {
   const [editing, setEditing] = useState(false);
   const color = getEntityColorStyle(span.label);
   const decision = span.validationStatus && span.validationStatus !== 'unreviewed'
     ? span.validationStatus
     : null;
   const rejected = decision === 'rejected';
+  // A span someone added has no pipeline proposal behind it, so there is
+  // nothing to confirm or reject: it is either right or it goes.
+  const isAdded = decision === 'added';
   const score = Number(span.confidence ?? 1);
   const sources = Array.isArray(span.sources) ? span.sources : null;
 
@@ -203,19 +207,42 @@ function ValidationRow({ span, lineNumber, onDecide, onFocus, isFocused }) {
           </span>
         )}
 
-        <span className="font-mono text-[10.5px] tabular-nums text-ink-faint">
-          {(score * 100).toFixed(0)}%
-        </span>
+        {isAdded ? (
+          <span className="text-[11px] text-hand">yours</span>
+        ) : (
+          <>
+            <span className="font-mono text-[10.5px] tabular-nums text-ink-faint">
+              {(score * 100).toFixed(0)}%
+            </span>
 
-        {sources && (
-          <span className="truncate text-[11px] text-ink-faint" title={sources.join(', ')}>
-            {sources.join(' + ')}
+            {sources && (
+              <span className="truncate text-[11px] text-ink-faint" title={sources.join(', ')}>
+                {sources.join(' + ')}
+              </span>
+            )}
+          </>
+        )}
+
+        {overlaps && (
+          <span
+            className="text-[11px] text-ink-faint"
+            title="Another span here covers some of the same words. Both are kept in the validated file; a training export keeps the one a person stands behind."
+          >
+            overlaps
           </span>
         )}
       </div>
 
       <div className="mt-1.5 flex items-center gap-1.5">
-        {rejected ? (
+        {isAdded ? (
+          <button
+            type="button"
+            onClick={() => onDelete && onDelete(span)}
+            className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-hand transition hover:border-hand/50"
+          >
+            Remove
+          </button>
+        ) : rejected ? (
           <button
             type="button"
             onClick={() => onDecide(span, 'unreviewed')}
@@ -245,7 +272,7 @@ function ValidationRow({ span, lineNumber, onDecide, onFocus, isFocused }) {
             </button>
           </>
         )}
-        {decision && !rejected && (
+        {decision && !rejected && !isAdded && (
           <button
             type="button"
             onClick={() => onDecide(span, 'unreviewed')}
@@ -276,6 +303,23 @@ export default function SpanListPanel({
   const undecided = isValidation
     ? spans.filter((s) => !s.validationStatus || s.validationStatus === 'unreviewed').length
     : spans.filter((s) => s.status !== 'approved').length;
+
+  /*
+   * Spans covering some of the same words. Allowed — a person may well mark a
+   * longer phrase than the pipeline did — but worth seeing, because only one of
+   * them can survive into a training export.
+   */
+  const overlapping = new Set();
+  if (isValidation) {
+    for (let i = 0; i < spans.length; i += 1) {
+      for (let j = i + 1; j < spans.length; j += 1) {
+        if (spans[i].start < spans[j].end && spans[j].start < spans[i].end) {
+          overlapping.add(`${spans[i].start}:${spans[i].end}`);
+          overlapping.add(`${spans[j].start}:${spans[j].end}`);
+        }
+      }
+    }
+  }
 
   const counts = isValidation
     ? spans.reduce(
@@ -312,7 +356,9 @@ export default function SpanListPanel({
             {counts.rejected ? `${counts.rejected} wrong` : ''}
             {counts.rejected && counts.relabelled ? ', ' : ''}
             {counts.relabelled ? `${counts.relabelled} relabelled` : ''}
-            {undecided > 0 ? `${counts.confirmed || counts.rejected || counts.relabelled ? ', ' : ''}${undecided} to go` : ''}
+            {counts.relabelled && counts.added ? ', ' : ''}
+            {counts.added ? `${counts.added} added` : ''}
+            {undecided > 0 ? `${counts.confirmed || counts.rejected || counts.relabelled || counts.added ? ', ' : ''}${undecided} to go` : ''}
           </p>
         )}
 
@@ -331,7 +377,7 @@ export default function SpanListPanel({
         {spans.length === 0 ? (
           <li className="px-3.5 py-4 text-[12.5px] leading-relaxed text-ink-soft">
             {isValidation
-              ? 'The pipeline found nothing in this passage. If that looks right, mark it as nothing to validate.'
+              ? 'The pipeline found nothing in this passage. If that looks right, mark it as nothing to validate — or select the words it missed and give them a label.'
               : nerStatus === 'pending'
                 ? 'The model has not read this passage yet.'
                 : nerStatus === 'skipped'
@@ -351,8 +397,10 @@ export default function SpanListPanel({
                 span={span}
                 lineNumber={lineNumber}
                 onDecide={onDecide}
+                onDelete={onDelete}
                 onFocus={() => onFocusSpan && onFocusSpan(span)}
                 isFocused={isFocused}
+                overlaps={overlapping.has(`${span.start}:${span.end}`)}
               />
             ) : (
               <AnnotationRow

@@ -25,10 +25,13 @@ const entitySchema = new mongoose.Schema({
    *               tagged this and a human disagreed" is the point of the file.
    * relabelled -> kept, with a different type; originalLabel holds what the
    *               pipeline said.
+   * added      -> the pipeline missed it and a person marked it. Never part of
+   *               the pipeline baseline, so it is removable rather than
+   *               rejectable: rejecting your own span records nothing useful.
    */
   validationStatus: {
     type: String,
-    enum: ['unreviewed', 'confirmed', 'rejected', 'relabelled'],
+    enum: ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'],
   },
   originalLabel: String,
 });

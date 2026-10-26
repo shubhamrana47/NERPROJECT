@@ -34,8 +34,12 @@ const SCHEMA_VERSION = '1.1';
  */
 const ANNOTATOR_ONLY_LABELS = ['Agri_Equipment'];
 
-/** Decisions a person can record against a pipeline entity. */
-const VALIDATION_DECISIONS = ['confirmed', 'rejected', 'relabelled'];
+/**
+ * Decisions a person can record on a validation document. The first three are
+ * judgements on something the pipeline proposed; 'added' marks a span the
+ * pipeline missed, which has no pipeline counterpart to judge.
+ */
+const VALIDATION_DECISIONS = ['confirmed', 'rejected', 'relabelled', 'added'];
 
 /**
  * Decimal numbers, percentages, degrees and ordinals hold together — "28.5",
@@ -309,8 +313,8 @@ function buildAnnotatedRecords(documents, options = {}) {
  */
 function buildValidatedRecords(documents) {
   const records = [];
-  const totals = { entities: 0, confirmed: 0, rejected: 0, relabelled: 0, unreviewed: 0,
-    complete_passages: 0, passages: 0 };
+  const totals = { entities: 0, confirmed: 0, rejected: 0, relabelled: 0, added: 0,
+    unreviewed: 0, complete_passages: 0, passages: 0 };
 
   documents.forEach((doc) => {
     (doc.segments || []).forEach((seg) => {
@@ -330,9 +334,9 @@ function buildValidatedRecords(documents) {
       });
 
       const original = Array.isArray(source.entities) ? source.entities : [];
-      const counts = { confirmed: 0, rejected: 0, relabelled: 0, unreviewed: 0 };
+      const counts = { confirmed: 0, rejected: 0, relabelled: 0, added: 0, unreviewed: 0 };
 
-      const entities = original.map((orig) => {
+      const judged = original.map((orig) => {
         const decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
         const status = decided?.validationStatus || 'unreviewed';
 
@@ -361,6 +365,33 @@ function buildValidatedRecords(documents) {
         return { ...orig, validation: { status } };
       });
 
+      /*
+       * Spans with no counterpart in the record are the annotator's own, and
+       * are appended rather than merged in, so the pipeline's own list keeps the
+       * order and the shape it arrived in. They carry no mean_logprob or runner
+       * up: those describe a model's uncertainty, and there is none here. The
+       * 'added' status and the human source keep them identifiable after a
+       * round trip, which is how they stay out of the pipeline baseline on
+       * re-import.
+       */
+      const keyed = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
+      const additions = (seg.entities || [])
+        .filter((e) => !keyed.has(`${e.start}:${e.end}`))
+        .sort((a, b) => a.start - b.start || a.end - b.end)
+        .map((e) => {
+          counts.added += 1;
+          return {
+            text: e.text,
+            type: e.label,
+            start: e.start,
+            end: e.end,
+            score: 1.0,
+            sources: ['human'],
+            validation: { status: 'added' },
+          };
+        });
+
+      const entities = judged.concat(additions);
       const hasEntities = entities.length > 0;
       const complete = hasEntities ? counts.unreviewed === 0 : seg.nothingToValidate === true;
 
@@ -370,6 +401,7 @@ function buildValidatedRecords(documents) {
       totals.confirmed += counts.confirmed;
       totals.rejected += counts.rejected;
       totals.relabelled += counts.relabelled;
+      totals.added += counts.added;
       totals.unreviewed += counts.unreviewed;
 
       records.push({
