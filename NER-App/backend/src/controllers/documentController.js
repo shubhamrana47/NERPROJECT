@@ -4,8 +4,81 @@
  */
 
 const Document = require('../models/Document');
+const { CANONICAL_TYPES, normalizeLabel } = require('../utils/exportUtils');
 const { parseDocument } = require('../services/jsonParser');
 const { computeStats } = require('../services/nerService');
+
+const VALIDATION_STATUSES = ['unreviewed', 'confirmed', 'rejected', 'relabelled'];
+
+/**
+ * Entities that arrived with a pipeline file, loaded as they are.
+ *
+ * Nothing is invented and nothing is re-predicted: the type becomes the label,
+ * the pipeline's score becomes the confidence, and every offset is checked
+ * against the passage text so a span can never point at the wrong characters.
+ * The entity's own metadata is not copied here — the untouched record is kept
+ * in sourceRecord, and the export rebuilds from that.
+ *
+ * A validated file uploaded again brings its decisions back through each
+ * entity's `validation` block.
+ */
+function buildProvidedEntities(provided, text, ingest) {
+  const out = [];
+
+  for (const raw of provided) {
+    if (!raw || typeof raw !== 'object') continue;
+
+    const entityText = String(raw.text ?? '').trim();
+    const type = String(raw.type ?? '').trim();
+    const start = Number(raw.start);
+    const end = Number(raw.end);
+
+    const usable =
+      entityText &&
+      type &&
+      Number.isFinite(start) &&
+      Number.isFinite(end) &&
+      end > start &&
+      end <= text.length &&
+      text.slice(start, end) === entityText;
+
+    if (!usable) {
+      ingest.skippedOffsets += 1;
+      continue;
+    }
+
+    const label = CANONICAL_TYPES.includes(type) ? type : normalizeLabel(type);
+    const block = raw.validation && typeof raw.validation === 'object' ? raw.validation : null;
+    const restored =
+      block && VALIDATION_STATUSES.includes(block.status) ? block.status : 'unreviewed';
+    if (block && restored !== 'unreviewed') ingest.restoredDecisions += 1;
+
+    // The annotation-axis status mirrors the decision, so a confirmed or
+    // relabelled span counts as human-verified in the dataset exports and an
+    // unreviewed one does not.
+    const statusFor = {
+      unreviewed: 'accepted',
+      confirmed: 'approved',
+      rejected: 'accepted',
+      relabelled: 'edited',
+    };
+
+    out.push({
+      text: entityText,
+      label: restored === 'relabelled' && block.type ? String(block.type).trim() || label : label,
+      start,
+      end,
+      confidence: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 1,
+      status: statusFor[restored],
+      source: restored === 'unreviewed' || restored === 'rejected' ? 'llm' : 'human',
+      validationStatus: restored,
+      originalLabel: String(block?.original_type || label),
+    });
+    ingest.provided += 1;
+  }
+
+  return out.sort((a, b) => a.start - b.start || a.end - b.end);
+}
 
 // POST /api/documents
 // Upload JSON or JSONL document, run model inference, and store in MongoDB
@@ -79,6 +152,52 @@ exports.upload = async (req, res, next) => {
     const skipNer = req.query.skipNer === 'true' || req.body.skipNer === 'true';
 
     /*
+     * Which workflow this file belongs to is decided here, from the file's own
+     * structure, and never from its name. A file whose entities carry a `type`
+     * came from the hybrid pipeline and is for validation: its entities are
+     * loaded as they are and the model is never run on it. Everything else is
+     * the annotation workflow, unchanged.
+     */
+    const isValidation = parsed.some(
+      (seg) => Array.isArray(seg.providedEntities) && seg.providedEntities.length > 0
+    );
+    const ingest = { provided: 0, skippedOffsets: 0, restoredDecisions: 0 };
+
+    if (isValidation) {
+      const segments = parsed.map((seg) => {
+        const { providedEntities = [], importedEntities, ...rest } = seg;
+        const entities = buildProvidedEntities(providedEntities, rest.text, ingest);
+
+        /*
+         * A validated file carries its own progress: a passage someone read and
+         * found empty says so in its summary, and that has to come back or the
+         * work would look unfinished on resume.
+         */
+        const acknowledged =
+          rest.sourceRecord?.validation_summary?.nothing_to_validate === true;
+        if (acknowledged) ingest.restoredDecisions += 1;
+
+        return {
+          ...rest,
+          entities,
+          // The pipeline's own output, kept as the baseline to compare against.
+          originalEntities: entities.map((e) => ({ ...e })),
+          nerStatus: 'provided',
+          ...(acknowledged ? { nothingToValidate: true } : {}),
+        };
+      });
+
+      const doc = await Document.create({
+        filename: req.file.originalname,
+        threshold,
+        kind: 'validate',
+        segments,
+        stats: computeStats(segments),
+      });
+      return res.status(201).json({ ...doc.toObject(), ingest });
+    }
+
+    /*
      * Inference is deliberately not run here. On a large file it is minutes of
      * work before a single passage can be looked at, and the annotator only
      * ever needs the passage in front of them plus the next few. The client
@@ -86,7 +205,7 @@ exports.upload = async (req, res, next) => {
      * can start the moment the file is parsed.
      */
     const segments = parsed.map((seg) => {
-      const { importedEntities, ...rest } = seg;
+      const { importedEntities, providedEntities, ...rest } = seg;
 
       // Re-uploading an exported file resumes it: its annotations come back and
       // the model is not asked to read those passages again.
@@ -132,6 +251,7 @@ exports.upload = async (req, res, next) => {
     const doc = await Document.create({
       filename: req.file.originalname,
       threshold,
+      kind: 'annotate',
       segments,
       stats: computeStats(segments),
     });
@@ -180,3 +300,29 @@ const lineController = require('./lineController');
 const exportController = require('./exportController');
 
 Object.assign(exports, entityController, lineController, exportController);
+
+// POST /api/documents/:id/skip-inference
+// The upload dialog is answered after the file is classified, so the choice to
+// annotate from scratch arrives here rather than as an upload parameter.
+exports.skipInference = async (req, res, next) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    if (doc.kind === 'validate') {
+      return res.status(409).json({ error: 'A validation document does not use the model.' });
+    }
+
+    let changed = 0;
+    doc.segments.forEach((seg) => {
+      if (seg.nerStatus === 'pending') {
+        seg.nerStatus = 'skipped';
+        changed += 1;
+      }
+    });
+    if (changed > 0) await doc.save();
+
+    res.json({ ok: true, skipped: changed });
+  } catch (err) {
+    next(err);
+  }
+};

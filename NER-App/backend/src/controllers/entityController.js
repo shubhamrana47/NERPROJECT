@@ -91,7 +91,21 @@ exports.saveSegmentEntities = async (req, res, next) => {
     const seg = doc.segments.find((s) => s.index === Number(segmentIndex));
     if (!seg) return res.status(404).json({ error: 'Segment not found' });
 
-    seg.entities = entities.map((e) => {
+    const isValidation = doc.kind === 'validate';
+
+    /*
+     * In a validation document the set of entities is fixed: they came from the
+     * pipeline and the job is to judge them, not to add or move any. Spans that
+     * do not match one the file supplied are refused here as well as in the
+     * interface, so the rule holds however the API is called.
+     */
+    const allowed = isValidation
+      ? new Set((seg.originalEntities || []).map((e) => `${e.start}:${e.end}`))
+      : null;
+    let refused = 0;
+
+    const kept = [];
+    for (const e of entities) {
       const ent = {
         text: String(e.text || '').trim(),
         label: String(e.label || '').trim(),
@@ -101,11 +115,32 @@ exports.saveSegmentEntities = async (req, res, next) => {
         status: e.status || 'approved',
         source: e.source || 'human',
       };
+
+      if (isValidation) {
+        if (!allowed.has(`${ent.start}:${ent.end}`)) {
+          refused += 1;
+          continue;
+        }
+        // Carry the decision, and remember what the pipeline originally said.
+        const baseline = (seg.originalEntities || []).find(
+          (o) => o.start === ent.start && o.end === ent.end
+        );
+        if (e.validationStatus) ent.validationStatus = e.validationStatus;
+        ent.originalLabel = e.originalLabel || baseline?.originalLabel || baseline?.label;
+      } else if (e.validationStatus) {
+        // Harmless on an annotation document, but kept so a mixed client cannot
+        // silently lose it.
+        ent.validationStatus = e.validationStatus;
+        if (e.originalLabel) ent.originalLabel = e.originalLabel;
+      }
+
       if (e._id && mongoose.Types.ObjectId.isValid(e._id) && !String(e._id).startsWith('temp_')) {
         ent._id = e._id;
       }
-      return ent;
-    });
+      kept.push(ent);
+    }
+
+    seg.entities = kept.sort((a, b) => a.start - b.start || a.end - b.end);
 
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
@@ -116,6 +151,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
         ok: true,
         stats: doc.stats,
         savedCount: seg.entities.length,
+        refused,
         // The segment's stored spans, so the client can pick up real ids.
         savedEntities: seg.entities,
       });

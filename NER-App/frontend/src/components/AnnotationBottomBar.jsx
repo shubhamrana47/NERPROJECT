@@ -5,6 +5,7 @@ import { downloadAnnotatedFile } from '../api.js';
 export default function AnnotationBottomBar({
   docId,
   docFilename,
+  docKind = 'annotate',
   currentPassageNumber = 0,
   totalPassages = 0,
   sentenceCount = 0,
@@ -29,7 +30,7 @@ export default function AnnotationBottomBar({
     if (!docId) return;
     try {
       setDownloading(true);
-      const saved = await downloadAnnotatedFile(docId, docFilename);
+      const saved = await downloadAnnotatedFile(docId, docFilename, docKind);
       setDownloadSuccess(
         `${saved.records.toLocaleString()} ${saved.records === 1 ? 'record' : 'records'} saved`
       );
@@ -101,7 +102,11 @@ export default function AnnotationBottomBar({
             onClick={handleExport}
             disabled={downloading}
             className="inline-flex items-center gap-1.5 rounded-md border border-rule bg-sheet px-3 py-1.5 text-[12.5px] text-ink transition hover:border-rule-strong disabled:opacity-50"
-            title="Download the file with annotations appended"
+            title={
+              docKind === 'validate'
+                ? 'Download the file with your validation decisions'
+                : 'Download the file with annotations appended'
+            }
           >
             {downloading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-faint" />
@@ -110,7 +115,9 @@ export default function AnnotationBottomBar({
             ) : (
               <Download className="h-3.5 w-3.5 text-ink-faint" />
             )}
-            {downloading ? 'Saving' : downloadSuccess || 'Export annotated file'}
+            {downloading
+              ? 'Saving'
+              : downloadSuccess || (docKind === 'validate' ? 'Export validated file' : 'Export annotated file')}
           </button>
         </div>
       </div>

@@ -1,5 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { reviewEntity, saveSegmentEntities, resetSegment, predictSegments } from '../api.js';
+import {
+  reviewEntity,
+  saveSegmentEntities,
+  resetSegment,
+  predictSegments,
+  acknowledgeEmptyPassage,
+} from '../api.js';
 import SegmentCard, { splitSentencesWithOffsets } from '../components/SegmentCard.jsx';
 import PassageAnnotationCard from '../components/PassageAnnotationCard.jsx';
 import SpanListPanel from '../components/SpanListPanel.jsx';
@@ -55,6 +61,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setViewMode(previewMode ? 'overview' : 'focus');
   }, [previewMode]);
   useEffect(() => () => window.clearTimeout(messageTimerRef.current), []);
+
+  /*
+   * A validation document holds entities the hybrid pipeline produced. The job
+   * is to judge them: confirm, reject or relabel. Nothing is added, nothing is
+   * predicted, and the two workflows share only the layout.
+   */
+  const isValidation = doc.kind === 'validate';
 
   const passages = doc.segments || [];
   const totalPassages = passages.length;
@@ -169,9 +182,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   );
 
   useEffect(() => {
-    if (viewMode !== 'focus' || totalPassages === 0) return;
+    if (isValidation || viewMode !== 'focus' || totalPassages === 0) return;
     requestWindow(passageIndex);
-  }, [passageIndex, viewMode, totalPassages, requestWindow]);
+  }, [isValidation, passageIndex, viewMode, totalPassages, requestWindow]);
 
   /* ------------------------------ passage state ----------------------------- */
 
@@ -223,6 +236,43 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setMessage('');
   }, []);
 
+  /**
+   * Records a decision against a pipeline entity. Nothing is removed: a
+   * rejection is a state the span carries, so it stays visible, can be undone,
+   * and travels into the exported file as feedback.
+   */
+  const decideEntity = useCallback((target, decision, nextLabel) => {
+    setWorking((prev) =>
+      prev.map((e) => {
+        const match =
+          (target._id && e._id === target._id) ||
+          (e.start === target.start && e.end === target.end);
+        if (!match) return e;
+
+        if (decision === 'unreviewed') {
+          return { ...e, validationStatus: 'unreviewed', status: 'accepted', source: 'llm' };
+        }
+        if (decision === 'confirmed') {
+          return { ...e, validationStatus: 'confirmed', status: 'approved', source: 'human' };
+        }
+        if (decision === 'rejected') {
+          return { ...e, validationStatus: 'rejected', status: 'accepted', source: 'llm' };
+        }
+        return {
+          ...e,
+          label: nextLabel || e.label,
+          originalLabel: e.originalLabel || e.label,
+          validationStatus: 'relabelled',
+          status: 'edited',
+          source: 'human',
+        };
+      })
+    );
+    setIsDirty(true);
+    isDirtyRef.current = true;
+    setMessage('');
+  }, []);
+
   const deleteEntity = useCallback((target) => {
     setWorking((prev) =>
       prev.filter((e) => {
@@ -236,14 +286,33 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setMessage('');
   }, []);
 
-  // The label sidebar applies to whichever passage is open.
+  /*
+   * The label sidebar applies to whichever passage is open. In validation mode
+   * adding is not allowed, so a label click relabels the focused entity rather
+   * than labelling a text selection.
+   */
   useEffect(() => {
     annotation?.registerLineAnnotator?.({
-      onAddEntity: addEntity,
+      onAddEntity: isValidation ? null : addEntity,
       onUpdateEntity: updateEntity,
-      onDeleteEntity: deleteEntity,
+      onDeleteEntity: isValidation ? null : deleteEntity,
+      onRelabel: isValidation
+        ? (label) => {
+            const target = focusedSpan || annotation?.activeEditingEntity;
+            if (target) decideEntity(target, 'relabelled', label);
+          }
+        : null,
     });
-  }, [annotation?.registerLineAnnotator, addEntity, updateEntity, deleteEntity]);
+  }, [
+    annotation?.registerLineAnnotator,
+    annotation?.activeEditingEntity,
+    addEntity,
+    updateEntity,
+    deleteEntity,
+    decideEntity,
+    focusedSpan,
+    isValidation,
+  ]);
 
   /* -------------------------------- persistence ------------------------------ */
 
@@ -310,6 +379,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     [applyDoc, enqueue, flash, passage]
   );
 
+  const goToRef = useRef(() => {});
+
   const goTo = useCallback(
     (nextIndex) => {
       const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
@@ -334,6 +405,10 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     [passage, passageIndex, passages, persist, totalPassages, working, annotation]
   );
 
+  useEffect(() => {
+    goToRef.current = goTo;
+  }, [goTo]);
+
   const handleSave = useCallback(() => {
     if (passage) persist(passage.index != null ? passage.index : passageIndex, working, 'Saved');
   }, [passage, passageIndex, persist, working]);
@@ -348,14 +423,59 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     return approved;
   }, [working]);
 
+  /** Validation: every entity still unjudged is confirmed as correct. */
+  const confirmRemaining = useCallback(() => {
+    const confirmed = working.map((e) =>
+      !e.validationStatus || e.validationStatus === 'unreviewed'
+        ? { ...e, validationStatus: 'confirmed', status: 'approved', source: 'human' }
+        : e
+    );
+    setWorking(confirmed);
+    setIsDirty(true);
+    isDirtyRef.current = true;
+    return confirmed;
+  }, [working]);
+
+  /** Validation: a passage holding nothing still has to be acknowledged. */
+  const handleNothingToValidate = useCallback(async () => {
+    if (!passage) return;
+    setError('');
+    const segIndex = passage.index != null ? passage.index : passageIndex;
+    const base = docRef.current;
+    const segments = (base.segments || []).map((seg) =>
+      seg.index === segIndex ? { ...seg, nothingToValidate: true } : seg
+    );
+    applyDoc({ ...base, segments });
+    flash('Marked as nothing to validate');
+
+    try {
+      await acknowledgeEmptyPassage(base._id, segIndex);
+    } catch (e) {
+      setError(`That could not be recorded: ${e.message}`);
+    }
+
+    if (passageIndex < totalPassages - 1) goToRef.current(passageIndex + 1);
+  }, [applyDoc, flash, passage, passageIndex, totalPassages]);
+
   const handleApprove = useCallback(() => {
     if (!passage) return;
-    const approved = working.map((e) =>
-      e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
-    );
     const segIdx = passage.index != null ? passage.index : passageIndex;
     const hasNext = passageIndex < totalPassages - 1;
-    persist(segIdx, approved, hasNext ? null : 'Passage approved');
+
+    // Validation: confirm whatever is still undecided, or acknowledge an empty
+    // passage, then move on the same way the annotation path does.
+    const approved = isValidation
+      ? confirmRemaining()
+      : working.map((e) =>
+          e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
+        );
+
+    if (isValidation && working.length === 0) {
+      handleNothingToValidate();
+      return;
+    }
+
+    persist(segIdx, approved, hasNext ? null : isValidation ? 'Passage validated' : 'Passage approved');
 
     if (hasNext) {
       const nextIdx = passageIndex + 1;
@@ -374,7 +494,18 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       setIsDirty(false);
       isDirtyRef.current = false;
     }
-  }, [passage, passageIndex, passages, persist, totalPassages, working, annotation]);
+  }, [
+    confirmRemaining,
+    handleNothingToValidate,
+    isValidation,
+    passage,
+    passageIndex,
+    passages,
+    persist,
+    totalPassages,
+    working,
+    annotation,
+  ]);
 
   const handleReset = useCallback(() => {
     if (!passage) return;
@@ -460,6 +591,22 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
     (doc.segments || []).forEach((seg) => {
       if (seg.nerStatus === 'pending') awaitingModel += 1;
+
+      if (doc.kind === 'validate') {
+        const ents = seg.entities || [];
+        const complete = ents.length
+          ? ents.every((e) => e.validationStatus && e.validationStatus !== 'unreviewed')
+          : seg.nothingToValidate === true;
+        if (complete) reviewedPassages += 1;
+        ents.forEach((e) => {
+          if (e.status === 'deleted') return;
+          active += 1;
+          if (e.validationStatus === 'confirmed' || e.validationStatus === 'relabelled') manual += 1;
+          counts[e.label] = (counts[e.label] || 0) + 1;
+        });
+        return;
+      }
+
       let touched = false;
       (seg.entities || []).forEach((e) => {
         if (e.status === 'deleted') return;
@@ -487,6 +634,26 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       })
       .sort((a, b) => a.start - b.start);
   }, [working, passage?.text]);
+
+  /*
+   * Which sources backed an entity is the most useful thing a validator can
+   * see, and it lives in the untouched source record rather than in the stored
+   * entity. Looked up by offset for display only; never saved back.
+   */
+  const displaySpans = useMemo(() => {
+    if (!isValidation) return workingSpans;
+    const provided = Array.isArray(passage?.sourceRecord?.entities)
+      ? passage.sourceRecord.entities
+      : [];
+    if (provided.length === 0) return workingSpans;
+    const byOffset = new Map(provided.map((e) => [`${e.start}:${e.end}`, e]));
+    return workingSpans.map((span) => {
+      const origin = byOffset.get(`${span.start}:${span.end}`);
+      return origin && Array.isArray(origin.sources)
+        ? { ...span, sources: origin.sources }
+        : span;
+    });
+  }, [workingSpans, isValidation, passage]);
 
   const lineNumberFor = useCallback(
     (span) => {
@@ -525,11 +692,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
               <aside className="order-2 flex flex-col gap-4 md:order-none lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-6rem)]">
                 <div className="min-h-0 flex-1">
                   <SpanListPanel
-                    spans={workingSpans}
+                    spans={displaySpans}
+                    isValidation={isValidation}
+                    onDecide={decideEntity}
                     lineNumberFor={lineNumberFor}
                     onUpdate={updateEntity}
                     onDelete={deleteEntity}
-                    onApproveAll={approveAll}
+                    onApproveAll={isValidation ? confirmRemaining : approveAll}
                     focusedSpan={focusedSpan}
                     onFocusSpan={setFocusedSpan}
                     nerStatus={effectiveNerStatus}
@@ -555,6 +724,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
               <main className="order-1 min-w-0 md:order-none">
                 <PassageAnnotationCard
                   passage={passage}
+                  isValidation={isValidation}
+                  onNothingToValidate={handleNothingToValidate}
+                  onFocusEntity={setFocusedSpan}
                   nerStatus={effectiveNerStatus}
                   sentences={sentences}
                   entities={working}
@@ -577,6 +749,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
               {/* Entity labels stay in the right-hand column from tablet width up. */}
               <aside className="order-3 md:order-none md:sticky md:top-[4.25rem] md:h-[calc(100vh-6rem)]">
                 <EntityPaletteSidebar
+                  isValidation={isValidation}
+                  focusedSpan={focusedSpan}
                   modelSpans={(passage.originalEntities || []).length}
                   manualSpans={
                     workingSpans.filter((e) => e.source === 'human' || e.status === 'edited').length
@@ -620,6 +794,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       <AnnotationBottomBar
         docId={doc._id}
         docFilename={doc.filename}
+        docKind={doc.kind}
         currentPassageNumber={passageIndex + 1}
         totalPassages={totalPassages}
         sentenceCount={sentences.length}

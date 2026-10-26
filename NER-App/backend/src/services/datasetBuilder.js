@@ -34,6 +34,9 @@ const SCHEMA_VERSION = '1.1';
  */
 const ANNOTATOR_ONLY_LABELS = ['Agri_Equipment'];
 
+/** Decisions a person can record against a pipeline entity. */
+const VALIDATION_DECISIONS = ['confirmed', 'rejected', 'relabelled'];
+
 /**
  * Decimal numbers, percentages, degrees and ordinals hold together — "28.5",
  * "85%", "30°C", "15th", "50kg" — which matters for the quantity, temperature
@@ -107,6 +110,17 @@ function prepareSpans(text, textStart, entities, options, issues) {
 
   for (const ent of entities) {
     if (!ent || isDeleted(ent)) continue;
+
+    /*
+     * A person looked at this span and said it is wrong. It stays in the
+     * validated file as feedback, but it must never reach a training or
+     * benchmark export — not even one that asks for low-confidence spans.
+     * This check sits before every other filter for that reason.
+     */
+    if (ent.validationStatus === 'rejected') {
+      issues.rejected_excluded += 1;
+      continue;
+    }
 
     const verified = isVerifiedSpan(ent);
     if (options.verifiedOnly && !verified) {
@@ -280,6 +294,100 @@ function buildAnnotatedRecords(documents, options = {}) {
   return { records, issues, options: opts };
 }
 
+/**
+ * The validation export: the pipeline's own file, returned with the
+ * annotator's decisions overlaid.
+ *
+ * Each entity is rebuilt from the untouched source record, so `score`,
+ * `sources`, `mean_logprob` and the rest come back exactly as they arrived;
+ * only a `validation` block is added, and only once a person has judged that
+ * span. Matching is by offset, which is safe because validation never moves a
+ * span and never adds one. `suppressed`, `bio`, `hybrid` and `n_entities` pass
+ * through untouched as the historical record of the pipeline run — after a
+ * relabel, `bio` no longer agrees with the validated types and is not
+ * authoritative.
+ */
+function buildValidatedRecords(documents) {
+  const records = [];
+  const totals = { entities: 0, confirmed: 0, rejected: 0, relabelled: 0, unreviewed: 0,
+    complete_passages: 0, passages: 0 };
+
+  documents.forEach((doc) => {
+    (doc.segments || []).forEach((seg) => {
+      const source =
+        seg.sourceRecord && typeof seg.sourceRecord === 'object' && !Array.isArray(seg.sourceRecord)
+          ? { ...seg.sourceRecord }
+          : stripUndefined({
+              passage_id: seg.passageId || undefined,
+              passage_tag: seg.passageTag || undefined,
+              text: seg.text,
+              entities: [],
+            });
+
+      const decisions = new Map();
+      (seg.entities || []).forEach((e) => {
+        decisions.set(`${e.start}:${e.end}`, e);
+      });
+
+      const original = Array.isArray(source.entities) ? source.entities : [];
+      const counts = { confirmed: 0, rejected: 0, relabelled: 0, unreviewed: 0 };
+
+      const entities = original.map((orig) => {
+        const decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
+        const status = decided?.validationStatus || 'unreviewed';
+
+        if (status === 'unreviewed' || !VALIDATION_DECISIONS.includes(status)) {
+          counts.unreviewed += 1;
+          // No block at all: an unreviewed entity is left exactly as it came.
+          const { validation, ...untouched } = orig;
+          return untouched;
+        }
+
+        counts[status] += 1;
+
+        if (status === 'relabelled') {
+          return {
+            ...orig,
+            // The corrected type is what a consumer reads; what the pipeline
+            // said is preserved beside it. The stored originalLabel wins over
+            // the record's own type, because after one round trip the record
+            // already carries the correction and would otherwise report it as
+            // the original.
+            type: decided.label,
+            validation: { status, original_type: decided.originalLabel || orig.type },
+          };
+        }
+
+        return { ...orig, validation: { status } };
+      });
+
+      const hasEntities = entities.length > 0;
+      const complete = hasEntities ? counts.unreviewed === 0 : seg.nothingToValidate === true;
+
+      totals.passages += 1;
+      if (complete) totals.complete_passages += 1;
+      totals.entities += entities.length;
+      totals.confirmed += counts.confirmed;
+      totals.rejected += counts.rejected;
+      totals.relabelled += counts.relabelled;
+      totals.unreviewed += counts.unreviewed;
+
+      records.push({
+        ...source,
+        entities,
+        validation_summary: {
+          entities: entities.length,
+          ...counts,
+          complete,
+          ...(hasEntities ? {} : { nothing_to_validate: seg.nothingToValidate === true }),
+        },
+      });
+    });
+  });
+
+  return { records, totals };
+}
+
 function stripUndefined(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
@@ -315,6 +423,7 @@ function toBIO(text, spans, issues) {
 function emptyIssues() {
   return {
     unverified_spans_excluded: 0,
+    rejected_excluded: 0,
     low_confidence_excluded: 0,
     below_confidence_excluded: 0,
     empty_text_dropped: 0,
@@ -557,7 +666,9 @@ function toSpacy(rows) {
 module.exports = {
   SCHEMA_VERSION,
   ANNOTATOR_ONLY_LABELS,
+  VALIDATION_DECISIONS,
   buildAnnotatedRecords,
+  buildValidatedRecords,
   buildRows,
   buildManifest,
   bioLabelList,

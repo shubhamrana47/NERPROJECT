@@ -20,6 +20,9 @@ export default function LabelStudioAnnotator({
   onUpdateEntity,
   onDeleteEntity,
   readOnly = false,
+  // Validation: entities are judged, never added, so dragging selects nothing.
+  allowSelection = true,
+  onFocusEntity,
 }) {
   const containerRef = useRef(null);
   const annotation = useAnnotation();
@@ -39,7 +42,7 @@ export default function LabelStudioAnnotator({
 
   // Turn a mouse selection into exact character offsets within this sentence.
   const handleMouseUp = () => {
-    if (readOnly) return;
+    if (readOnly || !allowSelection) return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
@@ -88,6 +91,7 @@ export default function LabelStudioAnnotator({
         ent.status === 'edited' ||
         ent._id?.toString().startsWith('temp_');
       const isFresh = String(ent._id || '').startsWith('temp_');
+      const isRejected = ent.validationStatus === 'rejected';
       const isEditing =
         activeEditingEntity &&
         ((activeEditingEntity._id && activeEditingEntity._id === ent._id) ||
@@ -102,6 +106,7 @@ export default function LabelStudioAnnotator({
           onClick={(e) => {
             if (readOnly) return;
             e.stopPropagation();
+            if (onFocusEntity) onFocusEntity(ent);
             if (setActiveEditingEntity) setActiveEditingEntity(ent);
             if (clearSelection) clearSelection();
           }}
@@ -116,10 +121,12 @@ export default function LabelStudioAnnotator({
           <span
             className={`inline px-[1px] pb-[2px] transition-colors ${
               isEditing ? 'bg-ink/[0.07]' : 'group-hover:bg-ink/[0.04]'
-            }`}
+            } ${isRejected ? 'text-ink-faint line-through' : ''}`}
             style={{
-              borderBottom: `2px ${isManual ? 'dashed' : 'solid'} ${colorStyle.border}`,
-              backgroundColor: isEditing ? undefined : isManual ? colorStyle.bg : undefined,
+              borderBottom: isRejected
+                ? '2px dotted var(--color-rule-strong)'
+                : `2px ${isManual ? 'dashed' : 'solid'} ${colorStyle.border}`,
+              backgroundColor: isEditing ? undefined : isManual && !isRejected ? colorStyle.bg : undefined,
             }}
           >
             {entText}
@@ -134,7 +141,12 @@ export default function LabelStudioAnnotator({
             {isManual && (
               <span className="h-[3px] w-[3px] rounded-full bg-hand" aria-hidden="true" />
             )}
-            <span style={{ color: colorStyle.border }}>{formatEntityLabel(ent.label)}</span>
+            <span
+              style={{ color: isRejected ? undefined : colorStyle.border }}
+              className={isRejected ? 'text-ink-faint line-through' : undefined}
+            >
+              {formatEntityLabel(ent.label)}
+            </span>
             {!readOnly && (
               <button
                 type="button"

@@ -10,6 +10,7 @@ const {
 } = require('../utils/exportUtils');
 const {
   buildAnnotatedRecords,
+  buildValidatedRecords,
   buildRows,
   buildManifest,
   toJsonl,
@@ -235,6 +236,36 @@ exports.datasetExport = async (req, res, next) => {
       minConfidence: Number(req.query.min_confidence || 0),
       resolveOverlaps: req.query.overlaps !== 'keep',
     };
+
+    /*
+     * A validation document goes back as the pipeline's own file with the
+     * annotator's decisions overlaid. Rejected entities travel with it, which
+     * is the point; the training-shaped formats below drop them.
+     */
+    const validationDocs = docs.filter((d) => d.kind === 'validate');
+    if (format === 'annotated' && validationDocs.length > 0) {
+      const annotationDocs = docs.filter((d) => d.kind !== 'validate');
+      const { records, totals } = buildValidatedRecords(validationDocs);
+      const extra = annotationDocs.length
+        ? buildAnnotatedRecords(annotationDocs, {}).records
+        : [];
+      const all = [...records, ...extra];
+
+      res.setHeader('Content-Type', 'application/x-jsonlines; charset=utf-8');
+      if (req.query.download !== 'false') {
+        // Same compact timestamped naming the annotated export uses, so a
+        // download never silently replaces an earlier one.
+        const pad = (n) => String(n).padStart(2, '0');
+        const now = new Date();
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        res.setHeader('Content-Disposition', `attachment; filename="validated_${stamp}.jsonl"`);
+      }
+      res.setHeader('X-Dataset-Rows', String(all.length));
+      res.setHeader('X-Dataset-Entities', String(totals.entities));
+      res.setHeader('X-Dataset-Verified-Entities', String(totals.confirmed + totals.relabelled));
+      res.setHeader('X-Validation-Totals', JSON.stringify(totals));
+      return res.send(all.map((r) => JSON.stringify(r)).join('\n'));
+    }
 
     if (format === 'annotated') {
       // Every span the annotation holds travels, flagged, so the consumer can

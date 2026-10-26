@@ -47,6 +47,47 @@ is parsed with whatever structure it has.
 
 ---
 
+## Two kinds of file
+
+| Your file | What happens |
+| :--- | :--- |
+| Advisory text to mark up | You annotate it, and the model can suggest entities as you go. |
+| Output from the hybrid pipeline, entities already tagged | You **validate** it: confirm, reject or relabel what the pipeline found. The model never runs, and no model option is offered. |
+
+The platform works out which it is from the file itself when you open it.
+
+---
+
+## Validating pipeline output
+
+When a file arrives already tagged, the job changes from marking up to checking.
+
+* Each entity is listed on the left with its **score** and the **sources** that
+  backed it — `llm`, `berta`, `ontology`, a regex rule. A span at 1.00 agreed by
+  three sources needs a glance; one at 0.61 from a single source is where your
+  time belongs.
+* **Correct** keeps it. **Wrong** rejects it — the entity stays in the file,
+  struck through, and **Put it back** undoes that.
+* To fix a label, click the entity in the passage and pick a label on the right,
+  or press its number. The original label is remembered and travels in the
+  export.
+* **You cannot add entities here.** This mode is for judging what the pipeline
+  produced; the interface and the API both refuse additions.
+* `Mark N correct and continue` records everything still undecided as correct
+  and moves on. <kbd>A</kbd> does the same.
+* If the pipeline found **nothing** in a passage, say **Nothing to validate**
+  before moving on. Without it, a passage nobody opened looks exactly like one
+  that was checked and found empty.
+* Export gives you `validated_<timestamp>.jsonl`: your original file with a
+  `validation` block on each entity you judged, and a `validation_summary` per
+  record. Upload it again any time to carry on where you stopped.
+
+Rejected entities are deliberately kept, because "the pipeline said this and a
+person disagreed" is the most useful thing in the file. They are never used as
+training labels.
+
+---
+
 ## Opening a file
 
 Click the **file name** in the top bar, or **New** in the left panel, and pick
@@ -228,8 +269,8 @@ fields added at the end:
 ```
 
 A note appears telling you what the saved file contains, for example
-*"Saved your_file_annotated.jsonl — 323 records, 1,204 spans, 712 verified by
-hand."*
+*"Saved annotated_2026-10-26_14-05-31.jsonl — 323 records, 1,204 spans, 712 verified
+by hand."*
 
 ### Reading the output
 

@@ -101,6 +101,8 @@ export default function EntityPaletteSidebar({
   manualSpans = 0,
   meanConfidence = null,
   entityCounts = {},
+  isValidation = false,
+  focusedSpan = null,
 }) {
   const annotation = useAnnotation();
   const [search, setSearch] = useState('');
@@ -160,6 +162,23 @@ export default function EntityPaletteSidebar({
   const armed = Boolean(selectedSpan);
 
   const handlePick = (type) => {
+    // Validation: a label corrects the entity in focus; nothing is ever added.
+    if (isValidation) {
+      const target = focusedSpan || activeEditingEntity;
+      if (!target) {
+        setJustTagged('');
+        setNotice('Click an entity in the passage first, then pick its correct label.');
+        setTimeout(() => setNotice(''), 3000);
+        return;
+      }
+      applyLabel(type);
+      setSearch('');
+      setNotice('');
+      setJustTagged(`${target.text} → ${formatEntityLabel(type)}`);
+      setTimeout(() => setJustTagged(''), 2600);
+      return;
+    }
+
     if (!selectedSpan) {
       setJustTagged('');
       setNotice('Select the words in the sentence first, then pick this label.');
@@ -190,7 +209,27 @@ export default function EntityPaletteSidebar({
           </span>
         </div>
 
-        {selectedSpan ? (
+        {isValidation ? (
+          focusedSpan || activeEditingEntity ? (
+            <div className="rounded border-l-2 border-hand bg-paper px-3 py-2.5">
+              <p className="font-serif text-[16px] leading-snug text-ink">
+                “{(focusedSpan || activeEditingEntity).text}”
+              </p>
+              <p className="mt-1.5 text-[12px] text-ink-soft">
+                Tagged{' '}
+                <span className="text-ink">
+                  {formatEntityLabel((focusedSpan || activeEditingEntity).label)}
+                </span>
+                . Pick a different label to correct it.
+              </p>
+            </div>
+          ) : (
+            <p className="px-0.5 text-[12.5px] leading-snug text-ink-soft">
+              Click an entity in the passage to put it in focus, then pick a label here to correct
+              it. Entities cannot be added in validation.
+            </p>
+          )
+        ) : selectedSpan ? (
           <div className="mt-2.5 rounded border-l-2 border-hand bg-paper px-3 py-2.5">
             <p className="font-serif text-[16px] leading-snug text-ink">“{selectedSpan.text}”</p>
             <div className="mt-2 flex items-center justify-between gap-2">

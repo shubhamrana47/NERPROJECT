@@ -39,6 +39,21 @@ exports.predictSegments = async (req, res, next) => {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
+    /*
+     * A validation document's entities came from the hybrid pipeline and are
+     * there to be judged, not replaced. The model is never run on one, whoever
+     * asks.
+     */
+    if (doc.kind === 'validate') {
+      return res.status(409).json({
+        error:
+          'This document is for validating entities that came with the file. The model is not run on it.',
+        kind: 'validate',
+        predicted: [],
+        pending: 0,
+      });
+    }
+
     const wanted = resolveIndexes(req.body || {}, doc);
     const candidates = wanted
       .map((i) => doc.segments.find((s) => s.index === i))
