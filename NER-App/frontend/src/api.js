@@ -78,6 +78,21 @@ export const predictSegments = (docId, window) =>
     body: JSON.stringify(window),
   });
 
+/**
+ * The file is classified on upload, so the choice to annotate from scratch is
+ * made after it arrives rather than as an upload parameter.
+ */
+export const skipInference = (docId) =>
+  req(`${BASE}/${docId}/skip-inference`, { method: 'POST' });
+
+/** Records that a person read a passage holding no entities. */
+export const acknowledgeEmptyPassage = (docId, segIndex, acknowledged = true) =>
+  req(`${BASE}/${docId}/segments/${segIndex}/nothing-to-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acknowledged }),
+  });
+
 // lean=1 asks the API to reply with counts and stats instead of echoing the
 // whole document back, which on a large file is megabytes the client already
 // has. The client applies its own update, so the echo is dead weight.
@@ -169,8 +184,11 @@ function getSmallTimestamp(date = new Date()) {
   return `${y}-${m}-${d}_${h}-${min}-${s}`;
 }
 
-export const downloadAnnotatedFile = async (docId, _docFilename = 'document') => {
-  const filename = `annotated_${getSmallTimestamp()}.jsonl`;
+export const downloadAnnotatedFile = async (docId, _docFilename = 'document', kind = 'annotate') => {
+  // A validated file is a different thing from an annotated one, and the name
+  // says which.
+  const prefix = kind === 'validate' ? 'validated' : 'annotated';
+  const filename = `${prefix}_${getSmallTimestamp()}.jsonl`;
   return saveBlob(datasetUrl(docId, {}), filename, { countLines: true });
 };
 

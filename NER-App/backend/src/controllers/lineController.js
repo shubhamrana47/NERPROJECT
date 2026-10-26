@@ -165,3 +165,32 @@ exports.resetLine = async (req, res, next) => {
     next(err);
   }
 };
+
+// POST /api/documents/:id/segments/:segmentIndex/nothing-to-validate
+// Records that a person read a passage holding no entities and had nothing to
+// mark. Without this an unopened passage is indistinguishable from a checked one.
+exports.acknowledgeEmptyPassage = async (req, res, next) => {
+  try {
+    const { id, segmentIndex } = req.params;
+    const acknowledged = req.body?.acknowledged !== false;
+
+    const doc = await Document.findById(id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    const seg = doc.segments.find((s) => s.index === Number(segmentIndex));
+    if (!seg) return res.status(404).json({ error: 'Segment not found' });
+
+    if ((seg.entities || []).length > 0) {
+      return res.status(409).json({
+        error: 'This passage has entities to validate, so it cannot be marked as empty.',
+      });
+    }
+
+    seg.nothingToValidate = acknowledged;
+    await doc.save();
+
+    res.json({ ok: true, segIndex: seg.index, nothingToValidate: seg.nothingToValidate });
+  } catch (err) {
+    next(err);
+  }
+};

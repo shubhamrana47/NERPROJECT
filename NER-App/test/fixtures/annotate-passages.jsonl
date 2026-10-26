@@ -1,0 +1,3 @@
+{"passage_id": "a1", "passage_tag": "PUN-0001", "crops": ["WHEAT"], "stages": ["Sowing"], "subjects": ["WHEAT (Sowing)"], "n_subjects": 1, "n_crops": 1, "n_occurrences": 3, "n_chars": 79, "text": "For wheat sown after mid-December, apply 55 kg DAP per acre at sowing."}
+{"passage_id": "a2", "passage_tag": "PUN-0002", "crops": ["COTTON"], "stages": ["Flowering"], "subjects": ["COTTON (Flowering)"], "n_subjects": 1, "n_crops": 1, "n_occurrences": 2, "n_chars": 71, "text": "Spray imidacloprid on cotton to control whitefly during flowering."}
+{"passage_id": "a3", "passage_tag": "PUN-0003", "crops": [], "stages": [], "subjects": [], "n_subjects": 0, "n_crops": 0, "n_occurrences": 0, "n_chars": 43, "text": "Farmers should contact the extension office."}

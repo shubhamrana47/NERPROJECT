@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { uploadDocument, uploadDocumentWithoutNER } from './api.js';
+import { uploadDocument, skipInference } from './api.js';
 import DocumentView from './pages/DocumentView.jsx';
 import TopHeaderBar from './components/TopHeaderBar.jsx';
 import { AnnotationProvider } from './context/AnnotationContext.jsx';
@@ -8,36 +8,58 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [pendingFile, setPendingFile] = useState(null);
+  const [askModelChoice, setAskModelChoice] = useState(null);
   const [previewMode, setPreviewMode] = useState(false);
   const fileInputRef = useRef(null);
 
-  const onFile = (e) => {
+  /*
+   * The file is uploaded first and classified by the API, which is what decides
+   * the workflow. Only an annotation document is then asked about the model; a
+   * file that arrives already annotated by the pipeline opens straight into
+   * validation and is never offered a model option at all.
+   */
+  const onFile = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    setPendingFile(file);
     e.target.value = '';
-  };
+    if (!file) return;
 
-  const handleUploadChoice = async (withNER) => {
-    if (!pendingFile) return;
     setLoading(true);
     setError('');
     try {
-      const doc = withNER
-        ? await uploadDocument(pendingFile)
-        : await uploadDocumentWithoutNER(pendingFile);
+      const doc = await uploadDocument(file);
       setCurrent(doc);
       setPreviewMode(false);
+      if (doc.kind === 'validate') {
+        setAskModelChoice(null);
+      } else {
+        setAskModelChoice(doc);
+      }
     } catch (err) {
       setError(err.message);
     }
     setLoading(false);
-    setPendingFile(null);
   };
 
-  const cancelUpload = () => {
-    setPendingFile(null);
+  /** Answered only for annotation documents, after the file is in. */
+  const handleModelChoice = async (useModel) => {
+    const doc = askModelChoice;
+    setAskModelChoice(null);
+    if (!doc || useModel) return;
+    try {
+      await skipInference(doc._id);
+      setCurrent((prev) =>
+        prev && prev._id === doc._id
+          ? {
+              ...prev,
+              segments: (prev.segments || []).map((s) =>
+                s.nerStatus === 'pending' ? { ...s, nerStatus: 'skipped' } : s
+              ),
+            }
+          : prev
+      );
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const handleDocChange = (updatedDoc) => {
@@ -77,55 +99,46 @@ export default function App() {
           </div>
         )}
 
-        {pendingFile && !loading && (
+        {askModelChoice && !loading && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4 backdrop-blur-sm">
             <div className="w-full max-w-md overflow-hidden rounded-md border border-rule bg-sheet shadow-[0_24px_60px_-24px_rgba(28,38,33,0.45)]">
               <div className="border-b border-rule px-5 py-4">
                 <h2 className="font-serif text-[20px] leading-tight text-ink">
-                  How should this file start?
+                  Should the model read this file?
                 </h2>
-                <p className="mt-1 truncate text-[12.5px] text-ink-faint" title={pendingFile.name}>
-                  {pendingFile.name}
+                <p className="mt-1 truncate text-[12.5px] text-ink-faint" title={askModelChoice.filename}>
+                  {askModelChoice.filename} — {(askModelChoice.segments || []).length} passages, ready now
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => handleUploadChoice(true)}
+                onClick={() => handleModelChoice(true)}
                 className="block w-full border-b border-rule px-5 py-4 text-left transition hover:bg-paper"
               >
                 <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
                   <span className="inline-block h-0 w-4 border-b-2 border-solid border-machine" />
-                  Let the model read it first
+                  Yes, suggest entities as I go
                 </span>
                 <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
-                  Every sentence arrives pre-marked, and you correct what it got wrong.
+                  The model reads the passage you are on and the next few, so you correct rather
+                  than start from nothing.
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleUploadChoice(false)}
-                className="block w-full border-b border-rule px-5 py-4 text-left transition hover:bg-paper"
+                onClick={() => handleModelChoice(false)}
+                className="block w-full px-5 py-4 text-left transition hover:bg-paper"
               >
                 <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink">
                   <span className="inline-block h-0 w-4 border-b-2 border-dashed border-hand" />
-                  Start from a clean sheet
+                  No, I will mark everything myself
                 </span>
                 <span className="mt-1 block text-[12.5px] leading-snug text-ink-soft">
-                  No predictions. You mark every span yourself.
+                  No predictions at all.
                 </span>
               </button>
-
-              <div className="px-5 py-3">
-                <button
-                  type="button"
-                  onClick={cancelUpload}
-                  className="text-[12.5px] text-ink-faint underline-offset-2 transition hover:text-ink hover:underline"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -135,7 +148,7 @@ export default function App() {
             <div className="rounded-md border border-rule bg-sheet px-6 py-5 text-center">
               <p className="font-serif text-[17px] text-ink">Reading the document</p>
               <p className="mt-1 text-[12.5px] text-ink-soft">
-                Splitting it into sentences and marking entities. Large files take a minute.
+                Splitting it into passages and checking what it already contains.
               </p>
             </div>
           </div>
@@ -155,8 +168,8 @@ export default function App() {
                 Mark up an advisory, one line at a time
               </h1>
               <p className="mt-2.5 max-w-[46ch] text-[13.5px] leading-relaxed text-ink-soft">
-                Open a JSON or JSONL file of agricultural text. Each sentence comes up on its own,
-                with 36 entity labels a keystroke away.
+                Open a JSON or JSONL file of agricultural text and mark up the entities, or open a
+                file the pipeline has already tagged and validate what it found.
               </p>
               <button
                 type="button"

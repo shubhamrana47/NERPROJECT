@@ -34,6 +34,15 @@ export function AnnotationProvider({ children }) {
 
   const applyLabel = useCallback(
     (label) => {
+      /*
+       * Validation mode: entities cannot be added, so choosing a label means
+       * relabelling the entity in focus.
+       */
+      if (annotatorRef.current?.onRelabel) {
+        annotatorRef.current.onRelabel(label);
+        rememberLabel(label);
+        return;
+      }
       if (selectedSpan && annotatorRef.current?.onAddEntity) {
         annotatorRef.current.onAddEntity({
           text: selectedSpan.text,

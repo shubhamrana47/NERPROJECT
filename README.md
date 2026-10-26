@@ -248,6 +248,66 @@ actually emit.
 
 ---
 
+## Two Workflows
+
+The platform decides which workflow a file belongs to **from the file's own
+structure**, never from its name, when the file is uploaded.
+
+| | Annotation | Validation |
+| :--- | :--- | :--- |
+| Triggered by | any file whose entities use `label`, or that has none | entities that use `type` with offsets, as the hybrid pipeline writes them |
+| The model | predicts on demand, a window ahead of the annotator | **never runs**; `POST /:id/predict` refuses with 409 |
+| The job | mark up entities | confirm, reject or relabel what the pipeline produced |
+| Adding entities | yes | no, refused by the interface and by the API |
+| Export | `annotated_<timestamp>.jsonl` | `validated_<timestamp>.jsonl` |
+
+Because classification happens on the server, the file is uploaded first and the
+model question is asked afterwards — and only for an annotation document.
+
+### Validating pipeline output
+
+A file from the hybrid pipeline carries its entities with `type`, `start`, `end`,
+`score` and `sources`, alongside `bio`, `hybrid`, `suppressed` and `n_entities`.
+All of it is loaded as it is and preserved; the annotator judges each entity.
+
+Each decision is recorded against the entity it belongs to:
+
+```json
+{
+  "text": "mid-December", "type": "Date_and_Time", "start": 21, "end": 33,
+  "score": 0.72, "sources": ["llm"],
+  "validation": { "status": "relabelled", "original_type": "Duration" }
+}
+```
+
+* `status` is one of `confirmed`, `rejected` or `relabelled`. An entity nobody
+  has judged carries **no** `validation` block at all, which is what lets a
+  part-finished file be picked up again.
+* A **rejected** entity is kept, never deleted — "the pipeline tagged this and a
+  person disagreed" is the most valuable signal in the file. It is struck
+  through in the interface and can be restored.
+* **A rejected entity is excluded from every training-shaped export**, including
+  `?low_confidence=1`, and the manifest counts the exclusions as
+  `rejected_excluded`.
+* `confirmed` and `relabelled` entities count as human-verified, so
+  `?verified=1` yields exactly the spans a person signed off.
+* Each record gains a `validation_summary` with counts and a `complete` flag. A
+  passage the pipeline found nothing in needs an explicit acknowledgement, which
+  appears as `nothing_to_validate`, so an unopened passage is never mistaken for
+  a checked one.
+* `bio`, `hybrid`, `suppressed` and `n_entities` pass through untouched as the
+  historical record of the pipeline run. **After a relabel, `bio` no longer
+  agrees with the validated types and is not authoritative.**
+
+A validated file can be uploaded again to carry on: decisions and
+acknowledgements come back, and the model is still never run on it.
+
+One limitation worth knowing: JSON has no negative zero, so a `mean_logprob` of
+`-0.0` comes back as `0`. The value is numerically identical and no JSON writer
+can preserve the sign.
+
+---
+
 ## Annotation Output
 
 `GET /api/documents/:id/dataset` gives back **the file you uploaded, with the
@@ -319,7 +379,9 @@ export button produces the annotated file and nothing else.
 ## API Reference
 
 ### Document Management
-* `POST /api/documents` — Upload a `.json` or `.jsonl` document, parse it into passages, and save to MongoDB. Inference is **not** run here; passages start as `pending` and are predicted on demand (`?skipNer=true` marks them `skipped` to annotate from scratch).
+* `POST /api/documents` — Upload a `.json` or `.jsonl` document, classify the workflow from its structure, parse it into passages, and save to MongoDB. Inference is **not** run here; annotation passages start as `pending` and are predicted on demand, while a validation file's passages are `provided` and never predicted (`?skipNer=true` marks them `skipped` to annotate from scratch).
+* `POST /api/documents/:id/skip-inference` — Annotate from scratch: marks every pending passage `skipped`. Refused for a validation document.
+* `POST /api/documents/:id/segments/:segmentIndex/nothing-to-validate` — Records that a person read a passage holding no entities. Refused if the passage has entities.
 * `GET /api/documents` — List uploaded documents with entity statistics.
 * `GET /api/documents/:id` — Retrieve document details, segments, and annotations.
 * `DELETE /api/documents/:id` — Delete document and all annotations.

@@ -34,6 +34,13 @@ router.post('/:id/segments/:segmentIndex/reset', entityController.resetSegment);
 
 // On-demand inference for a window of passages
 router.post('/:id/predict', predictController.predictSegments);
+router.post('/:id/skip-inference', documentController.skipInference);
+
+// Validation workflow: acknowledge a passage that holds no entities
+router.post(
+  '/:id/segments/:segmentIndex/nothing-to-validate',
+  lineController.acknowledgeEmptyPassage
+);
 
 // Sentence line-level annotation routes
 router.put('/:id/segments/:segmentIndex/line-entities', lineController.saveLineEntities);

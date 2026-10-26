@@ -25,6 +25,7 @@ const corsOptions = {
     'X-Dataset-Entities',
     'X-Dataset-Verified-Entities',
     'X-Dataset-Quality',
+    'X-Validation-Totals',
   ],
   preflightContinue: false,
   optionsSuccessStatus: 204,
@@ -42,7 +43,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header(
     'Access-Control-Expose-Headers',
-    'Content-Disposition, X-Dataset-Rows, X-Dataset-Entities, X-Dataset-Verified-Entities, X-Dataset-Quality'
+    'Content-Disposition, X-Dataset-Rows, X-Dataset-Entities, X-Dataset-Verified-Entities, X-Dataset-Quality, X-Validation-Totals'
   );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);

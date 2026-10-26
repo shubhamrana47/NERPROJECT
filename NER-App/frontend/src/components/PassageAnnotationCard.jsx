@@ -72,6 +72,8 @@ function PassageSheet({ label, meta, sentences, renderSentence, footer, tone = '
 export default function PassageAnnotationCard({
   passage,
   nerStatus,
+  isValidation = false,
+  onNothingToValidate,
   sentences,
   entities,
   passageNumber,
@@ -87,6 +89,7 @@ export default function PassageAnnotationCard({
   hasNext,
   onRetryPredict,
   onDeleteEntity,
+  onFocusEntity,
 }) {
   const annotation = useAnnotation();
   const [activeTab, setActiveTab] = useState('interactive');
@@ -95,6 +98,11 @@ export default function PassageAnnotationCard({
   const yourSpans = entities.filter(
     (e) => e.source === 'human' || e.status === 'edited' || String(e._id || '').startsWith('temp_')
   ).length;
+
+  const decided = entities.filter(
+    (e) => e.validationStatus && e.validationStatus !== 'unreviewed'
+  ).length;
+  const undecided = entities.length - decided;
 
   const quickLabels = annotation?.quickLabels || ENTITY_SHORTCUTS.map((s) => s.label);
   const selectedSpan = annotation?.selectedSpan;
@@ -108,6 +116,8 @@ export default function PassageAnnotationCard({
       onAddEntity={() => {}}
       onUpdateEntity={() => {}}
       onDeleteEntity={onDeleteEntity}
+      allowSelection={!isValidation}
+      onFocusEntity={onFocusEntity}
     />
   );
 
@@ -226,7 +236,7 @@ export default function PassageAnnotationCard({
 
       {(activeTab === 'baseline' || activeTab === 'both') && (
         <PassageSheet
-          label="What the model proposed"
+          label={isValidation ? 'What the pipeline tagged' : 'What the model proposed'}
           meta={`${modelSpans} ${modelSpans === 1 ? 'span' : 'spans'}`}
           sentences={sentences}
           renderSentence={renderBaseline}
@@ -240,24 +250,36 @@ export default function PassageAnnotationCard({
 
       {(activeTab === 'interactive' || activeTab === 'both') && (
         <PassageSheet
-          label="Your reading"
-          meta={`${entities.length} ${entities.length === 1 ? 'span' : 'spans'}${
-            yourSpans > 0 ? `, ${yourSpans} yours` : ''
-          }`}
+          label={isValidation ? 'Checking these' : 'Your reading'}
+          meta={
+            isValidation
+              ? `${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}${
+                  decided > 0 ? `, ${decided} decided` : ''
+                }`
+              : `${entities.length} ${entities.length === 1 ? 'span' : 'spans'}${
+                  yourSpans > 0 ? `, ${yourSpans} yours` : ''
+                }`
+          }
           sentences={sentences}
           renderSentence={renderInteractive}
           tone={selectedSpan ? 'hand' : 'rule'}
           footer={
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
-              <div className="flex items-center gap-4 text-[11.5px] text-ink-soft">
+              <div className="flex flex-wrap items-center gap-4 text-[11.5px] text-ink-soft">
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-0 w-4 border-b-2 border-solid border-machine" />
-                  model
+                  {isValidation ? 'from the pipeline' : 'model'}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-0 w-4 border-b-2 border-dashed border-hand" />
-                  yours
+                  {isValidation ? 'you changed it' : 'yours'}
                 </span>
+                {isValidation && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-0 w-4 border-b-2 border-dotted border-rule-strong" />
+                    <span className="line-through">rejected</span>
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -265,9 +287,13 @@ export default function PassageAnnotationCard({
                   type="button"
                   onClick={onReset}
                   className="rounded-md px-2.5 py-2 text-[13px] text-ink-faint transition hover:text-hand"
-                  title="Put this passage back to the model's own reading"
+                  title={
+                    isValidation
+                      ? 'Undo every decision in this passage'
+                      : "Put this passage back to the model's own reading"
+                  }
                 >
-                  Reset passage
+                  {isValidation ? 'Undo decisions' : 'Reset passage'}
                 </button>
                 <button
                   type="button"
@@ -290,7 +316,13 @@ export default function PassageAnnotationCard({
                   className="flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
                   title="Approve every span here and go to the next passage (A)"
                 >
-                  Approve and continue
+                  {isValidation
+                    ? entities.length === 0
+                      ? 'Nothing to validate'
+                      : undecided > 0
+                        ? `Mark ${undecided} correct and continue`
+                        : 'Done, continue'
+                    : 'Approve and continue'}
                   <span className="rounded bg-paper/25 px-1.5 py-px font-mono text-[10.5px]">A</span>
                 </button>
               </div>
@@ -299,7 +331,32 @@ export default function PassageAnnotationCard({
         />
       )}
 
-      {/* Selection bar: the quick labels, within reach of the text. */}
+      {/* Validation has no selection step: entities are judged, not added. */}
+      {isValidation ? (
+        <div className="rounded-md border border-rule bg-sheet px-4 py-3">
+          {entities.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
+                The pipeline tagged nothing here. If that is right, say so — an unopened passage
+                should never look like a checked one.
+              </p>
+              <button
+                type="button"
+                onClick={onNothingToValidate}
+                className="shrink-0 rounded-md bg-ink px-3.5 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
+              >
+                Nothing to validate
+              </button>
+            </div>
+          ) : (
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              <span className="font-medium text-ink">Checking, not tagging:</span> click an entity
+              to put it in focus, then mark it correct or wrong in the list on the left. To fix a
+              label, press a number or pick one on the right. Entities cannot be added here.
+            </p>
+          )}
+        </div>
+      ) : (
       <div
         className={`rounded-md border px-4 py-3 ${
           selectedSpan ? 'border-hand/40 bg-sheet' : 'border-rule bg-sheet'
@@ -350,7 +407,8 @@ export default function PassageAnnotationCard({
             existing span to change or remove it.
           </p>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

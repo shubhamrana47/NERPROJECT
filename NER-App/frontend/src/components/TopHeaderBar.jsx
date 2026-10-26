@@ -31,7 +31,7 @@ export default function TopHeaderBar({
     setExporting(true);
     setExportNote('');
     try {
-      const saved = await downloadAnnotatedFile(doc._id, doc.filename);
+      const saved = await downloadAnnotatedFile(doc._id, doc.filename, doc.kind);
       setExportNote(describeExport(saved.filename, saved));
       setTimeout(() => setExportNote(''), 10000);
     } catch (e) {

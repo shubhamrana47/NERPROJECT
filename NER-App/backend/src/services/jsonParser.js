@@ -48,6 +48,26 @@ function toStringList(value) {
     .filter((v) => v && !isDummyText(v));
 }
 
+/*
+ * Two kinds of file carry an `entities` array, and they must never be confused.
+ *
+ * An export from the annotation workflow uses `label` on each entity. A file
+ * from the hybrid pipeline uses `type`, together with offsets and its own
+ * metadata, and is for validation rather than annotation. The two are told
+ * apart by which key the entities actually use, not by the file name.
+ */
+const looksProvided = (e) =>
+  e && typeof e === 'object' && typeof e.type === 'string' && e.type.trim() !== '';
+const looksAnnotated = (e) =>
+  e && typeof e === 'object' && typeof e.label === 'string' && e.label.trim() !== '';
+
+function classifyEntities(value) {
+  if (!Array.isArray(value) || value.length === 0) return {};
+  if (value.some(looksAnnotated)) return { importedEntities: value };
+  if (value.some(looksProvided)) return { providedEntities: value };
+  return {};
+}
+
 function firstString(...values) {
   for (const v of values) {
     if (typeof v === 'string' && v.trim()) return v.trim();
@@ -287,9 +307,8 @@ function parseDocument(json) {
       candidate.trim(),
       {
         sourceRecord: item,
-        // An annotated file can be uploaded again to carry on where it was
-        // left off; these are restored rather than re-predicted.
-        importedEntities: Array.isArray(item.entities) ? item.entities : undefined,
+        // Either annotations to resume, or pipeline entities to validate.
+        ...classifyEntities(item.entities),
         passageId,
         passageTag,
         crops,
@@ -325,4 +344,4 @@ function parseDocument(json) {
   return segments;
 }
 
-module.exports = { parseDocument, toStringList, describeSubject };
+module.exports = { parseDocument, toStringList, describeSubject, classifyEntities };
