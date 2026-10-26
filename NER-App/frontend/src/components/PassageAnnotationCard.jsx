@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, RotateCw } from 'lucide-react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
 import { ENTITY_SHORTCUTS, getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
@@ -94,6 +94,16 @@ export default function PassageAnnotationCard({
   const annotation = useAnnotation();
   const [activeTab, setActiveTab] = useState('interactive');
 
+  // Shown when someone drags across words in a validation passage.
+  const [selectionBlocked, setSelectionBlocked] = useState(false);
+  const blockedTimer = useRef(null);
+  useEffect(() => () => window.clearTimeout(blockedTimer.current), []);
+  const noteSelectionBlocked = () => {
+    setSelectionBlocked(true);
+    window.clearTimeout(blockedTimer.current);
+    blockedTimer.current = window.setTimeout(() => setSelectionBlocked(false), 6000);
+  };
+
   const modelSpans = (passage.originalEntities || []).length;
   const yourSpans = entities.filter(
     (e) => e.source === 'human' || e.status === 'edited' || String(e._id || '').startsWith('temp_')
@@ -118,6 +128,7 @@ export default function PassageAnnotationCard({
       onDeleteEntity={onDeleteEntity}
       allowSelection={!isValidation}
       onFocusEntity={onFocusEntity}
+      onSelectionBlocked={noteSelectionBlocked}
     />
   );
 
@@ -347,6 +358,17 @@ export default function PassageAnnotationCard({
               >
                 Nothing to validate
               </button>
+            </div>
+          ) : selectionBlocked ? (
+            <div className="rounded border-l-2 border-hand bg-paper px-3 py-2">
+              <p className="text-[13px] leading-relaxed text-ink">
+                Selecting words does nothing in this file. It arrived already tagged, and
+                validation is for judging those tags, not adding new ones.
+              </p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
+                Click an entity that is already marked to put it in focus, then say whether it is
+                correct, mark it wrong, or pick a different label for it.
+              </p>
             </div>
           ) : (
             <p className="text-[13px] leading-relaxed text-ink-soft">
