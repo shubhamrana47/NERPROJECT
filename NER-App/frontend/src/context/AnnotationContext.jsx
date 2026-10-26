@@ -35,14 +35,11 @@ export function AnnotationProvider({ children }) {
   const applyLabel = useCallback(
     (label) => {
       /*
-       * Validation mode: entities cannot be added, so choosing a label means
-       * relabelling the entity in focus.
+       * A selection is the more explicit act, so it wins. It has to: in
+       * validation an entity can be in focus while words are selected, and
+       * labelling what was just dragged over is plainly what was meant. Only
+       * with nothing selected does a label mean "correct the entity in focus".
        */
-      if (annotatorRef.current?.onRelabel) {
-        annotatorRef.current.onRelabel(label);
-        rememberLabel(label);
-        return;
-      }
       if (selectedSpan && annotatorRef.current?.onAddEntity) {
         annotatorRef.current.onAddEntity({
           text: selectedSpan.text,
@@ -58,6 +55,11 @@ export function AnnotationProvider({ children }) {
         try {
           window.getSelection()?.removeAllRanges();
         } catch (_) {}
+        return;
+      }
+      if (annotatorRef.current?.onRelabel) {
+        annotatorRef.current.onRelabel(label);
+        rememberLabel(label);
       }
     },
     [selectedSpan, rememberLabel]

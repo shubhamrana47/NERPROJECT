@@ -94,13 +94,14 @@ exports.saveSegmentEntities = async (req, res, next) => {
     const isValidation = doc.kind === 'validate';
 
     /*
-     * In a validation document the set of entities is fixed: they came from the
-     * pipeline and the job is to judge them, not to add or move any. Spans that
-     * do not match one the file supplied are refused here as well as in the
-     * interface, so the rule holds however the API is called.
+     * In a validation document each span is either one the pipeline proposed —
+     * matched by its offsets, and judged — or one a person added because the
+     * pipeline missed it. An addition is accepted only if its offsets really
+     * describe its text in this passage, so a stale or miscomputed selection is
+     * refused here as well as in the interface.
      */
-    const allowed = isValidation
-      ? new Set((seg.originalEntities || []).map((e) => `${e.start}:${e.end}`))
+    const baselineOf = isValidation
+      ? new Map((seg.originalEntities || []).map((e) => [`${e.start}:${e.end}`, e]))
       : null;
     let refused = 0;
 
@@ -117,16 +118,32 @@ exports.saveSegmentEntities = async (req, res, next) => {
       };
 
       if (isValidation) {
-        if (!allowed.has(`${ent.start}:${ent.end}`)) {
-          refused += 1;
-          continue;
+        const baseline = baselineOf.get(`${ent.start}:${ent.end}`);
+        if (baseline) {
+          // Carry the decision, and remember what the pipeline originally said.
+          if (!ent.label) ent.label = baseline.label;
+          if (e.validationStatus) ent.validationStatus = e.validationStatus;
+          ent.originalLabel = e.originalLabel || baseline.originalLabel || baseline.label;
+        } else {
+          const text = seg.text || '';
+          const describesItsText =
+            Number.isInteger(ent.start) &&
+            Number.isInteger(ent.end) &&
+            ent.start >= 0 &&
+            ent.end > ent.start &&
+            ent.end <= text.length &&
+            text.slice(ent.start, ent.end).trim() === ent.text;
+          if (!describesItsText || !ent.label) {
+            refused += 1;
+            continue;
+          }
+          // A person's own span: not something to confirm or reject, so it
+          // carries no baseline label and no model score.
+          ent.validationStatus = 'added';
+          ent.source = 'human';
+          ent.confidence = 1.0;
+          ent.originalLabel = undefined;
         }
-        // Carry the decision, and remember what the pipeline originally said.
-        const baseline = (seg.originalEntities || []).find(
-          (o) => o.start === ent.start && o.end === ent.end
-        );
-        if (e.validationStatus) ent.validationStatus = e.validationStatus;
-        ent.originalLabel = e.originalLabel || baseline?.originalLabel || baseline?.label;
       } else if (e.validationStatus) {
         // Harmless on an annotation document, but kept so a mixed client cannot
         // silently lose it.
@@ -141,6 +158,10 @@ exports.saveSegmentEntities = async (req, res, next) => {
     }
 
     seg.entities = kept.sort((a, b) => a.start - b.start || a.end - b.end);
+
+    // "Nothing to validate" was true of an empty passage; adding a span to it
+    // makes that claim stale, so it is withdrawn rather than left behind.
+    if (seg.nothingToValidate && seg.entities.length > 0) seg.nothingToValidate = false;
 
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))

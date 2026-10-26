@@ -206,21 +206,30 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passage?.entities]);
 
-  const addEntity = useCallback((newEnt) => {
-    setWorking((prev) => [
-      ...prev,
-      {
-        ...newEnt,
-        _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        confidence: 1.0,
-        source: 'human',
-        status: 'approved',
-      },
-    ]);
-    setIsDirty(true);
-    isDirtyRef.current = true;
-    setMessage('');
-  }, []);
+  const addEntity = useCallback(
+    (newEnt) => {
+      setWorking((prev) => [
+        ...prev,
+        {
+          ...newEnt,
+          _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          confidence: 1.0,
+          source: 'human',
+          status: 'approved',
+          /*
+           * In a validation file a span of one's own is marked as added rather
+           * than left unreviewed: there is no pipeline proposal behind it to
+           * confirm or reject, and the distinction has to survive the export.
+           */
+          ...(isValidation ? { validationStatus: 'added' } : {}),
+        },
+      ]);
+      setIsDirty(true);
+      isDirtyRef.current = true;
+      setMessage('');
+    },
+    [isValidation]
+  );
 
   const updateEntity = useCallback((target, changes) => {
     setWorking((prev) =>
@@ -248,6 +257,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           (target._id && e._id === target._id) ||
           (e.start === target.start && e.end === target.end);
         if (!match) return e;
+
+        /*
+         * A span the annotator added is theirs: changing its label is a
+         * correction of their own work, not a verdict on the pipeline, so it
+         * stays an addition and gains no original_type.
+         */
+        if (e.validationStatus === 'added') {
+          return decision === 'relabelled' ? { ...e, label: nextLabel || e.label } : e;
+        }
 
         if (decision === 'unreviewed') {
           return { ...e, validationStatus: 'unreviewed', status: 'accepted', source: 'llm' };
@@ -287,15 +305,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, []);
 
   /*
-   * The label sidebar applies to whichever passage is open. In validation mode
-   * adding is not allowed, so a label click relabels the focused entity rather
-   * than labelling a text selection.
+   * The label sidebar applies to whichever passage is open. Adding works in
+   * both workflows; what validation adds is onRelabel, so that a label click
+   * with nothing selected corrects the entity in focus instead.
    */
   useEffect(() => {
     annotation?.registerLineAnnotator?.({
-      onAddEntity: isValidation ? null : addEntity,
+      onAddEntity: addEntity,
       onUpdateEntity: updateEntity,
-      onDeleteEntity: isValidation ? null : deleteEntity,
+      onDeleteEntity: deleteEntity,
       onRelabel: isValidation
         ? (label) => {
             const target = focusedSpan || annotation?.activeEditingEntity;

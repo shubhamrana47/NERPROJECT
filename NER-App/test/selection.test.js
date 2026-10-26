@@ -242,15 +242,64 @@ test('clicking a label with nothing selected explains itself', async (t) => {
   );
 });
 
-test('validation: dragging across words explains that adding is not part of it', async (t) => {
+test('validation: dragging across words adds the entity the pipeline missed', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical']);
+
+  await ui.select(0, 'sowing');
+  assert.match(armed(ui) || '', /sowing/, 'a selection has to arm here too');
+  await ui.pickLabel('Location');
+
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Location'], 'the span is on the passage');
+  const row = [...ui.host.querySelectorAll('li')].find((li) =>
+    li.textContent.includes('sowing')
+  );
+  assert.ok(row, 'and in the list beside it');
+  assert.match(row.textContent, /you added this/, "recorded as the annotator's own");
+});
+
+test('validation: a selection wins over an entity in focus', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+
+  // focus one entity, then select different words: the label must act on the
+  // selection, not relabel what happens to be in focus
+  await ui.clickSpan('wheat');
+  await ui.select(0, 'sowing');
+  await ui.pickLabel('Location');
+
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Location']);
+  const wheat = ui.getDoc().segments[0].entities.find((e) => e.text === 'wheat');
+  assert.equal(wheat.label, 'Crop', 'the focused entity is left exactly as it was');
+  assert.notEqual(wheat.validationStatus, 'relabelled');
+});
+
+test('validation: an added entity is removed rather than rejected', async (t) => {
   const ui = await mount('validate');
   t.after(() => ui.close());
   await ui.select(0, 'sowing');
-  assert.equal(armed(ui), undefined, 'validation must not arm a selection');
+  await ui.pickLabel('Location');
+
+  const rowFor = (word) =>
+    [...ui.host.querySelectorAll('li')].find((li) => li.textContent.includes(word));
+  const row = rowFor('sowing');
+  assert.ok(row, 'the added span is in the list');
+  assert.match(row.textContent, /you added this/);
   assert.ok(
-    ui.paragraphs().some((t) => t.includes('Selecting words does nothing in this file')),
-    'and it must say so'
+    ![...row.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Wrong'),
+    'there is nothing to mark wrong: the annotator put it there'
   );
+
+  const remove = [...row.querySelectorAll('button')].find(
+    (b) => b.textContent.trim() === 'Remove'
+  );
+  assert.ok(remove, 'it is removable instead');
+  await globalThis.__act(async () => {
+    remove.dispatchEvent(new globalThis.MouseEvent('click', { bubbles: true }));
+  });
+
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical'], 'and it is gone from the passage');
 });
 
 test('validation: a focused entity is relabelled from the palette', async (t) => {

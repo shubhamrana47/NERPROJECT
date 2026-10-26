@@ -8,7 +8,10 @@ const { CANONICAL_TYPES, normalizeLabel } = require('../utils/exportUtils');
 const { parseDocument } = require('../services/jsonParser');
 const { computeStats } = require('../services/nerService');
 
-const VALIDATION_STATUSES = ['unreviewed', 'confirmed', 'rejected', 'relabelled'];
+const VALIDATION_STATUSES = ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'];
+
+/** A span a person added is not part of what the pipeline proposed. */
+const isAddedByHand = (e) => e && e.validationStatus === 'added';
 
 /**
  * Entities that arrived with a pipeline file, loaded as they are.
@@ -61,6 +64,7 @@ function buildProvidedEntities(provided, text, ingest) {
       confirmed: 'approved',
       rejected: 'accepted',
       relabelled: 'edited',
+      added: 'approved',
     };
 
     out.push({
@@ -72,7 +76,8 @@ function buildProvidedEntities(provided, text, ingest) {
       status: statusFor[restored],
       source: restored === 'unreviewed' || restored === 'rejected' ? 'llm' : 'human',
       validationStatus: restored,
-      originalLabel: String(block?.original_type || label),
+      // An addition has no original: the pipeline never proposed it.
+      originalLabel: restored === 'added' ? undefined : String(block?.original_type || label),
     });
     ingest.provided += 1;
   }
@@ -180,8 +185,13 @@ exports.upload = async (req, res, next) => {
         return {
           ...rest,
           entities,
-          // The pipeline's own output, kept as the baseline to compare against.
-          originalEntities: entities.map((e) => ({ ...e })),
+          /*
+           * The pipeline's own output, kept as the baseline to compare against
+           * and to undo back to. Spans a person added are excluded: after a
+           * round trip they arrive in the file like any other entity, and
+           * without this they would show up as something the pipeline proposed.
+           */
+          originalEntities: entities.filter((e) => !isAddedByHand(e)).map((e) => ({ ...e })),
           nerStatus: 'provided',
           ...(acknowledged ? { nothingToValidate: true } : {}),
         };

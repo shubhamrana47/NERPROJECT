@@ -52,7 +52,7 @@ is parsed with whatever structure it has.
 | Your file | What happens |
 | :--- | :--- |
 | Advisory text to mark up | You annotate it, and the model can suggest entities as you go. |
-| Output from the hybrid pipeline, entities already tagged | You **validate** it: confirm, reject or relabel what the pipeline found. The model never runs, and no model option is offered. |
+| Output from the hybrid pipeline, entities already tagged | You **validate** it: confirm, reject or relabel what the pipeline found, and add what it missed. The model never runs, and no model option is offered. |
 
 The platform works out which it is from the file itself when you open it.
 
@@ -70,9 +70,20 @@ When a file arrives already tagged, the job changes from marking up to checking.
   struck through, and **Put it back** undoes that.
 * To fix a label, click the entity in the passage and pick a label on the right,
   or press its number. The original label is remembered and travels in the
-  export.
-* **You cannot add entities here.** This mode is for judging what the pipeline
-  produced; the interface and the API both refuse additions.
+  export. With words selected, a label applies to the selection instead — a
+  selection always wins over whatever is in focus.
+* **If the pipeline missed an entity, add it.** Drag across the words and pick a
+  label, exactly as in annotation. A span of yours is listed as *you added
+  this*, and carries **Remove** instead of Correct and Wrong — there is no
+  pipeline guess behind it to judge, so it is either right or it goes. In the
+  export it arrives as `"validation": {"status": "added"}` with
+  `"sources": ["human"]`, which is how it stays yours after a round trip.
+* Your span may **overlap** one of the pipeline's — marking a longer phrase than
+  it did is a normal correction. Both are kept in the validated file; the row
+  says `overlaps` so the clash is visible. A training export keeps the one a
+  person stands behind.
+* The record's own `n_entities` is left as the pipeline wrote it: it is history.
+  The current total is in `validation_summary.entities`.
 * `Mark N correct and continue` records everything still undecided as correct
   and moves on. <kbd>A</kbd> does the same.
 * If the pipeline found **nothing** in a passage, say **Nothing to validate**

@@ -127,6 +127,7 @@ test('each decision is recorded in the shape agreed', async () => {
     confirmed: 1,
     rejected: 1,
     relabelled: 1,
+    added: 0,
     unreviewed: 3,
     complete: false,
   });
@@ -236,6 +237,7 @@ test('a validated file can be uploaded again to carry on', async () => {
     confirmed: 1,
     rejected: 1,
     relabelled: 1,
+    added: 0,
     unreviewed: 3,
     complete: false,
   });
@@ -246,11 +248,10 @@ test('a validated file can be uploaded again to carry on', async () => {
   );
 });
 
-test('saving a validation passage refuses spans the file did not supply', async () => {
-  const doc = await loadValidationDoc();
+/** Saves a passage, sending its current spans plus whatever is added. */
+async function save(doc, segmentIndex, extra = []) {
   Document.findById = async () => doc;
-  const seg = doc.segments[0];
-
+  const seg = doc.segments.find((x) => x.index === segmentIndex);
   const payload = [
     ...seg.entities.map((e) => ({
       text: e.text,
@@ -260,25 +261,169 @@ test('saving a validation passage refuses spans the file did not supply', async 
       confidence: e.confidence,
       status: e.status,
       source: e.source,
-      validationStatus: 'confirmed',
+      validationStatus: e.validationStatus,
       originalLabel: e.originalLabel,
     })),
-    // an entity nobody supplied: adding is not part of validation
-    { text: 'Farmers', label: 'Person', start: 0, end: 7, confidence: 1, source: 'human' },
+    ...extra,
   ];
-
-  const res = await invoke(entityController.saveSegmentEntities, {
-    params: { id: 'v1', segmentIndex: '0' },
+  return invoke(entityController.saveSegmentEntities, {
+    params: { id: 'v1', segmentIndex: String(segmentIndex) },
     query: { lean: '1' },
     body: { entities: payload },
   });
+}
 
-  assert.equal(res.body.refused, 1, 'the added span was refused');
-  assert.equal(res.body.savedCount, 6);
+/** A span of one's own, measured against the passage text. */
+function addition(seg, phrase, label) {
+  const start = seg.text.indexOf(phrase);
+  assert.ok(start >= 0, `"${phrase}" is not in the passage`);
+  return { text: phrase, label, start, end: start + phrase.length, confidence: 1, source: 'human' };
+}
+
+test('a span the pipeline missed is accepted, and marked as added', async () => {
+  const doc = await loadValidationDoc();
+  const seg = doc.segments[2];
+
+  const res = await save(doc, 2, [addition(seg, 'extension office', 'Organization')]);
+
+  assert.equal(res.body.refused, 0);
+  assert.equal(res.body.savedCount, 1);
+  const stored = doc.segments[2].entities[0];
+  assert.equal(stored.text, 'extension office');
+  assert.equal(stored.validationStatus, 'added', 'not unreviewed: there is nothing to review');
+  assert.equal(stored.source, 'human');
+  assert.equal(stored.confidence, 1);
+  assert.equal(stored.originalLabel, undefined, 'the pipeline never proposed it');
+});
+
+test('a span whose offsets do not describe its text is refused', async () => {
+  const doc = await loadValidationDoc();
+
+  const res = await save(doc, 0, [
+    // "For whe" is what 0:7 actually covers
+    { text: 'Farmers', label: 'Person', start: 0, end: 7, confidence: 1, source: 'human' },
+    { text: 'sowing', label: 'Agri_Process', start: 63, end: 400, confidence: 1, source: 'human' },
+    // no label at all
+    { ...addition(doc.segments[0], 'apply', 'Agri_Method'), label: '' },
+  ]);
+
+  assert.equal(res.body.refused, 3);
+  assert.equal(res.body.savedCount, 6, 'the six the pipeline supplied are untouched');
   assert.ok(!doc.segments[0].entities.some((e) => e.text === 'Farmers'));
+});
+
+test('decisions on pipeline spans are still recorded when saving alongside an addition', async () => {
+  const doc = await loadValidationDoc();
+  const seg = doc.segments[1];
+  decide(seg, 'cotton', 'confirmed');
+
+  const res = await save(doc, 1, [addition(seg, 'Spray', 'Agri_Method')]);
+
+  assert.equal(res.body.refused, 0);
+  assert.equal(res.body.savedCount, 5);
+  const stored = doc.segments[1].entities;
+  assert.equal(stored.find((e) => e.text === 'cotton').validationStatus, 'confirmed');
+  assert.equal(stored.find((e) => e.text === 'Spray').validationStatus, 'added');
+  // stored in document order, so the list reads with the passage
+  assert.deepEqual(
+    stored.map((e) => e.text),
+    ['Spray', 'imidacloprid', 'cotton', 'whitefly', 'flowering']
+  );
+});
+
+test('an added span is appended to the exported record, with the pipeline count left alone', async () => {
+  const doc = await loadValidationDoc();
+  const seg = doc.segments[1];
+  await save(doc, 1, [addition(seg, 'Spray', 'Agri_Method')]);
+
+  const { records, totals } = buildValidatedRecords([doc]);
+  const row = records[1];
+
+  assert.equal(row.entities.length, 5);
+  // the pipeline's own four keep their order and their shape at the front
+  assert.deepEqual(
+    row.entities.slice(0, 4).map((e) => e.text),
+    SOURCE[1].entities.map((e) => e.text)
+  );
+  assert.deepEqual(
+    sameRecord(row.entities.slice(0, 4), SOURCE[1].entities),
+    [],
+    'nothing the pipeline wrote is disturbed by the addition'
+  );
+
+  const added = row.entities[4];
+  assert.deepEqual(added, {
+    text: 'Spray',
+    type: 'Agri_Method',
+    start: 0,
+    end: 5,
+    score: 1.0,
+    sources: ['human'],
+    validation: { status: 'added' },
+  });
+  assert.ok(!('mean_logprob' in added), 'no model uncertainty is invented for a human span');
+
+  assert.equal(row.n_entities, SOURCE[1].n_entities, "the pipeline's own count is history");
+  assert.equal(row.validation_summary.entities, 5, 'the current total lives in the summary');
+  assert.equal(row.validation_summary.added, 1);
+  assert.equal(row.validation_summary.unreviewed, 4);
+  assert.equal(totals.added, 1);
+});
+
+test('a re-imported addition stays an addition, and never joins the pipeline baseline', async () => {
+  const doc = await loadValidationDoc();
+  await save(doc, 1, [addition(doc.segments[1], 'Spray', 'Agri_Method')]);
+  const { records } = buildValidatedRecords([doc]);
+
+  const resumed = await loadValidationDoc(records);
+  const seg = resumed.segments[1];
+
+  assert.equal(seg.entities.length, 5);
+  const spray = seg.entities.find((e) => e.text === 'Spray');
+  assert.equal(spray.validationStatus, 'added');
+  assert.equal(spray.source, 'human', 'and so still counts as verified downstream');
+  assert.equal(
+    seg.originalEntities.length,
+    4,
+    'the baseline is what the pipeline proposed, which was four'
+  );
+  assert.ok(!seg.originalEntities.some((e) => e.text === 'Spray'));
+
+  // and a second round trip changes nothing
+  const { records: again } = buildValidatedRecords([resumed]);
+  assert.deepEqual(sameRecord(again[1], records[1]), []);
+});
+
+test('adding to an acknowledged empty passage withdraws the acknowledgement', async () => {
+  const doc = await loadValidationDoc();
+  const seg = doc.segments[2];
+  seg.nothingToValidate = true;
+
+  await save(doc, 2, [addition(seg, 'extension office', 'Organization')]);
+
+  assert.equal(doc.segments[2].nothingToValidate, false, 'the claim is stale, so it is dropped');
+  const { records } = buildValidatedRecords([doc]);
   assert.ok(
-    doc.segments[0].entities.every((e) => e.validationStatus === 'confirmed'),
-    'the decisions were stored'
+    !('nothing_to_validate' in records[2].validation_summary),
+    'and the exported record cannot say both'
+  );
+  assert.equal(records[2].validation_summary.complete, true);
+  assert.equal(records[2].validation_summary.added, 1);
+});
+
+test('an added span may overlap a pipeline one, and both stay in the file', async () => {
+  const doc = await loadValidationDoc();
+  const seg = doc.segments[0];
+  // "55 kg DAP" covers the pipeline's "55 kg" and its "DAP"
+  await save(doc, 0, [addition(seg, '55 kg DAP', 'Chemical')]);
+
+  const { records } = buildValidatedRecords([doc]);
+  assert.equal(records[0].entities.length, 7);
+  assert.ok(records[0].entities.some((e) => e.text === '55 kg'));
+  assert.ok(records[0].entities.some((e) => e.text === 'DAP'));
+  assert.ok(
+    records[0].entities.some((e) => e.text === '55 kg DAP' && e.validation.status === 'added'),
+    'the annotator reading is kept beside the pipeline one, not merged with it'
   );
 });
 
