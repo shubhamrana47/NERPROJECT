@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import { getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
 import { CAPTION_ATTR, offsetsFromRange } from '../utils/selectionOffsets.js';
@@ -24,6 +24,7 @@ export default function LabelStudioAnnotator({
   allowSelection = true,
   onFocusEntity,
   onSelectionBlocked,
+  onSelectionUnresolved,
 }) {
   const containerRef = useRef(null);
   const annotation = useAnnotation();
@@ -41,44 +42,74 @@ export default function LabelStudioAnnotator({
       .sort((a, b) => a.start - b.start);
   }, [entities, sentenceStart, sentenceEnd]);
 
-  // Turn a mouse selection into exact character offsets within this sentence.
-  const handleMouseUp = () => {
-    if (readOnly) return;
+  /*
+   * Selection is read from the document rather than from a mouseup on this
+   * element.
+   *
+   * Releasing the mouse a little outside the sentence — in the padding, the
+   * gutter, or past the end of the last line — is completely normal when
+   * selecting the final word, and an element-level handler never fires for it.
+   * The selection was made, and nothing happened: indistinguishable from a
+   * broken tagger. A document-level listener sees it, and each sentence
+   * answers only for a selection that began inside it.
+   */
+  useEffect(() => {
+    if (readOnly) return undefined;
 
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const onMouseUp = () => {
+      const container = containerRef.current;
+      if (!container) return;
 
-    /*
-     * Validation has no selection step. Saying so is the point: dragging across
-     * words and getting nothing at all is indistinguishable from a broken
-     * interface.
-     */
-    if (!allowSelection) {
-      if (selection.toString().trim() && onSelectionBlocked) onSelectionBlocked();
-      return;
-    }
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
-    const measured = offsetsFromRange(
-      containerRef.current,
-      selection.getRangeAt(0),
-      sentenceText
-    );
+      const range = selection.getRangeAt(0);
+      const startsHere = container.contains(range.startContainer);
+      if (!startsHere) return; // another sentence will answer for it
 
-    // Unresolvable, or nothing but whitespace: leave the selection alone rather
-    // than labelling words nobody picked.
-    if (!measured) return;
+      if (!allowSelection) {
+        if (selection.toString().trim() && onSelectionBlocked) onSelectionBlocked();
+        return;
+      }
 
-    if (setSelectedSpan) {
-      setSelectedSpan({
-        text: measured.text,
-        localStart: measured.start,
-        localEnd: measured.end,
-        globalStart: sentenceStart + measured.start,
-        globalEnd: sentenceStart + measured.end,
-      });
-    }
-    if (setActiveEditingEntity) setActiveEditingEntity(null);
-  };
+      // Began here but ran past the end of this sentence.
+      if (!container.contains(range.endContainer)) {
+        if (onSelectionUnresolved) onSelectionUnresolved('crosses-sentences');
+        return;
+      }
+
+      const measured = offsetsFromRange(container, range, sentenceText);
+      if (!measured) {
+        if (selection.toString().trim() && onSelectionUnresolved) {
+          onSelectionUnresolved('unresolved');
+        }
+        return;
+      }
+
+      if (setSelectedSpan) {
+        setSelectedSpan({
+          text: measured.text,
+          localStart: measured.start,
+          localEnd: measured.end,
+          globalStart: sentenceStart + measured.start,
+          globalEnd: sentenceStart + measured.end,
+        });
+      }
+      if (setActiveEditingEntity) setActiveEditingEntity(null);
+    };
+
+    document.addEventListener('mouseup', onMouseUp);
+    return () => document.removeEventListener('mouseup', onMouseUp);
+  }, [
+    readOnly,
+    allowSelection,
+    sentenceText,
+    sentenceStart,
+    setSelectedSpan,
+    setActiveEditingEntity,
+    onSelectionBlocked,
+    onSelectionUnresolved,
+  ]);
 
   const renderAnnotatedText = () => {
     const pieces = [];
@@ -195,7 +226,6 @@ export default function LabelStudioAnnotator({
   return (
     <div
       ref={containerRef}
-      onMouseUp={handleMouseUp}
       className={`font-serif text-[20px] leading-[2.5] text-ink transition-colors ${
         selectedSpan ? 'selection:bg-[#f0d9d6]' : ''
       }`}
