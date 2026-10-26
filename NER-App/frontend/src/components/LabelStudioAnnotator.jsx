@@ -23,6 +23,7 @@ export default function LabelStudioAnnotator({
   // Validation: entities are judged, never added, so dragging selects nothing.
   allowSelection = true,
   onFocusEntity,
+  onSelectionBlocked,
 }) {
   const containerRef = useRef(null);
   const annotation = useAnnotation();
@@ -42,10 +43,20 @@ export default function LabelStudioAnnotator({
 
   // Turn a mouse selection into exact character offsets within this sentence.
   const handleMouseUp = () => {
-    if (readOnly || !allowSelection) return;
+    if (readOnly) return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+
+    /*
+     * Validation has no selection step. Saying so is the point: dragging across
+     * words and getting nothing at all is indistinguishable from a broken
+     * interface.
+     */
+    if (!allowSelection) {
+      if (selection.toString().trim() && onSelectionBlocked) onSelectionBlocked();
+      return;
+    }
 
     const measured = offsetsFromRange(
       containerRef.current,
