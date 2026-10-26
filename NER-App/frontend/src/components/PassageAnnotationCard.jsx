@@ -94,15 +94,17 @@ export default function PassageAnnotationCard({
   const annotation = useAnnotation();
   const [activeTab, setActiveTab] = useState('interactive');
 
-  // Shown when someone drags across words in a validation passage.
-  const [selectionBlocked, setSelectionBlocked] = useState(false);
-  const blockedTimer = useRef(null);
-  useEffect(() => () => window.clearTimeout(blockedTimer.current), []);
-  const noteSelectionBlocked = () => {
-    setSelectionBlocked(true);
-    window.clearTimeout(blockedTimer.current);
-    blockedTimer.current = window.setTimeout(() => setSelectionBlocked(false), 6000);
+  // Why a selection did not turn into a span, when it did not.
+  const [selectionNote, setSelectionNote] = useState(null);
+  const noteTimer = useRef(null);
+  useEffect(() => () => window.clearTimeout(noteTimer.current), []);
+  const flashNote = (kind) => {
+    setSelectionNote(kind);
+    window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => setSelectionNote(null), 6000);
   };
+  const noteSelectionBlocked = () => flashNote('blocked');
+  const noteSelectionUnresolved = (reason) => flashNote(reason || 'unresolved');
 
   const modelSpans = (passage.originalEntities || []).length;
   const yourSpans = entities.filter(
@@ -129,6 +131,7 @@ export default function PassageAnnotationCard({
       allowSelection={!isValidation}
       onFocusEntity={onFocusEntity}
       onSelectionBlocked={noteSelectionBlocked}
+      onSelectionUnresolved={noteSelectionUnresolved}
     />
   );
 
@@ -359,7 +362,7 @@ export default function PassageAnnotationCard({
                 Nothing to validate
               </button>
             </div>
-          ) : selectionBlocked ? (
+          ) : selectionNote ? (
             <div className="rounded border-l-2 border-hand bg-paper px-3 py-2">
               <p className="text-[13px] leading-relaxed text-ink">
                 Selecting words does nothing in this file. It arrived already tagged, and
@@ -428,6 +431,29 @@ export default function PassageAnnotationCard({
             any sentence above, then press a number or click a label on the right. Click an
             existing span to change or remove it.
           </p>
+        )}
+
+        {/* Why a selection did not become a span, rather than silence. */}
+        {!selectedSpan && selectionNote === 'crosses-sentences' && (
+          <div className="mt-2 rounded border-l-2 border-hand bg-paper px-3 py-2">
+            <p className="text-[13px] leading-relaxed text-ink">
+              That selection ran across two sentences, so nothing was tagged.
+            </p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
+              A span belongs to one sentence. Select the words inside a single numbered line and
+              try again.
+            </p>
+          </div>
+        )}
+        {!selectedSpan && selectionNote === 'unresolved' && (
+          <div className="mt-2 rounded border-l-2 border-hand bg-paper px-3 py-2">
+            <p className="text-[13px] leading-relaxed text-ink">
+              That selection could not be placed exactly, so nothing was tagged.
+            </p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
+              Select the words again, starting and finishing inside the sentence text.
+            </p>
+          </div>
         )}
         </div>
       )}

@@ -1,0 +1,287 @@
+/**
+ * Selecting words and turning them into a span, driven through the real
+ * components in a DOM.
+ *
+ * This exists because the failures here are invisible to logic tests: an
+ * element-level mouseup handler that never fires when the mouse is released
+ * just outside the sentence, a selection crossing two sentences that resolves
+ * to nothing, an offset thrown off by the little label captions. Each one looks
+ * exactly like a tagger that does not work, and each one has happened.
+ *
+ * React and esbuild come from the frontend workspace; jsdom is a devDependency
+ * of this package. No database and no network.
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const FRONTEND = path.join(__dirname, '..', 'frontend');
+const fromFrontend = (m) => require(require.resolve(m, { paths: [FRONTEND] }));
+
+const { execFileSync } = require('node:child_process');
+
+const { JSDOM } = require('jsdom');
+
+const TWO_SENTENCES =
+  'For wheat sown after mid-December, apply 55 kg DAP per acre at sowing. ' +
+  'Broadcast 45 kg urea for timely sown crops in Punjab during January.';
+
+/** Bundles the harness once, so the suite does not pay for it per test. */
+let bundlePath;
+function buildHarness() {
+  if (bundlePath) return bundlePath;
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ner-ui-')), 'harness.cjs');
+  const bin = path.join(FRONTEND, 'node_modules', '.bin', 'esbuild');
+  execFileSync(
+    bin,
+    [
+      path.join(__dirname, 'ui-harness.jsx'),
+      '--bundle',
+      '--platform=node',
+      '--format=cjs',
+      `--outfile=${out}`,
+      '--loader:.jsx=jsx',
+      "--define:import.meta.env={}",
+      '--log-level=error',
+    ],
+    {
+      cwd: FRONTEND,
+      // the harness imports React, which lives in the frontend workspace
+      env: { ...process.env, NODE_PATH: path.join(FRONTEND, 'node_modules') },
+      stdio: ['ignore', 'ignore', 'inherit'],
+    }
+  );
+  bundlePath = out;
+  return out;
+}
+
+/** A DOM with the app mounted, plus helpers to drive it. */
+async function mount(which) {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
+    MouseEvent: dom.window.MouseEvent,
+    getComputedStyle: dom.window.getComputedStyle,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  global.fetch = async () => ({ ok: true, json: async () => ({ ok: true, savedEntities: [], stats: {} }) });
+
+  // required once; it reads the current global document when mounting
+  require(buildHarness());
+
+  const act = globalThis.__act;
+  const mounted = await globalThis.__mount(which);
+
+  const sentences = () =>
+    [...mounted.host.querySelectorAll('div')].filter((d) => d.className?.includes('font-serif'));
+  const captions = () =>
+    [...mounted.host.querySelectorAll('[data-caption]')].map((c) =>
+      c.textContent.replace('×', '').trim()
+    );
+  const paragraphs = () =>
+    [...mounted.host.querySelectorAll('p')].map((p) => p.textContent.trim());
+
+  const textNodeWith = (root, word) => {
+    const walker = dom.window.document.createTreeWalker(root, dom.window.NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement.closest('[data-caption]')) continue;
+      const at = node.nodeValue.indexOf(word);
+      if (at !== -1) return { node, at };
+    }
+    return null;
+  };
+
+  /** Selects a word and releases the mouse wherever asked. */
+  const select = async (sentenceIndex, word, releaseOn = 'sentence') => {
+    const sentence = sentences()[sentenceIndex];
+    const hit = textNodeWith(sentence, word);
+    assert.ok(hit, `"${word}" not found in sentence ${sentenceIndex}`);
+    const range = dom.window.document.createRange();
+    range.setStart(hit.node, hit.at);
+    range.setEnd(hit.node, hit.at + word.length);
+    const selection = dom.window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const target = releaseOn === 'sentence' ? sentence : dom.window.document.body;
+    await act(async () => {
+      target.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true }));
+    });
+  };
+
+  /** Selects from one sentence into the next. */
+  const selectAcrossSentences = async () => {
+    const from = textNodeWith(sentences()[0], 'sowing');
+    const to = textNodeWith(sentences()[1], 'Broadcast');
+    const range = dom.window.document.createRange();
+    range.setStart(from.node, from.at);
+    range.setEnd(to.node, to.at + 9);
+    const selection = dom.window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    await act(async () => {
+      dom.window.document.body.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true }));
+    });
+  };
+
+  /** Clicks a label in the palette, never a label picker in the span list. */
+  const pickLabel = async (label) => {
+    const palette = [...mounted.host.querySelectorAll('aside')].find((a) =>
+      a.textContent.includes('Entity labels')
+    );
+    assert.ok(palette, 'the label palette is not on screen');
+    const button = [...palette.querySelectorAll('button')].find((b) =>
+      new RegExp(`^${label}`).test(b.textContent.trim())
+    );
+    assert.ok(button, `no ${label} button in the palette`);
+    await act(async () => {
+      button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+  };
+
+  const clickSpan = async (word) => {
+    const span = [...mounted.host.querySelectorAll('span.group')].find((s) =>
+      s.textContent.includes(word)
+    );
+    assert.ok(span, `no span for "${word}" in the passage`);
+    await act(async () => {
+      span.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+  };
+
+  const clickButton = async (label) => {
+    const button = [...mounted.host.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === label
+    );
+    assert.ok(button, `no "${label}" button on screen`);
+    await act(async () => {
+      button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+  };
+
+  const close = () => {
+    try {
+      mounted.unmount?.();
+    } catch (_) {}
+    dom.window.close();
+  };
+
+  return {
+    ...mounted,
+    close,
+    captions,
+    paragraphs,
+    select,
+    selectAcrossSentences,
+    pickLabel,
+    clickSpan,
+    clickButton,
+  };
+}
+
+const armed = (ui) => ui.paragraphs().find((t) => t.startsWith('Labelling'));
+
+test('a word is tagged on a passage that already carries model spans', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Chemical']);
+
+  await ui.select(0, 'sowing');
+  assert.match(armed(ui) || '', /sowing/);
+  await ui.pickLabel('Location');
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Location', 'Chemical']);
+});
+
+test('words in a later sentence are tagged, not the first occurrence', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+  await ui.select(1, 'Punjab');
+  await ui.pickLabel('Location');
+  await ui.select(1, 'January');
+  await ui.pickLabel('Location');
+
+  // one for each, in document order, with the model's spans untouched
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Chemical', 'Location', 'Location']);
+});
+
+test('releasing the mouse outside the sentence still arms the selection', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+  // exactly what happens when selecting the last word of a line
+  await ui.select(1, 'January', 'body');
+  assert.match(armed(ui) || '', /January/, 'a selection released outside the sentence was lost');
+  await ui.pickLabel('Location');
+  assert.ok(ui.captions().includes('Location'), 'and it must still be taggable');
+});
+
+test('a selection crossing two sentences says so instead of doing nothing', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+  await ui.selectAcrossSentences();
+  assert.equal(armed(ui), undefined, 'it must not arm a span across a sentence boundary');
+  assert.ok(
+    ui.paragraphs().some((t) => t.includes('ran across two sentences')),
+    'and it must explain why, rather than failing silently'
+  );
+});
+
+test('clicking a label with nothing selected explains itself', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+  await ui.pickLabel('Location');
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Chemical'], 'nothing is tagged');
+  assert.ok(
+    ui.paragraphs().some((t) => /Select the words in the sentence first/.test(t)),
+    'the palette has to say why'
+  );
+});
+
+test('validation: dragging across words explains that adding is not part of it', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+  await ui.select(0, 'sowing');
+  assert.equal(armed(ui), undefined, 'validation must not arm a selection');
+  assert.ok(
+    ui.paragraphs().some((t) => t.includes('Selecting words does nothing in this file')),
+    'and it must say so'
+  );
+});
+
+test('validation: a focused entity is relabelled from the palette', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical']);
+  await ui.clickSpan('wheat');
+  assert.ok(ui.paragraphs().some((t) => /Pick a different label/.test(t)));
+  await ui.pickLabel('Disease');
+  assert.deepEqual(ui.captions(), ['Disease', 'Chemical'], 'the tag on screen must change');
+});
+
+test('validation: an entity is marked wrong without choosing another label', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+
+  const hasButton = (label) =>
+    [...ui.host.querySelectorAll('button')].some((b) => b.textContent.trim() === label);
+  const struckSpans = () =>
+    [...ui.host.querySelectorAll('span.group .line-through')].length;
+
+  assert.equal(struckSpans(), 0);
+  await ui.clickButton('Wrong');
+
+  // the entity is still there, struck through in the passage, with no label
+  // having been chosen for it
+  assert.equal(ui.captions().length, 2, 'nothing is removed from the passage');
+  assert.ok(struckSpans() > 0, 'a rejected entity is struck through');
+  assert.ok(hasButton('Put it back'), 'and the rejection can be taken back');
+
+  await ui.clickButton('Put it back');
+  assert.equal(struckSpans(), 0, 'undone');
+  assert.ok(hasButton('Wrong'), 'and it can be rejected again');
+});
