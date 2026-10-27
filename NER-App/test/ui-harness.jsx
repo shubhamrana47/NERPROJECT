@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnnotationProvider } from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/context/AnnotationContext.jsx';
 import DocumentView from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/pages/DocumentView.jsx';
+import TopHeaderBar from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/components/TopHeaderBar.jsx';
 
 const TEXT = 'For wheat sown after mid-December, apply 55 kg DAP per acre at sowing.';
 
@@ -67,7 +68,10 @@ const taggedDoc = {
 globalThis.__act = act;
 
 globalThis.__mount = async (which) => {
-  const doc = which === 'validate' ? validateDoc : which === 'tagged' ? taggedDoc : annotateDoc;
+  // 'header' mounts the top bar too, which is where Export lives.
+  const withHeader = which.endsWith('+header');
+  const kind = withHeader ? which.slice(0, -'+header'.length) : which;
+  const doc = kind === 'validate' ? validateDoc : kind === 'tagged' ? taggedDoc : annotateDoc;
   const host = globalThis.document.getElementById('root');
   const root = createRoot(host);
   let current = JSON.parse(JSON.stringify(doc));
@@ -75,6 +79,7 @@ globalThis.__mount = async (which) => {
   const render = () => act(() => {
     root.render(
       <AnnotationProvider>
+        {withHeader && <TopHeaderBar doc={current} onOpenUpload={() => {}} onTogglePreview={() => {}} />}
         <DocumentView doc={current} onChange={onChange} onOpenUpload={() => {}} />
       </AnnotationProvider>
     );

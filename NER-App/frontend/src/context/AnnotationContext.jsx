@@ -17,9 +17,24 @@ export function AnnotationProvider({ children }) {
   const [activeEditingEntity, setActiveEditingEntity] = useState(null);
   const [recentLabels, setRecentLabels] = useState(readRecentLabels);
   const annotatorRef = useRef(null);
+  const flushRef = useRef(null);
 
   const registerLineAnnotator = useCallback((handlers) => {
     annotatorRef.current = handlers;
+  }, []);
+
+  /*
+   * The passage view writes behind the interface, so at any moment there can be
+   * work on screen that the server has not got yet. Anything that reads from
+   * the server — the export above all — has to wait for it, or it quietly hands
+   * back a file missing the last thing someone did.
+   */
+  const registerFlush = useCallback((fn) => {
+    flushRef.current = fn;
+  }, []);
+
+  const flushPendingWork = useCallback(async () => {
+    if (typeof flushRef.current === 'function') await flushRef.current();
   }, []);
 
   /** Records a label as used, whichever route applied it. */
@@ -107,6 +122,8 @@ export function AnnotationProvider({ children }) {
       updateEntity,
       deleteEntity,
       registerLineAnnotator,
+      registerFlush,
+      flushPendingWork,
       recentLabels,
       quickLabels,
       rememberLabel,
@@ -119,6 +136,8 @@ export function AnnotationProvider({ children }) {
       updateEntity,
       deleteEntity,
       registerLineAnnotator,
+      registerFlush,
+      flushPendingWork,
       recentLabels,
       quickLabels,
       rememberLabel,

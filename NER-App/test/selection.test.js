@@ -58,7 +58,7 @@ function buildHarness() {
 }
 
 /** A DOM with the app mounted, plus helpers to drive it. */
-async function mount(which) {
+async function mount(which, { recordCalls = false } = {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
   Object.assign(global, {
     window: dom.window,
@@ -70,7 +70,24 @@ async function mount(which) {
     getComputedStyle: dom.window.getComputedStyle,
     IS_REACT_ACT_ENVIRONMENT: true,
   });
-  global.fetch = async () => ({ ok: true, json: async () => ({ ok: true, savedEntities: [], stats: {} }) });
+  const calls = [];
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (recordCalls) calls.push(`${opts.method || 'GET'} ${u.replace(/^.*\/api/, '/api').split('?')[0]}`);
+    if (u.includes('/dataset')) {
+      const line = JSON.stringify({ text: 'x', entities: [], validation_summary: { entities: 0 } });
+      return { ok: true, status: 200, text: async () => `${line}\n`, json: async () => ({}) };
+    }
+    const body = JSON.parse(opts.body || '{}');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, savedEntities: body.entities || [], stats: {} }),
+    };
+  };
+  // the export hands a blob to the browser; jsdom has no object URLs
+  dom.window.URL.createObjectURL = () => 'blob:stub';
+  dom.window.URL.revokeObjectURL = () => {};
 
   // required once; it reads the current global document when mounting
   require(buildHarness());
@@ -174,6 +191,7 @@ async function mount(which) {
 
   return {
     ...mounted,
+    calls,
     close,
     captions,
     paragraphs,
@@ -333,4 +351,26 @@ test('validation: an entity is marked wrong without choosing another label', asy
   await ui.clickButton('Put it back');
   assert.equal(struckSpans(), 0, 'undone');
   assert.ok(hasButton('Wrong'), 'and it can be rejected again');
+});
+
+test('exporting writes the open passage first, instead of leaving it behind', async (t) => {
+  const ui = await mount('validate+header', { recordCalls: true });
+  t.after(() => ui.close());
+
+  // tag something and go straight to Export, without pressing Save
+  await ui.select(0, 'sowing');
+  await ui.pickLabel('Location');
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Location']);
+  assert.deepEqual(ui.calls, [], 'nothing has been written yet');
+
+  await ui.clickButton('Export');
+
+  const saves = ui.calls.filter((c) => c.endsWith('/entities'));
+  const exports = ui.calls.filter((c) => c.includes('/dataset'));
+  assert.equal(saves.length, 1, 'the open passage is saved');
+  assert.equal(exports.length, 1, 'and the file is still fetched');
+  assert.ok(
+    ui.calls.indexOf(saves[0]) < ui.calls.indexOf(exports[0]),
+    'the save has to come first, or the server builds a file without it'
+  );
 });
