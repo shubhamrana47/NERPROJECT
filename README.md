@@ -1,17 +1,26 @@
 # AgNER: Agricultural Named Entity Recognition & Human-in-the-Loop Annotation Suite
 
-A full-stack Named Entity Recognition pipeline and annotation workbench for
-agricultural advisories, pest and disease reports, and agronomic research
-documents.
+**A workbench for annotating NER data by hand**, for agricultural advisories,
+pest and disease reports and agronomic research documents. A person reads a
+passage and marks which words are entities and what type each one is; what comes
+out is a labelled dataset — training data, and a gold benchmark to measure
+against.
 
-It pairs a fine-tuned **RoBERTa-base checkpoint (AgNER-BERTa)** with a
-**passage annotation workbench**: one advisory passage on screen at a time with
-all of its sentences in view, the model's proposals marked for review, and all
-37 canonical agricultural classes a keystroke away. The model runs **on demand**
-a window ahead of the annotator, so a large file is ready to work on
-immediately. Exports hand back the uploaded file with annotations appended, each
-span recording whether a person verified it — the distinction a training set and
-a gold benchmark both depend on.
+The annotation is the product. **A fine-tuned RoBERTa-base checkpoint
+(AgNER-BERTa) is there to assist it**, pre-marking what it thinks are entities
+so the annotator corrects rather than starts from an empty page. That is the
+whole of its role: it can be declined outright when a file is opened, it never
+runs on a file that is already tagged, and a span it proposed carries
+`verified: false` however confident it was — only a person's sign-off makes a
+label data. Where the model and the annotator disagree, the annotator is right
+by definition, and the export keeps the two readings apart so nothing downstream
+can confuse them.
+
+Because the model is an assistant rather than a gate, it runs **on demand** a
+window ahead of the annotator, and a large file is ready to work on the moment
+it is uploaded.
+
+![The Fieldnote workbench: entity list on the left, the passage in the middle with its spans underlined and captioned, the 37 labels on the right](docs/the-screen.png)
 
 > **New to the application, or going to annotate with it?** Start with
 > **[Introduction and Annotator's Guide](USER_GUIDE.md)** — what it is for, every
@@ -73,8 +82,12 @@ NERPROJECT/
   and a window that fails can be retried from the passage itself.
 * **A whole passage on screen.** Every sentence of the advisory is shown
   together, numbered down a gutter, so context is never cut in half. Spans are
-  marked by underline — solid for the model, dashed for a person — with the
-  label set beneath.
+  marked by underline in the label's own colour — **solid** for a machine's
+  reading, **dashed** for a person's, **dotted and struck through** for one
+  rejected in validation — with the label set beneath. Colour never encodes
+  confidence; confidence is a number and is shown as one.
+* **Either workflow, decided from the file.** Plain text is annotated;
+  pipeline output is validated. See [Two Workflows](#two-workflows).
 * **Three columns**: the span list on the left, the passage in the middle, the
   37 entity labels on the right.
 * **Keyboard first**: <kbd>1</kbd>–<kbd>9</kbd> label the selection,
@@ -85,34 +98,77 @@ NERPROJECT/
   behind the interface, one request at a time in order.
 
 ### 3. The Full Entity Palette, Always Open
-* **Free-Form Text Highlighting**: Highlight any word or multi-word phrase with the cursor to tag missed entities.
-* **All 37 Classes Visible**: Every canonical agricultural entity class is listed in the right-hand column, grouped by domain with sticky headings, always open and scrollable — no 10-item limit and no hidden dropdown.
-* **Live Typeahead Search**: Filter entities in real time by typing (<kbd>Enter</kbd> to apply matching tag, <kbd>Esc</kbd> to cancel).
-* **In-Place Entity Editing**: Click any existing tag to reclassify its category, inspect confidence scores, or delete false positives.
+* **All 37 classes visible**, grouped by domain with sticky headings in the
+  right-hand column — always open and scrollable, with no hidden dropdown and no
+  short list standing in for the taxonomy.
+* **Recently used first.** The block above the list follows the labels the
+  annotator actually reaches for, while the number keys stay fixed: the digit
+  printed beside a label is always the digit that applies it.
+* **Typeahead search** filters by name (<kbd>/</kbd> to focus, <kbd>Enter</kbd>
+  applies the first match, <kbd>Esc</kbd> clears).
+* **Select, then label.** Dragging across any words in any sentence arms a
+  selection; a label then applies to it. A selection always wins over a span in
+  focus, so labelling what was just dragged over is never ambiguous. A selection
+  crossing two sentences, or one that cannot be placed exactly, says so instead
+  of failing silently.
+* **In-place editing.** Click a span to put it in focus and change its label,
+  see its confidence and sources, or remove it.
 
-### 4. Direct File Download Station
-* **One-Click Real Downloads**: Replaced raw text viewing with immediate browser file downloads (Blob-driven, saving directly to the user's Downloads directory).
-* **Multiple Export Formats**:
-  * **Training Data (`.json`)**: Sentence-level training dataset with character offsets and provenance tags.
-  * **Training Data (`.jsonl`)**: Standard newline-delimited JSON Lines for fine-tuning Hugging Face transformers.
-  * **Label Studio Tasks (`.json`)**: Official Label Studio schema containing model pre-annotations and human ground-truth.
-* **Sticky Bottom Metrics Deck**: Displays current page, remaining sentences, total annotations completed (model vs. manual breakdown), progress bar, and the export station.
+### 4. One Export, Which Is Also the Save File
+* **One button, one file.** The interface exports the uploaded file with the
+  annotations appended — `annotated_<date>_<time>.jsonl`, or
+  `validated_<date>_<time>.jsonl` for a validation document. No format picker,
+  and no separate gold export to keep in step: `verified` tells a consumer which
+  spans a person stands behind. The shape is under
+  [Annotation Output](#annotation-output).
+* **It writes before it reads.** Both export buttons flush the passage on screen
+  and wait for the save queue to drain before asking the server to build the
+  file, so work that has not been written yet cannot be missing from it.
+* **Re-uploadable.** An exported file is the working copy: upload it again and
+  the annotations come back with their provenance, and those passages are not
+  queued for the model a second time.
+* **Derivatives on the same endpoint** for pipelines that want them —
+  `?format=conll|hf|spacy|jsonl|json|manifest`. These are not surfaced in the
+  interface.
+* **Counts are read from the file itself**, not from response headers a browser
+  may hide, so the note under the top bar always matches what was saved.
 
-### 5. Entity Provenance & Labelling Tags (NER vs. Manual)
-Exported datasets explicitly record the provenance of every single entity:
-* **NER Model Output**: Entities identified by the AI model are tagged with:
-  * `"tag": "NER_LABELLED"`
-  * `"labelled_by": "NER Model"`
-  * `"source": "model"`
-* **Manual Annotations**: Terms added from scratch or corrected by an annotator are tagged with:
-  * `"tag": "MANUALLY_LABELLED"`
-  * `"labelled_by": "Manual Annotator"`
-  * `"source": "human"`
-* **Sentence-Level Summary**: Every exported sentence row includes a `labelled_summary` object with exact counts (`ner_labelled_count`, `manually_labelled_count`, and `total_entities`).
+### 5. Entity Provenance: Whose Reading Is This?
+Every span records where it came from and whether a person has signed it off.
 
-### 6. Non-Destructive Granular Persistence
-* **Line-Level Save (`PUT .../line-entities`)**: Commits additions and corrections for only the active sentence directly to MongoDB.
-* **Line-Level Reset (`POST .../reset-line`)**: Restores original model predictions for only the current sentence from immutable `originalEntities` without altering annotations on any other line.
+* **Annotation documents** carry `source` (`model` or `human`), `status`
+  (`accepted`, `approved`, `edited`), `confidence`, and **`verified`**, which is
+  true only where a person approved, edited or added the span. `verified` is the
+  field a training set and a benchmark both turn on; `status: "accepted"` means
+  only that the model cleared its threshold and nobody has looked.
+* **Validation documents** carry the pipeline's own `score` and `sources`
+  untouched, plus a `validation` block holding the decision a person recorded —
+  `confirmed`, `rejected`, `relabelled` (with `original_type`) or `added` (a
+  span the pipeline missed, `sources: ["human"]`). An entity nobody has judged
+  carries no block at all, which is what lets a part-finished file be resumed.
+* **`Agri_Equipment` can only come from a person.** It joined the taxonomy after
+  the checkpoint was trained, so the model cannot predict it; the manifest
+  records it under `annotator_only_labels`.
+* The older `GET /:id/training-data` endpoint emits the legacy
+  `tag: NER_LABELLED | MANUALLY_LABELLED`, `labelled_by` and `labelled_summary`
+  fields instead. It is kept for compatibility and is not what the interface
+  produces.
+
+### 6. Persistence That Never Blocks a Click
+* **Passage-level save (`PUT .../segments/:i/entities`)**, applied optimistically
+  and written behind the interface, one request at a time and in order, so no
+  edit waits for the network and two writes can never land out of sequence.
+* **Approving, saving, moving passage and exporting all write.** The browser
+  warns before a close or reload with a write in flight or unsaved changes on
+  screen.
+* **Reset (`POST .../segments/:i/reset`)** restores a passage from its immutable
+  `originalEntities` — the model's own reading, or the pipeline's — without
+  touching any other passage.
+* **Validation writes are checked server-side**: a decision must belong to a
+  span the file supplied, and an added span's offsets must really describe its
+  text in that passage, or it is refused and counted.
+* Line-level endpoints (`PUT .../line-entities`, `POST .../reset-line`) remain
+  for compatibility; the passage view no longer uses them.
 
 ---
 
@@ -137,7 +193,11 @@ actually emit.
 
 ---
 
-## Exported Data Format Samples
+## Legacy Export Shapes
+
+These come from the older `GET /:id/training-data` and `GET /:id/label-studio`
+endpoints, kept so existing consumers keep working. **They are not what the
+interface exports** — for that, see [Annotation Output](#annotation-output).
 
 ### 1. Training Data (`.json` or `.jsonl`)
 ```json
