@@ -22,23 +22,36 @@ If you are setting the system up or working on its code, see
 
 ## What this is for
 
-A model called **AgNER-BERTa** reads agricultural advisories and proposes which
-words are crops, chemicals, diseases, quantities, dates and so on. It is good,
-but it is not right every time, and nobody should train or measure a model on
-its own guesses.
+**Fieldnote is a tool for annotating NER data by hand.** You read agricultural
+text and mark which words are entities and what kind each one is — crops,
+chemicals, diseases, quantities, dates, places, equipment. What comes out is a
+labelled dataset: training data for a model, and a gold benchmark to measure
+one against.
 
-Your job is to judge those proposals: approve what is correct, fix what is
-mislabelled, add what the model missed, and remove what is not an entity at
-all. What comes out is a dataset where **every span records whether a person
-verified it** — which is what makes it usable both for training a better model
-and for measuring one honestly.
+The annotation is the work. **The model is only there to help you do it
+faster.** It reads ahead and pre-marks what it thinks are entities, so that on
+a good passage you are correcting rather than starting from an empty page. That
+is the whole of its role:
+
+* **You can turn it off.** Choose *"No, I will mark everything myself"* when a
+  file opens and nothing is ever predicted. Everything else works the same.
+* **Its spans count for nothing until you say so.** A span the model proposed
+  carries `verified: false` however confident it was. Confidence is a machine's
+  opinion of itself; only a person's sign-off makes a label data.
+* **It is never the authority.** Where the model and you disagree, you are
+  right by definition — that is the point of the exercise. Its proposals are
+  kept separately from your decisions so nobody downstream can confuse the two.
+
+So the model is a convenience, and the dataset is the product. A file annotated
+with the model switched off is worth exactly as much as one annotated with it
+on — it just took longer.
 
 One line of your file is one **passage**: a few sentences of advice about a
 particular crop at a particular stage. You work through them one passage at a
 time, and the work comes in two shapes depending on what your file already
-holds — marking up plain advisory text, or checking entities a pipeline has
-already tagged. Fieldnote decides which from the file itself and the rest of
-this guide covers both.
+holds — marking up plain text yourself, or checking entities that a model or
+pipeline has already proposed. Fieldnote decides which from the file itself,
+and the rest of this guide covers both.
 
 Three things are worth knowing before you start, because they are what the
 design is for:
@@ -47,8 +60,8 @@ design is for:
   screen and in the export says which it is, in the marks you see and in the
   fields you get.
 * **Nothing is thrown away.** A span you reject stays in the file, marked
-  rejected, because "the pipeline said this and a person disagreed" is the most
-  useful thing in a dataset. It is simply never used as a training label.
+  rejected, because "a machine said this and a person disagreed" is one of the
+  most useful things in a dataset. It is simply never used as a training label.
 * **The file you export is the file you re-open.** There is no separate project
   state to keep; your work travels in the data.
 
