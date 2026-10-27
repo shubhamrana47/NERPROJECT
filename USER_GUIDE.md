@@ -127,28 +127,16 @@ because the model has no business running on a file that is already tagged.
 
 ## The screen
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Fieldnote   your_file.jsonl ▾            Whole document    Export        │
-├────────────────┬───────────────────────────────┬─────────────────────────┤
-│  Spans here  12│  PUN-0001  WHEAT  Sowing      │  Entity labels      37  │
-│  ─────────────│  WHEAT (Sowing)                │  ──────────────────────  │
-│  1 wheat      │  3 sentences                   │  "yellow rust"          │
-│    Crop  4:9  │                                │  pick a label           │
-│  2 55 kg      │  ┌──┬──────────────────────┐   │  ──────────────────────  │
-│    Quantity   │  │ 1│ For wheat sown after │   │  Recently used          │
-│  3 DAP        │  │  │ mid-December, apply  │   │  [Crop 4][Disease 7]    │
-│    Chemical   │  │  │ 55 kg DAP per acre.  │   │  [Chemical 6][Quantity] │
-│               │  │ 2│ Broadcast 45 kg urea │   │  ──────────────────────  │
-│  ─────────────│  │  │ for timely sown crop │   │  Crops & Botanical      │
-│  Progress  12%│  └──┴──────────────────────┘   │   ● Crop            41  │
-│  passage 12 of│  Reset  Skip  Save  [Approve]  │   ● Fruit            3  │
-│  323          │                                │   ● Vegetable        7  │
-│  Go to passage│  To add a span: drag across…   │  Pests & Diseases       │
-├────────────────┴───────────────────────────────┴─────────────────────────┤
-│  passage 12 / 323   3 sentences here   1,204 spans            Export     │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+![Fieldnote with a validation file open: the entity list on the left, the passage in the middle with its spans underlined and captioned, and the label palette on the right](docs/the-screen.png)
+
+*A pipeline-tagged file mid-check. On the left, `Entities to check` with
+`Correct` / `Wrong` on each row and the score and sources behind it; in the
+middle, passage 2 of 323 with its five sentences numbered and every span
+underlined in its label's colour; on the right, the 37 labels with `Recently
+used` on top. The legend under the passage — solid `from the pipeline`, dashed
+`you changed or added it`, dotted `rejected` — is the whole visual language in
+one line. An annotation file looks the same, with `Spans here` on the left and
+`Approve` in place of `Correct` and `Wrong`.*
 
 Three columns, and they stay put: the list of spans on the left, the passage in
 the middle, the labels on the right. Nothing collapses or slides away while you
@@ -178,7 +166,9 @@ and a bar, `passage 12 of 323 · 11 reviewed`, how many passages the model has
 not read yet, a **`Go to passage`** box, the file name with **`New`** to open
 another, and **`Show low confidence only`**, which narrows the
 **`Whole document`** view to the passages holding spans the model was unsure of
-— useful for a pass over the weak predictions rather than the whole file.
+— useful for a pass over the weak predictions rather than the whole file. The
+keys you need most are listed at the bottom of this panel, so they are on screen
+while you work.
 
 **Middle — the passage.** All of its sentences, numbered down the gutter, so a
 sentence is never cut off from the advice around it. Above it:
