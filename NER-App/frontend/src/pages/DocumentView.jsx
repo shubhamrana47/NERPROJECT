@@ -427,6 +427,27 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     goToRef.current = goTo;
   }, [goTo]);
 
+  /*
+   * Write whatever is open, then wait for the queue to drain. Called before the
+   * export reads the document back from the server, so a span someone has just
+   * marked cannot be missing from the file they are handed.
+   */
+  const flushPending = useCallback(async () => {
+    if (isDirtyRef.current && passage) {
+      const segIdx = passage.index != null ? passage.index : passageIndex;
+      persist(segIdx, working, null);
+    }
+    try {
+      await queueRef.current;
+    } catch (_) {
+      // persist() has already reported the failure and re-flagged the passage
+    }
+  }, [passage, passageIndex, persist, working]);
+
+  useEffect(() => {
+    annotation?.registerFlush?.(flushPending);
+  }, [annotation?.registerFlush, flushPending]);
+
   const handleSave = useCallback(() => {
     if (passage) persist(passage.index != null ? passage.index : passageIndex, working, 'Saved');
   }, [passage, passageIndex, persist, working]);

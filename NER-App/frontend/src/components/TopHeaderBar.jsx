@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Download, Eye, FileText } from 'lucide-react';
 import { downloadAnnotatedFile } from '../api.js';
 import { describeExport } from '../utils/annotatedFile.js';
+import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 /**
  * Wordmark: three marked-up lines of text. The blue rule is a model prediction,
@@ -23,6 +24,7 @@ export default function TopHeaderBar({
   onTogglePreview,
   isPreviewOpen = false,
 }) {
+  const annotation = useAnnotation();
   const [exporting, setExporting] = useState(false);
   const [exportNote, setExportNote] = useState('');
 
@@ -31,6 +33,9 @@ export default function TopHeaderBar({
     setExporting(true);
     setExportNote('');
     try {
+      // The file is built on the server, so anything still only on screen has
+      // to be written first.
+      await annotation?.flushPendingWork?.();
       const saved = await downloadAnnotatedFile(doc._id, doc.filename, doc.kind);
       setExportNote(describeExport(saved.filename, saved));
       setTimeout(() => setExportNote(''), 10000);
