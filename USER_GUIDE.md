@@ -1,7 +1,22 @@
-# Fieldnote — Annotator's Guide
+# Fieldnote — Introduction and Annotator's Guide
 
-A guide to marking up agricultural advisories in Fieldnote. If you are setting
-the system up or working on its code, see [README.md](README.md) instead.
+Everything you need to use Fieldnote: what it is for, what is on the screen,
+what every mark and colour means, how to annotate and how to validate, the
+keys, and what comes out at the end. Start at the top and you can work from
+your first file; dip in anywhere once you know it.
+
+If you are setting the system up or working on its code, see
+[README.md](README.md) instead.
+
+**Contents** — [What this is for](#what-this-is-for) ·
+[What you need](#what-you-need) · [Two kinds of file](#two-kinds-of-file) ·
+[The screen](#the-screen) · [The visual language](#the-visual-language) ·
+[Annotating](#annotating-a-passage) ·
+[Validating](#validating-pipeline-output) · [Keys](#keys) ·
+[Saving](#saving) · [Exporting](#exporting) ·
+[The 37 labels](#the-37-entity-labels) ·
+[Annotating well](#annotating-well) ·
+[When something looks wrong](#when-something-looks-wrong)
 
 ---
 
@@ -20,7 +35,22 @@ and for measuring one honestly.
 
 One line of your file is one **passage**: a few sentences of advice about a
 particular crop at a particular stage. You work through them one passage at a
-time.
+time, and the work comes in two shapes depending on what your file already
+holds — marking up plain advisory text, or checking entities a pipeline has
+already tagged. Fieldnote decides which from the file itself and the rest of
+this guide covers both.
+
+Three things are worth knowing before you start, because they are what the
+design is for:
+
+* **A machine's reading and a person's are never mixed up.** Every span on
+  screen and in the export says which it is, in the marks you see and in the
+  fields you get.
+* **Nothing is thrown away.** A span you reject stays in the file, marked
+  rejected, because "the pipeline said this and a person disagreed" is the most
+  useful thing in a dataset. It is simply never used as a training label.
+* **The file you export is the file you re-open.** There is no separate project
+  state to keep; your work travels in the data.
 
 ---
 
@@ -54,48 +84,12 @@ is parsed with whatever structure it has.
 | Advisory text to mark up | You annotate it, and the model can suggest entities as you go. |
 | Output from the hybrid pipeline, entities already tagged | You **validate** it: confirm, reject or relabel what the pipeline found, and add what it missed. The model never runs, and no model option is offered. |
 
-The platform works out which it is from the file itself when you open it.
-
----
-
-## Validating pipeline output
-
-When a file arrives already tagged, the job changes from marking up to checking.
-
-* Each entity is listed on the left with its **score** and the **sources** that
-  backed it — `llm`, `berta`, `ontology`, a regex rule. A span at 1.00 agreed by
-  three sources needs a glance; one at 0.61 from a single source is where your
-  time belongs.
-* **Correct** keeps it. **Wrong** rejects it — the entity stays in the file,
-  struck through, and **Put it back** undoes that.
-* To fix a label, click the entity in the passage and pick a label on the right,
-  or press its number. The original label is remembered and travels in the
-  export. With words selected, a label applies to the selection instead — a
-  selection always wins over whatever is in focus.
-* **If the pipeline missed an entity, add it.** Drag across the words and pick a
-  label, exactly as in annotation. A span of yours is listed as *you added
-  this*, and carries **Remove** instead of Correct and Wrong — there is no
-  pipeline guess behind it to judge, so it is either right or it goes. In the
-  export it arrives as `"validation": {"status": "added"}` with
-  `"sources": ["human"]`, which is how it stays yours after a round trip.
-* Your span may **overlap** one of the pipeline's — marking a longer phrase than
-  it did is a normal correction. Both are kept in the validated file; the row
-  says `overlaps` so the clash is visible. A training export keeps the one a
-  person stands behind.
-* The record's own `n_entities` is left as the pipeline wrote it: it is history.
-  The current total is in `validation_summary.entities`.
-* `Mark N correct and continue` records everything still undecided as correct
-  and moves on. <kbd>A</kbd> does the same.
-* If the pipeline found **nothing** in a passage, say **Nothing to validate**
-  before moving on. Without it, a passage nobody opened looks exactly like one
-  that was checked and found empty.
-* Export gives you `validated_<timestamp>.jsonl`: your original file with a
-  `validation` block on each entity you judged, and a `validation_summary` per
-  record. Upload it again any time to carry on where you stopped.
-
-Rejected entities are deliberately kept, because "the pipeline said this and a
-person disagreed" is the most useful thing in the file. They are never used as
-training labels.
+Fieldnote works out which it is from the file itself when you open it — from
+the shape of the entities inside, never from the file name. A file whose
+entities use `label` is annotation; one whose entities use `type` with offsets
+and scores, as the hybrid pipeline writes them, is validation. A file carrying
+both is treated as annotation, so an annotated export can never be misread as
+pipeline output.
 
 ---
 
@@ -106,11 +100,15 @@ your file. You are asked how to start:
 
 | Choice | What happens |
 | :--- | :--- |
-| **Let the model read it first** | Passages arrive pre-marked. You review and correct. This is the normal choice. |
-| **Start from a clean sheet** | No predictions at all. You mark every span yourself. Use this when building reference data without model influence. |
+| **Yes, suggest entities as I go** | Passages arrive pre-marked. You review and correct. This is the normal choice. |
+| **No, I will mark everything myself** | No predictions at all. You mark every span yourself. Use this when building reference data without model influence. |
 
-Either way the file opens **immediately**, however large it is. Nothing waits
-for the model.
+Either way the file opens **immediately**, however large it is: it is read,
+split into passages and saved before anything is predicted. Nothing waits for
+the model.
+
+**A validation file is never asked this question** — the dialog does not appear,
+because the model has no business running on a file that is already tagged.
 
 ---
 
@@ -139,27 +137,123 @@ for the model.
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-* **Left — Spans here.** Every span in the passage you are on. Click a label to
-  change it, **Approve** one at a time or **Approve all**, or **remove** one.
-  The number before each span is the sentence it sits in.
-* **Middle — the passage.** All of its sentences, numbered down the gutter, so
-  you never lose the context a sentence sits in.
-* **Right — Entity labels.** All 37, always open and scrollable, grouped by
-  domain. The block at the top follows the labels you have been using.
-* **Bottom.** Where you are, how many spans exist, and the export button. A
-  quiet `saving` appears here while a change is being written.
+Three columns, and they stay put: the list of spans on the left, the passage in
+the middle, the labels on the right. Nothing collapses or slides away while you
+work.
+
+**Left, top — `Spans here` (annotation) or `Entities to check` (validation).**
+Every span in the passage you are on, in reading order.
+
+* The small number before each span is the **sentence** it sits in.
+* Click the span's text to put it **in focus** — the passage tints it and the
+  right-hand panel starts talking about it.
+* Click the **label chip** (swatch, name, chevron) to change the label from a
+  drop-down.
+* **Annotating:** `4:9` is the span's character range in the passage text, and
+  `model 93%` or `yours` says where it came from. `Approve` signs off one span,
+  `remove` deletes it, and `Approve all N` at the top does the lot.
+* **Validating:** each row shows the pipeline's **score** and the **sources**
+  that backed it — `llm + berta`, `ontology`, a regex rule — the decision you
+  have recorded (*confirmed*, *rejected*, *relabelled*, *you added this*), and
+  the buttons for it: `Correct`, `Wrong`, `Put it back`, `Undo`, or `Remove` for
+  a span of your own. The header counts them: *3 correct, 1 wrong, 1 relabelled,
+  2 added, 8 to go*, with `Mark the remaining 8 correct` above.
+* `overlaps` on a row means another span covers some of the same words.
+
+**Left, bottom — `Progress`.** How far through the file you are as a percentage
+and a bar, `passage 12 of 323 · 11 reviewed`, how many passages the model has
+not read yet, a **`Go to passage`** box, the file name with **`New`** to open
+another, and **`Show low confidence only`**, which narrows the
+**`Whole document`** view to the passages holding spans the model was unsure of
+— useful for a pass over the weak predictions rather than the whole file.
+
+**Middle — the passage.** All of its sentences, numbered down the gutter, so a
+sentence is never cut off from the advice around it. Above it:
+
+* the **passage tag** and the **crop and stage chips** the file records;
+* three tabs — **`Model output`** (what the machine proposed, read-only, never
+  touched by your edits), **`Annotate`** (your working copy), **`Both`** one
+  under the other. In validation these read *What the pipeline tagged* and
+  *Checking these*.
+
+Below it: the legend, **`Reset passage`** / **`Undo decisions`**, **`Skip`**,
+**`Save`**, and the dark **`Approve and continue`**. Under that sits the
+selection bar: it names the words you have selected and offers the labels you
+use most, or tells you what to do next when nothing is selected.
+
+**Right — `Entity labels`.** All 37, always open, scrollable, grouped by domain
+with a count beside each.
+
+* The block at the top shows what you are about to label — the selected words,
+  or the span in focus.
+* **`Recently used`** keeps the labels you have been reaching for at the top,
+  with their number keys. Before you have used any, it shows the common ones.
+* The **search box** finds a label by name; <kbd>/</kbd> jumps into it and
+  <kbd>Enter</kbd> applies the first match.
+* The foot keeps a tally for this passage: `Model found`, `You added`, and the
+  model's `Mean confidence`.
+
+**Bottom bar.** Where you are, how many sentences and spans, a quiet `saving`
+while a write goes out or `reading ahead` while the model catches up, the
+**`Whole document`** toggle, and a second **`Export`** button. Both export
+buttons do the same thing.
+
+**`Whole document`** (top bar, or the toggle at the bottom) lays every passage
+out as a card to scroll through, honouring the low-confidence filter.
+**`Back to one passage`** returns you to work.
 
 ---
 
-## What the marks mean
+## The visual language
+
+Fieldnote is deliberately plain: paper-coloured background, serif text at
+reading size, thin rules. Everything that carries meaning does so through a
+**mark under a word**, and there are only a few marks to learn.
+
+### Two inks
+
+The whole interface is written in two colours, and they mean one thing each:
+
+| Ink | Where you see it | Meaning |
+| :--- | :--- | :--- |
+| **Blue** `#2F5FA8` | solid underlines, `Model found`, the legend, the wordmark | **a machine's reading** — the model, or the hybrid pipeline |
+| **Red** `#B5403A` | dashed underlines, `You added`, `yours`, the dot before a caption | **a person's reading** — you |
+
+Nothing else is coloured for effect. If something is red, a person did it.
+
+### Marks on a span
 
 | Mark | Meaning |
 | :--- | :--- |
-| **Solid underline** | the model proposed this span |
-| **Dashed underline** | you added or changed it |
-| Small label beneath | the entity type |
-| Red dot before the label | added by hand |
-| Colour | the entity type — each of the 37 has its own, and it is the only colour on the screen |
+| **Solid underline**, in the label's colour | the model or the pipeline proposed this span, and nobody has touched it |
+| **Dashed underline**, with a faint tint of the label's colour behind the words | **yours** — you added it, or changed its label |
+| **Dotted grey underline, with the words struck through and greyed** | **rejected** during validation. The span is still in the file and still in the export; `Put it back` undoes it |
+| **Small caption under the span** | the label, written in that label's colour |
+| **Small red dot before the caption** | the same thing the dashes say: this one is yours |
+| **`×` on the caption** (appears on hover) | remove this span |
+| **Faint grey tint behind the words** | hover, or the span currently in focus. The focused span is the one the right-hand panel is talking about |
+| **Pink text selection** | a selection is armed and a label will apply to it |
+
+A caption fades in when a span is first marked, so you can see the mark land
+without hunting for it.
+
+### Colour
+
+Each of the **37 labels has its own fixed colour**, and that one colour is used
+for the underline, the caption, and the round swatch beside the label
+everywhere it is listed. `Crop` is always the same green; `Chemical` is always
+the same purple.
+
+**Colour never means confidence.** A span the model is 61% sure of looks exactly
+like one it is 99% sure of — confidence is a number, shown as a number, in the
+span list. This is on purpose: a colour that shifted with confidence would make
+the passage hard to read and tell you nothing you cannot read off the list.
+
+### The legend is on screen
+
+Under the passage, the same three marks are spelled out — solid for the
+machine, dashed for yours, dotted and struck through for rejected — so you never
+have to remember this page.
 
 ---
 
@@ -168,10 +262,20 @@ for the model.
 **1. Read it.** The model's spans are already marked.
 
 **2. Add what it missed.** Drag across the words — any words, in any sentence —
-then either press the label's number key or click a label on the right. All 37
-are listed there; the search box finds one by name. The
-selected text appears in both the right panel and the bar under the passage, so
-you can see exactly what you are about to label.
+then press the label's number key (<kbd>1</kbd>–<kbd>9</kbd>) or click a label
+on the right. All 37 are listed there, and the search box finds one by name. The
+selected words appear in both the right panel and the bar under the passage, so
+you can see exactly what you are about to label. Release the mouse anywhere —
+even past the end of the line — and the selection still holds.
+
+**Each occurrence is its own span.** If `wheat` appears three times in a
+passage, you can tag all three, and tagging the third tags the third — spans are
+held by character position, not by the word itself. The same goes for a word
+inside another: `December` within `mid-December` is a span in its own right.
+
+A selection that runs across two sentences cannot become one span, and a
+selection the interface cannot place exactly is refused rather than guessed at.
+Both say so under the passage instead of failing silently.
 
 **3. Fix what is wrong.** Click the span in the text and the right panel opens
 an editor for it, where you can change its label or remove it. Or click the
@@ -198,15 +302,103 @@ back. It asks first.
 
 ---
 
+## Validating pipeline output
+
+When a file arrives already tagged, the job changes from marking up to checking.
+**The model never runs on it** — you are not asked about it, and nothing is
+predicted. What the pipeline wrote is what you see.
+
+* Each entity is listed on the left with its **score** and the **sources** that
+  backed it — `llm`, `berta`, `ontology`, a regex rule. A span at 1.00 agreed by
+  three sources needs a glance; one at 0.61 from a single source is where your
+  time belongs.
+* **Correct** keeps it. **Wrong** rejects it — the entity stays in the file,
+  struck through, and **Put it back** undoes that.
+* To fix a label, click the entity in the passage and pick a label on the right,
+  or press its number. The original label is remembered and travels in the
+  export. With words selected, a label applies to the selection instead — a
+  selection always wins over whatever is in focus.
+* **If the pipeline missed an entity, add it.** Drag across the words and pick a
+  label, exactly as in annotation. A span of yours is listed as *you added
+  this*, and carries **Remove** instead of Correct and Wrong — there is no
+  pipeline guess behind it to judge, so it is either right or it goes. In the
+  export it arrives as `"validation": {"status": "added"}` with
+  `"sources": ["human"]`, which is how it stays yours after a round trip.
+* Your span may **overlap** one of the pipeline's — marking a longer phrase than
+  it did is a normal correction. Both are kept in the validated file; the row
+  says `overlaps` so the clash is visible. A training export keeps the one a
+  person stands behind.
+* The record's own `n_entities` is left as the pipeline wrote it: it is history.
+  The current total is in `validation_summary.entities`.
+* `Mark N correct and continue` records everything still undecided as correct
+  and moves on. <kbd>A</kbd> does the same.
+* If the pipeline found **nothing** in a passage, say **Nothing to validate**
+  before moving on. Without it, a passage nobody opened looks exactly like one
+  that was checked and found empty.
+* `Undo decisions` puts the whole passage back to what the pipeline said.
+* Export gives you `validated_<date>_<time>.jsonl`: your original file with a
+  `validation` block on each entity you judged, and a `validation_summary` per
+  record. Upload it again any time to carry on where you stopped.
+
+Rejected entities are deliberately kept, because "the pipeline said this and a
+person disagreed" is the most useful thing in the file. They are never used as
+training labels.
+
+### What a validated record looks like
+
+Only the `validation` blocks and the summary are added. `score`, `sources`,
+`mean_logprob`, `bio`, `hybrid`, `suppressed` and `n_entities` are the
+pipeline's own record of its run and are passed through untouched — including
+`n_entities`, which stays as the pipeline counted it even after you add spans.
+
+```json
+{
+  "passage_id": "3817e6a6596d", "passage_tag": "PUN-0001", "n_entities": 3,
+  "text": "For wheat sown after mid-December, apply 55 kg DAP per acre at sowing.",
+
+  "entities": [
+    { "text": "wheat", "type": "Crop", "start": 4, "end": 9,
+      "score": 1.0, "sources": ["berta", "llm"],
+      "validation": { "status": "confirmed" } },
+
+    { "text": "mid-December", "type": "Duration", "start": 21, "end": 33,
+      "score": 0.72, "sources": ["llm"],
+      "validation": { "status": "relabelled", "original_type": "Duration" } },
+
+    { "text": "acre", "type": "Field_Area", "start": 55, "end": 59,
+      "score": 0.61, "sources": ["ontology"],
+      "validation": { "status": "rejected" } },
+
+    { "text": "happy seeder", "type": "Agri_Equipment", "start": 0, "end": 12,
+      "score": 1.0, "sources": ["human"],
+      "validation": { "status": "added" } }
+  ],
+  "validation_summary": {
+    "entities": 4, "confirmed": 1, "rejected": 1, "relabelled": 1, "added": 1,
+    "unreviewed": 0, "complete": true
+  }
+}
+```
+
+An entity you have not judged carries **no `validation` block at all** — which
+is exactly what lets a part-finished file be picked up again. After a relabel,
+`bio` no longer agrees with the types beside it and should not be trusted.
+
+---
+
 ## Keys
 
 | Key | Action |
 | :--- | :--- |
-| <kbd>1</kbd>–<kbd>9</kbd> | Label the selected text |
-| <kbd>A</kbd> | Approve the passage and go to the next |
-| <kbd>→</kbd> / <kbd>←</kbd> | Next / previous passage |
+| <kbd>1</kbd>–<kbd>9</kbd> | Label the selected words — or, in validation with nothing selected, correct the entity in focus |
+| <kbd>A</kbd> | Approve the passage (validation: mark the rest correct) and go to the next |
+| <kbd>→</kbd> / <kbd>←</kbd> | Next / previous passage, saving on the way out |
 | <kbd>/</kbd> | Jump to the label search box |
-| <kbd>Esc</kbd> | Drop the current selection |
+| <kbd>Enter</kbd> (in the search box) | Apply the first matching label |
+| <kbd>Esc</kbd> | Clear the search, then the selection, then the span in focus |
+
+Keys are ignored while you are typing in a box, so <kbd>4</kbd> in the search
+box searches for "4" rather than tagging a crop.
 
 The number keys are fixed, so a key always means the same label:
 
@@ -216,7 +408,12 @@ The number keys are fixed, so a key always means the same label:
 
 Everything else is one click away on the right, or found by typing in the
 search box. The quick block at the top of that panel reorders itself to the
-labels you actually use, but the numbers never move.
+labels you actually use, but **the numbers never move** — the digit printed
+beside a label is the digit that applies it, wherever the label has drifted to.
+
+A selection always wins over a span in focus. If you have an entity in focus and
+then drag across different words, <kbd>4</kbd> labels the words you dragged
+over — not the entity you had clicked.
 
 ---
 
@@ -226,12 +423,25 @@ labels you actually use, but the numbers never move.
 passages saves anything unsaved on the way out. Writes happen behind the
 interface, so nothing waits for the network.
 
+Four things write the passage you are on:
+
+| | |
+| :--- | :--- |
+| **Approve and continue** / <kbd>A</kbd> | signs the passage off and writes it |
+| **Save** | writes it without signing anything off |
+| **Moving passage** — <kbd>→</kbd>, <kbd>←</kbd>, `Skip`, `Go to passage` | writes whatever was open on the way out |
+| **Export** | writes the open passage first, then builds the file |
+
 * `saving` in the bottom bar means a write is still going out. It usually
   disappears immediately.
-* **Don't close the tab while `saving` is showing** — the browser will warn you.
-* **Unsaved changes in this passage** means you have edited and not yet
-  approved or moved on. **Save** commits it without approving.
+* **Unsaved changes in this passage** means you have tagged something and not
+  yet approved, saved or moved on. It is on screen, not on the server.
+* **The browser warns you if you close or reload the tab** with a write in
+  flight or with unsaved changes in the passage.
 * If a write fails you get a message naming the passage, and **Save** retries.
+* Export used to be the one way out of this: it asks the *server* for the file,
+  so work that had never been written was not in it. It now writes the open
+  passage first and waits for that to land.
 
 ---
 
@@ -257,8 +467,16 @@ there, which takes a moment.
 ## Exporting
 
 **Export** gives you one file: **your original file, with the annotations
-appended**. Same records, same order, every original field untouched, with two
-fields added at the end:
+appended**. Same records, same order, every original field untouched. There is
+one button's worth of choice — no formats to pick, no second gold export to keep
+in step.
+
+The button is in the top bar and again at the bottom; both do the same thing,
+and both write the passage you are on before asking the server for the file. An
+annotation file comes back as `annotated_<date>_<time>.jsonl`, a validated one
+as `validated_<date>_<time>.jsonl`.
+
+An annotated record gains two fields at the end:
 
 ```json
 {
@@ -279,9 +497,11 @@ fields added at the end:
 }
 ```
 
-A note appears telling you what the saved file contains, for example
-*"Saved annotated_2026-10-26_14-05-31.jsonl — 323 records, 1,204 spans, 712 verified
-by hand."*
+A note under the top bar tells you what the saved file actually contains,
+counted from the file itself rather than from anything the server claimed:
+*"Saved annotated_2026-10-26_14-05-31.jsonl — 323 records, 1,204 spans, 712
+verified by hand."* For a validated file it reads *"… 6,471 spans, 59 decided by
+hand."*
 
 ### Reading the output
 
@@ -368,8 +588,11 @@ The value of this dataset is consistency, so a few habits matter more than speed
 | **Every passage says "the model is reading this passage"** | The inference service never came up. Annotation by hand still works and saves normally. |
 | **A passage shows no spans and the model has read it** | The model genuinely found nothing. That is a valid, useful record — approve it as an empty passage. |
 | **`verified_spans: 0` across your export** | Nothing has been approved yet. Model confidence is not verification; work through passages and approve them. |
-| **Nothing happens when you click a label** | No text is selected. Drag across the words first — the panel says so when it is waiting. |
-| **Your spans disappeared after a reload** | Check the bottom bar before leaving; a write may not have finished. The browser warns you while one is in flight. |
+| **Nothing happens when you click a label** | Nothing is selected and, in validation, nothing is in focus. Drag across the words first, or click an entity — the panel says which it is waiting for. |
+| **A selection did nothing** | It ran across two sentences, or could not be placed exactly. A message under the passage says which; select again inside one numbered line. |
+| **A span you tagged is missing from the export** | This was a real bug and is fixed: Export now writes the open passage first. If you see it again, press **Save** before exporting and report it. |
+| **Your spans disappeared after a reload** | Work on screen is not on the server until something writes it. The browser warns you before closing or reloading with a write in flight or unsaved changes in the passage. |
+| **A validated file comes back with "none verified by hand"** | Validation records *decisions*, not the annotation workflow's `verified` flag. The note says *"N decided by hand"* for these files. |
 
 ---
 

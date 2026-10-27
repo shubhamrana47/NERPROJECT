@@ -599,9 +599,14 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [goTo, handleApprove, passageIndex, totalPassages, viewMode]);
 
-  // Warn if the tab closes with a write still going out.
+  /*
+   * Warn if the tab closes with a write still going out, or with work on screen
+   * that has not been written at all. The second case is the one that loses
+   * annotations: a span is tagged, nothing is pressed, and the passage is only
+   * on screen.
+   */
   useEffect(() => {
-    if (pendingSaves === 0) return undefined;
+    if (pendingSaves === 0 && !isDirty) return undefined;
     const warn = (e) => {
       e.preventDefault();
       e.returnValue = '';
@@ -609,7 +614,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [pendingSaves]);
+  }, [pendingSaves, isDirty]);
 
   const act = async (seg, ent, body) => {
     try {

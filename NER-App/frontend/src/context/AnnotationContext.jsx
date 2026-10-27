@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import { ENTITY_TYPES, ENTITY_SHORTCUTS } from '../utils/textUtils.jsx';
 import {
   addRecentLabel,
@@ -10,6 +18,8 @@ import {
 const AnnotationContext = createContext(null);
 
 const SHORTCUT_LABELS = ENTITY_SHORTCUTS.map((s) => s.label);
+/** The digit printed beside a label is the one that applies it. */
+const LABEL_FOR_KEY = Object.fromEntries(ENTITY_SHORTCUTS.map((s) => [s.key, s.label]));
 const isRealLabel = (label) => ENTITY_TYPES.includes(label);
 
 export function AnnotationProvider({ children }) {
@@ -79,6 +89,27 @@ export function AnnotationProvider({ children }) {
     },
     [selectedSpan, rememberLabel]
   );
+
+  /*
+   * 1-9 apply the label printed beside each key, on whatever applyLabel would
+   * act on: the words just selected, or failing that the entity in focus. The
+   * interface has always shown these digits; this is what listens for them.
+   * Held here rather than in the palette, because both the palette and the bar
+   * under the passage print them.
+   */
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      const label = LABEL_FOR_KEY[e.key];
+      if (!label) return;
+      if (!selectedSpan && !annotatorRef.current?.onRelabel) return;
+      e.preventDefault();
+      applyLabel(label);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [applyLabel, selectedSpan]);
 
   const updateEntity = useCallback(
     (targetEnt, changes) => {

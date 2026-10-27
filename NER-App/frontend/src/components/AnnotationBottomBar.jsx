@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, ChevronDown, Download, Loader2 } from 'lucide-react';
 import { downloadAnnotatedFile } from '../api.js';
+import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 export default function AnnotationBottomBar({
   docId,
@@ -18,6 +19,7 @@ export default function AnnotationBottomBar({
   viewMode,
   onToggleViewMode,
 }) {
+  const annotation = useAnnotation();
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState('');
 
@@ -30,6 +32,10 @@ export default function AnnotationBottomBar({
     if (!docId) return;
     try {
       setDownloading(true);
+      // The file is built on the server, so the passage on screen is written
+      // first. Both export buttons have to do this, not just the one in the
+      // top bar.
+      await annotation?.flushPendingWork?.();
       const saved = await downloadAnnotatedFile(docId, docFilename, docKind);
       setDownloadSuccess(
         `${saved.records.toLocaleString()} ${saved.records === 1 ? 'record' : 'records'} saved`
