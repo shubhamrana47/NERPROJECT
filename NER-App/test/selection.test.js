@@ -182,6 +182,13 @@ async function mount(which, { recordCalls = false } = {}) {
     });
   };
 
+  /** Presses a key on the window, the way the shortcut handler hears it. */
+  const pressKey = async (key) => {
+    await act(async () => {
+      dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+  };
+
   const close = () => {
     try {
       mounted.unmount?.();
@@ -198,6 +205,7 @@ async function mount(which, { recordCalls = false } = {}) {
     select,
     selectAcrossSentences,
     pickLabel,
+    pressKey,
     clickSpan,
     clickButton,
   };
@@ -373,4 +381,43 @@ test('exporting writes the open passage first, instead of leaving it behind', as
     ui.calls.indexOf(saves[0]) < ui.calls.indexOf(exports[0]),
     'the save has to come first, or the server builds a file without it'
   );
+});
+
+test('the bottom bar export writes the open passage too', async (t) => {
+  const ui = await mount('validate', { recordCalls: true });
+  t.after(() => ui.close());
+
+  await ui.select(0, 'sowing');
+  await ui.pickLabel('Location');
+  assert.deepEqual(ui.calls, [], 'nothing written yet');
+
+  await ui.clickButton('Export validated file');
+
+  const saves = ui.calls.filter((c) => c.endsWith('/entities'));
+  const exports = ui.calls.filter((c) => c.includes('/dataset'));
+  assert.equal(saves.length, 1, 'the open passage is saved');
+  assert.equal(exports.length, 1);
+  assert.ok(ui.calls.indexOf(saves[0]) < ui.calls.indexOf(exports[0]), 'save first');
+});
+
+test('the number printed beside a label is the key that applies it', async (t) => {
+  const ui = await mount('tagged');
+  t.after(() => ui.close());
+
+  await ui.select(1, 'Punjab');
+  await ui.pressKey('3'); // Location
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Chemical', 'Location']);
+
+  // and with nothing selected it stays out of the way
+  await ui.pressKey('4');
+  assert.deepEqual(ui.captions(), ['Crop', 'Chemical', 'Chemical', 'Location'], 'nothing tagged');
+});
+
+test('validation: a number corrects the entity in focus', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+
+  await ui.clickSpan('wheat');
+  await ui.pressKey('7'); // Disease
+  assert.deepEqual(ui.captions(), ['Disease', 'Chemical']);
 });

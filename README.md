@@ -13,9 +13,11 @@ immediately. Exports hand back the uploaded file with annotations appended, each
 span recording whether a person verified it — the distinction a training set and
 a gold benchmark both depend on.
 
-> **Going to annotate with it?** Read the **[Annotator's Guide](USER_GUIDE.md)** —
-> what the platform does, how to mark up a passage, the keyboard shortcuts, how to
-> read the exported file, and what to do when something looks wrong.
+> **New to the application, or going to annotate with it?** Start with
+> **[Introduction and Annotator's Guide](USER_GUIDE.md)** — what it is for, every
+> panel on the screen, what each mark and colour means (solid, dashed, dotted),
+> annotating, validating pipeline output, the keys, saving, how to read the
+> exported file, and what to do when something looks wrong.
 > This README covers the architecture, the API and deployment.
 
 ---
