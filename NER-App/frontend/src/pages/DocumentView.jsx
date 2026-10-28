@@ -252,6 +252,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                 originalLabel: prevFirstPlace,
                 originalRunnerUp: initialRunnerUp,
                 runnerUp: prevFirstPlace,
+                ...(isValidation && e.validationStatus !== 'added' ? { validationStatus: 'relabelled' } : {}),
               }
             : {}),
         };
@@ -260,7 +261,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setIsDirty(true);
     isDirtyRef.current = true;
     setMessage('');
-  }, []);
+  }, [isValidation]);
 
   /**
    * Records a decision against a pipeline entity. Nothing is removed: a
@@ -494,11 +495,20 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
   /** Validation: every entity still unjudged is confirmed as correct. */
   const confirmRemaining = useCallback(() => {
-    const confirmed = working.map((e) =>
-      !e.validationStatus || e.validationStatus === 'unreviewed'
-        ? { ...e, validationStatus: 'confirmed', status: 'approved', source: 'human' }
-        : e
-    );
+    const confirmed = working.map((e) => {
+      if (!e.validationStatus || e.validationStatus === 'unreviewed') {
+        const isRelabelled = Boolean(
+          e.isManual || (e.originalLabel && e.label !== e.originalLabel)
+        );
+        return {
+          ...e,
+          validationStatus: isRelabelled ? 'relabelled' : 'confirmed',
+          status: isRelabelled ? 'edited' : 'approved',
+          source: 'human',
+        };
+      }
+      return e;
+    });
     setWorking(confirmed);
     setIsDirty(true);
     isDirtyRef.current = true;

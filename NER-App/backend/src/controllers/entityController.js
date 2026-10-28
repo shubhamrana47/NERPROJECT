@@ -36,6 +36,9 @@ exports.reviewEntity = async (req, res, next) => {
       if (end !== undefined) ent.end = end;
       ent.status = 'edited';
       ent.isManual = true;
+      if (doc.kind === 'validate') {
+        ent.validationStatus = 'relabelled';
+      }
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
@@ -146,6 +149,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
 
           if (wasManuallyChanged) {
             ent.isManual = true;
+            ent.validationStatus = 'relabelled';
             // The rejected entity that was predicted by the pipeline that was earlier at first place
             // moves to second place / runner up, and the previous runner up entity disappears:
             const rejectedFirstPlace = ent.originalLabel || baseline.label;

@@ -355,7 +355,20 @@ function buildValidatedRecords(documents) {
 
       const judged = original.map((orig) => {
         const decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
-        const status = decided?.validationStatus || 'unreviewed';
+        let status = decided?.validationStatus || 'unreviewed';
+
+        const isLabelChanged =
+          decided &&
+          decided.label &&
+          orig.type &&
+          decided.label.trim().toLowerCase() !== orig.type.trim().toLowerCase();
+        const isManuallyChanged =
+          Boolean(decided?.isManual) &&
+          (isLabelChanged || Boolean(decided?.originalLabel && decided.label !== decided.originalLabel));
+
+        if (status === 'relabelled' || isLabelChanged || isManuallyChanged) {
+          status = 'relabelled';
+        }
 
         if (status === 'unreviewed' || !VALIDATION_DECISIONS.includes(status)) {
           counts.unreviewed += 1;
@@ -375,7 +388,7 @@ function buildValidatedRecords(documents) {
             // already carries the correction and would otherwise report it as
             // the original.
             type: decided.label,
-            ...runnerUpOverlay(orig, decided.runnerUp),
+            ...runnerUpOverlay(orig, decided.runnerUp || decided.originalLabel || orig.type),
             validation: { status, original_type: decided.originalLabel || orig.type },
           };
         }
