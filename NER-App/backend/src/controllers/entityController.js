@@ -23,11 +23,19 @@ exports.reviewEntity = async (req, res, next) => {
     } else if (action === 'delete') {
       ent.status = 'deleted';
     } else if (action === 'edit') {
-      if (label !== undefined) ent.label = label;
+      if (label !== undefined && label !== ent.label) {
+        const prevFirstPlace = ent.originalLabel || ent.label;
+        ent.originalLabel = prevFirstPlace;
+        if (!ent.originalRunnerUp) ent.originalRunnerUp = ent.runnerUp;
+        ent.runnerUp = prevFirstPlace;
+        ent.label = label;
+        ent.isManual = true;
+      }
       if (text !== undefined) ent.text = text;
       if (start !== undefined) ent.start = start;
       if (end !== undefined) ent.end = end;
       ent.status = 'edited';
+      ent.isManual = true;
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
@@ -115,6 +123,9 @@ exports.saveSegmentEntities = async (req, res, next) => {
         confidence: e.confidence !== undefined ? Number(e.confidence) : 1.0,
         status: e.status || 'approved',
         source: e.source || 'human',
+        runnerUp: e.runnerUp !== undefined ? e.runnerUp : (e.runner_up !== undefined ? e.runner_up : undefined),
+        originalRunnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.original_runner_up !== undefined ? e.original_runner_up : undefined),
+        isManual: Boolean(e.isManual || e.validationStatus === 'relabelled' || (e.source === 'human' && e.status === 'edited')),
       };
 
       if (isValidation) {
@@ -124,6 +135,27 @@ exports.saveSegmentEntities = async (req, res, next) => {
           if (!ent.label) ent.label = baseline.label;
           if (e.validationStatus) ent.validationStatus = e.validationStatus;
           ent.originalLabel = e.originalLabel || baseline.originalLabel || baseline.label;
+          if (!ent.originalRunnerUp) {
+            ent.originalRunnerUp = baseline.originalRunnerUp || baseline.runnerUp;
+          }
+
+          const wasManuallyChanged =
+            ent.validationStatus === 'relabelled' ||
+            (ent.label && baseline.label && ent.label !== (baseline.originalLabel || baseline.label)) ||
+            ent.isManual;
+
+          if (wasManuallyChanged) {
+            ent.isManual = true;
+            // The rejected entity that was predicted by the pipeline that was earlier at first place
+            // moves to second place / runner up, and the previous runner up entity disappears:
+            const rejectedFirstPlace = ent.originalLabel || baseline.label;
+            ent.runnerUp = rejectedFirstPlace;
+          } else if (ent.validationStatus === 'unreviewed') {
+            ent.isManual = false;
+            ent.runnerUp = ent.originalRunnerUp || baseline.runnerUp;
+          } else if (!ent.runnerUp && baseline.runnerUp) {
+            ent.runnerUp = baseline.runnerUp;
+          }
         } else {
           const text = seg.text || '';
           const describesItsText =

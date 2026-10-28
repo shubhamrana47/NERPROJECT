@@ -18,6 +18,7 @@ export default function AnnotationBottomBar({
   awaitingModel = 0,
   viewMode,
   onToggleViewMode,
+  onBeforeExport,
 }) {
   const annotation = useAnnotation();
   const [downloading, setDownloading] = useState(false);
@@ -35,7 +36,11 @@ export default function AnnotationBottomBar({
       // The file is built on the server, so the passage on screen is written
       // first. Both export buttons have to do this, not just the one in the
       // top bar.
-      await annotation?.flushPendingWork?.();
+      if (typeof onBeforeExport === 'function') {
+        await onBeforeExport();
+      } else {
+        await annotation?.flushPendingWork?.();
+      }
       const saved = await downloadAnnotatedFile(docId, docFilename, docKind);
       setDownloadSuccess(
         `${saved.records.toLocaleString()} ${saved.records === 1 ? 'record' : 'records'} saved`
