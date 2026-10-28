@@ -67,6 +67,25 @@ function buildProvidedEntities(provided, text, ingest) {
       added: 'approved',
     };
 
+    const rawRunnerUp =
+      raw.runner_up_label ||
+      raw.runner_up_type ||
+      raw.runner_up_entity ||
+      raw.runnerUp ||
+      (typeof raw.runner_up === 'string' ? raw.runner_up : raw.runner_up?.label || raw.runner_up?.type || raw.runner_up?.token) ||
+      raw.runner_up_token?.token ||
+      (typeof raw.runner_up_token === 'string' ? raw.runner_up_token : null);
+
+    let parsedRunnerUp = undefined;
+    if (rawRunnerUp && typeof rawRunnerUp === 'string' && rawRunnerUp.trim()) {
+      const clean = rawRunnerUp.trim();
+      parsedRunnerUp = CANONICAL_TYPES.includes(clean) ? clean : normalizeLabel(clean);
+    }
+
+    const origLabel = restored === 'added' ? undefined : String(block?.original_type || label);
+    const isManuallyChanged = restored === 'relabelled' || Boolean(raw.isManual);
+    const finalRunnerUp = isManuallyChanged && origLabel ? origLabel : parsedRunnerUp;
+
     out.push({
       text: entityText,
       label: restored === 'relabelled' && block.type ? String(block.type).trim() || label : label,
@@ -76,8 +95,10 @@ function buildProvidedEntities(provided, text, ingest) {
       status: statusFor[restored],
       source: restored === 'unreviewed' || restored === 'rejected' ? 'llm' : 'human',
       validationStatus: restored,
-      // An addition has no original: the pipeline never proposed it.
-      originalLabel: restored === 'added' ? undefined : String(block?.original_type || label),
+      originalLabel: origLabel,
+      runnerUp: finalRunnerUp,
+      originalRunnerUp: parsedRunnerUp,
+      isManual: isManuallyChanged,
     });
     ingest.provided += 1;
   }
@@ -229,6 +250,10 @@ exports.upload = async (req, res, next) => {
             confidence: e.confidence !== undefined ? Number(e.confidence) : 1,
             status: e.status || (e.source === 'human' ? 'approved' : 'accepted'),
             source: e.source === 'human' ? 'human' : 'model',
+            originalLabel: e.originalLabel,
+            runnerUp: e.runnerUp || e.runner_up,
+            originalRunnerUp: e.originalRunnerUp || e.original_runner_up || e.runnerUp || e.runner_up,
+            isManual: Boolean(e.isManual || e.source === 'human' || e.status === 'edited'),
           }))
           .filter(
             (e) =>

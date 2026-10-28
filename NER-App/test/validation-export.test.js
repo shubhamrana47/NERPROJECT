@@ -42,6 +42,8 @@ const decide = (seg, text, status, newLabel) => {
   ent.validationStatus = status;
   if (status === 'relabelled') {
     ent.originalLabel = ent.originalLabel || ent.label;
+    ent.runnerUp = ent.originalLabel;
+    ent.isManual = true;
     ent.label = newLabel;
     ent.status = 'edited';
     ent.source = 'human';

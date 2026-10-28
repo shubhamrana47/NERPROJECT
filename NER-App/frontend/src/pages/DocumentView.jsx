@@ -237,7 +237,24 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         const match =
           (target._id && e._id === target._id) ||
           (e.start === target.start && e.end === target.end);
-        return match ? { ...e, status: 'edited', source: 'human', ...changes } : e;
+        if (!match) return e;
+        const hasLabelChange = changes.label && changes.label !== e.label;
+        const prevFirstPlace = e.originalLabel || e.label;
+        const initialRunnerUp = e.originalRunnerUp !== undefined ? e.originalRunnerUp : e.runnerUp;
+        return {
+          ...e,
+          status: 'edited',
+          source: 'human',
+          isManual: true,
+          ...changes,
+          ...(hasLabelChange
+            ? {
+                originalLabel: prevFirstPlace,
+                originalRunnerUp: initialRunnerUp,
+                runnerUp: prevFirstPlace,
+              }
+            : {}),
+        };
       })
     );
     setIsDirty(true);
@@ -264,11 +281,19 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
          * stays an addition and gains no original_type.
          */
         if (e.validationStatus === 'added') {
-          return decision === 'relabelled' ? { ...e, label: nextLabel || e.label } : e;
+          return decision === 'relabelled' ? { ...e, label: nextLabel || e.label, isManual: true } : e;
         }
 
         if (decision === 'unreviewed') {
-          return { ...e, validationStatus: 'unreviewed', status: 'accepted', source: 'llm' };
+          return {
+            ...e,
+            label: e.originalLabel || e.label,
+            runnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : e.runnerUp,
+            isManual: false,
+            validationStatus: 'unreviewed',
+            status: 'accepted',
+            source: 'llm',
+          };
         }
         if (decision === 'confirmed') {
           return { ...e, validationStatus: 'confirmed', status: 'approved', source: 'human' };
@@ -276,10 +301,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         if (decision === 'rejected') {
           return { ...e, validationStatus: 'rejected', status: 'accepted', source: 'llm' };
         }
+        const prevFirstPlace = e.originalLabel || e.label;
+        const initialRunnerUp = e.originalRunnerUp !== undefined ? e.originalRunnerUp : e.runnerUp;
         return {
           ...e,
           label: nextLabel || e.label,
-          originalLabel: e.originalLabel || e.label,
+          originalLabel: prevFirstPlace,
+          originalRunnerUp: initialRunnerUp,
+          runnerUp: prevFirstPlace,
+          isManual: true,
           validationStatus: 'relabelled',
           status: 'edited',
           source: 'human',
@@ -850,6 +880,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         awaitingModel={docTotals.awaitingModel}
         viewMode={viewMode}
         onToggleViewMode={() => setViewMode((m) => (m === 'focus' ? 'overview' : 'focus'))}
+        onBeforeExport={flushPending}
       />
     </div>
   );

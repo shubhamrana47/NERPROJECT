@@ -311,6 +311,23 @@ function buildAnnotatedRecords(documents, options = {}) {
  * relabel, `bio` no longer agrees with the validated types and is not
  * authoritative.
  */
+/**
+ * After a relabel the pipeline's rejected type becomes the runner-up. The
+ * export keeps the uploaded schema exactly: a runner-up field is updated only
+ * if the record already carries one as a plain string, and none is ever added.
+ * `runner_up_token` is a token-level log-probability, not an entity type, so it
+ * is left exactly as the pipeline wrote it.
+ */
+const RUNNER_UP_KEYS = ['runner_up', 'runner_up_type', 'runner_up_label', 'runner_up_entity', 'runnerUp'];
+function runnerUpOverlay(orig, runnerUp) {
+  if (!runnerUp || !orig || typeof orig !== 'object') return {};
+  const out = {};
+  RUNNER_UP_KEYS.forEach((k) => {
+    if (typeof orig[k] === 'string') out[k] = runnerUp;
+  });
+  return out;
+}
+
 function buildValidatedRecords(documents) {
   const records = [];
   const totals = { entities: 0, confirmed: 0, rejected: 0, relabelled: 0, added: 0,
@@ -358,6 +375,7 @@ function buildValidatedRecords(documents) {
             // already carries the correction and would otherwise report it as
             // the original.
             type: decided.label,
+            ...runnerUpOverlay(orig, decided.runnerUp),
             validation: { status, original_type: decided.originalLabel || orig.type },
           };
         }

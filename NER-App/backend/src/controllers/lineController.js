@@ -56,6 +56,11 @@ exports.saveLineEntities = async (req, res, next) => {
         confidence: e.confidence !== undefined ? Number(e.confidence) : 1.0,
         status: e.status || 'approved',
         source: e.source || 'human',
+        validationStatus: e.validationStatus,
+        originalLabel: e.originalLabel,
+        runnerUp: e.runnerUp !== undefined ? e.runnerUp : (e.runner_up !== undefined ? e.runner_up : undefined),
+        originalRunnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.original_runner_up !== undefined ? e.original_runner_up : undefined),
+        isManual: Boolean(e.isManual || e.validationStatus === 'relabelled' || (e.source === 'human' && e.status === 'edited')),
       };
       if (e._id && mongoose.Types.ObjectId.isValid(e._id) && !String(e._id).startsWith('temp_')) {
         ent._id = e._id;

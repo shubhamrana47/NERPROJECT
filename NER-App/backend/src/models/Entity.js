@@ -34,6 +34,9 @@ const entitySchema = new mongoose.Schema({
     enum: ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'],
   },
   originalLabel: String,
+  runnerUp: String,
+  originalRunnerUp: String,
+  isManual: { type: Boolean, default: false },
 });
 
 module.exports = entitySchema;

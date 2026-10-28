@@ -33,26 +33,18 @@ let bundlePath;
 function buildHarness() {
   if (bundlePath) return bundlePath;
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ner-ui-')), 'harness.cjs');
-  const bin = path.join(FRONTEND, 'node_modules', '.bin', 'esbuild');
-  execFileSync(
-    bin,
-    [
-      path.join(__dirname, 'ui-harness.jsx'),
-      '--bundle',
-      '--platform=node',
-      '--format=cjs',
-      `--outfile=${out}`,
-      '--loader:.jsx=jsx',
-      "--define:import.meta.env={}",
-      '--log-level=error',
-    ],
-    {
-      cwd: FRONTEND,
-      // the harness imports React, which lives in the frontend workspace
-      env: { ...process.env, NODE_PATH: path.join(FRONTEND, 'node_modules') },
-      stdio: ['ignore', 'ignore', 'inherit'],
-    }
-  );
+  const esbuild = require(path.join(FRONTEND, 'node_modules', 'esbuild'));
+  esbuild.buildSync({
+    entryPoints: [path.join(__dirname, 'ui-harness.jsx')],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: out,
+    loader: { '.jsx': 'jsx' },
+    define: { 'import.meta.env': '{}' },
+    nodePaths: [path.join(FRONTEND, 'node_modules')],
+    logLevel: 'error',
+  });
   bundlePath = out;
   return out;
 }
@@ -63,7 +55,7 @@ async function mount(which, { recordCalls = false } = {}) {
   Object.assign(global, {
     window: dom.window,
     document: dom.window.document,
-    navigator: dom.window.navigator,
+    
     Node: dom.window.Node,
     HTMLElement: dom.window.HTMLElement,
     MouseEvent: dom.window.MouseEvent,
@@ -336,6 +328,33 @@ test('validation: a focused entity is relabelled from the palette', async (t) =>
   assert.ok(ui.paragraphs().some((t) => /Pick a different label/.test(t)));
   await ui.pickLabel('Disease');
   assert.deepEqual(ui.captions(), ['Disease', 'Chemical'], 'the tag on screen must change');
+});
+
+test('validation: relabelling shows Manual badge and shifts previous top entity to runner up', async (t) => {
+  const ui = await mount('validate');
+  t.after(() => ui.close());
+
+  // Check initial runner up badge in entities to check
+  assert.ok(ui.host.textContent.includes('2nd:'));
+  assert.ok(ui.host.textContent.includes('Chemical'));
+
+  await ui.clickSpan('wheat');
+  await ui.pickLabel('Disease');
+
+  // Manual badge should appear
+  assert.ok(ui.host.textContent.includes('Manual'), 'Manual badge appears');
+
+  // Earlier 1st place entity (Crop) moved to 2nd place / runner up
+  assert.deepEqual(ui.captions(), ['Disease', 'Chemical']);
+  assert.ok(ui.host.textContent.includes('Crop'), 'Crop is now runner up');
+
+  await ui.clickButton('Save');
+  const doc = ui.getDoc();
+  const wheat = doc.segments[0].entities.find((e) => e.text === 'wheat');
+  assert.equal(wheat.label, 'Disease');
+  assert.equal(wheat.runnerUp, 'Crop');
+  assert.notEqual(wheat.runnerUp, 'Chemical');
+  assert.equal(wheat.isManual, true);
 });
 
 test('validation: an entity is marked wrong without choosing another label', async (t) => {

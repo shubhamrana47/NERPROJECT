@@ -1,8 +1,8 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AnnotationProvider } from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/context/AnnotationContext.jsx';
-import DocumentView from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/pages/DocumentView.jsx';
-import TopHeaderBar from '/Users/arshsingh/WORK/NERPROJECT/NER-App/frontend/src/components/TopHeaderBar.jsx';
+import { AnnotationProvider } from '../frontend/src/context/AnnotationContext.jsx';
+import DocumentView from '../frontend/src/pages/DocumentView.jsx';
+import TopHeaderBar from '../frontend/src/components/TopHeaderBar.jsx';
 
 const TEXT = 'For wheat sown after mid-December, apply 55 kg DAP per acre at sowing.';
 
@@ -22,7 +22,7 @@ const validateDoc = {
     nerStatus: 'provided',
     entities: [
       { _id: 'e1', text: 'wheat', label: 'Crop', start: TEXT.indexOf('wheat'), end: TEXT.indexOf('wheat') + 5,
-        confidence: 1, status: 'accepted', source: 'llm', validationStatus: 'unreviewed', originalLabel: 'Crop' },
+        confidence: 1, status: 'accepted', source: 'llm', validationStatus: 'unreviewed', originalLabel: 'Crop', runnerUp: 'Chemical', originalRunnerUp: 'Chemical' },
       { _id: 'e2', text: 'DAP', label: 'Chemical', start: TEXT.indexOf('DAP'), end: TEXT.indexOf('DAP') + 3,
         confidence: 0.9, status: 'accepted', source: 'llm', validationStatus: 'unreviewed', originalLabel: 'Chemical' },
     ],
