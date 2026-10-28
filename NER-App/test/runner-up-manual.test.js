@@ -222,3 +222,102 @@ test('annotated export reflects saved edits with the same entity keys', async ()
   assert.deepEqual(Object.keys(ent).sort(),
     ['confidence', 'end', 'label', 'source', 'start', 'status', 'text', 'verified']);
 });
+
+
+test('manual selection calculates exact offsets for Markpower 75 WG without character drift', () => {
+  const { JSDOM } = require('jsdom');
+  const { offsetsFromRange, CAPTION_ATTR } = require('../frontend/src/utils/selectionOffsets.js');
+
+  const sentenceText =
+    'To control both grassy and broadleaf weeds apply Atlantis 3.6 WDG (mesosulfuron+iodosulfuron) 160 g/acre or Total/Markpower 75 WG (sulfosulfuron + metsulfuron) 16 g/acre or Accord Plus (Fenoxaprop+ Metribuzin) 500ml/acre or Shagun 21-11 @ 200g/acre or ACM-9 @ 240g/acre.';
+
+  const dom = new JSDOM('<!DOCTYPE html><html><body><div id="c"></div></body></html>');
+  const doc = dom.window.document;
+  const container = doc.getElementById('c');
+
+  // Preceding text up to Total: 0..108
+  const p1 = doc.createElement('span');
+  p1.setAttribute('data-start', '0');
+  p1.setAttribute('data-end', '108');
+  p1.textContent = sentenceText.slice(0, 108);
+  container.appendChild(p1);
+
+  // Total entity: 108..113
+  const totalEnt = doc.createElement('span');
+  totalEnt.className = 'group';
+  const totalText = doc.createElement('span');
+  totalText.setAttribute('data-start', '108');
+  totalText.setAttribute('data-end', '113');
+  totalText.textContent = sentenceText.slice(108, 113);
+  totalEnt.appendChild(totalText);
+  const cap = doc.createElement('span');
+  cap.setAttribute(CAPTION_ATTR, 'true');
+  cap.textContent = 'Chemical ×';
+  totalEnt.appendChild(cap);
+  container.appendChild(totalEnt);
+
+  // Slash: 113..114
+  const slash = doc.createElement('span');
+  slash.setAttribute('data-start', '113');
+  slash.setAttribute('data-end', '114');
+  slash.textContent = '/';
+  container.appendChild(slash);
+
+  // Markpower 75 WG text span: 114..129
+  const mark = doc.createElement('span');
+  mark.setAttribute('data-start', '114');
+  mark.setAttribute('data-end', '129');
+  mark.textContent = 'Markpower 75 WG';
+  container.appendChild(mark);
+
+  // Trailing text: 129..end
+  const trail = doc.createElement('span');
+  trail.setAttribute('data-start', '129');
+  trail.setAttribute('data-end', String(sentenceText.length));
+  trail.textContent = sentenceText.slice(129);
+  container.appendChild(trail);
+
+  // Select "Markpower 75 WG"
+  const range = doc.createRange();
+  range.setStart(mark.firstChild, 0);
+  range.setEnd(mark.firstChild, 15);
+
+  const measured = offsetsFromRange(container, range, sentenceText);
+  assert.ok(measured, 'selection was resolved');
+  assert.equal(measured.start, 114, 'start offset is exactly at index 114');
+  assert.equal(measured.end, 129, 'end offset is exactly at index 129');
+  assert.equal(measured.text, 'Markpower 75 WG', 'selected text matches exactly');
+  assert.notEqual(measured.text, 'wer 75 WG (sulf', 'offsets are not shifted forward');
+});
+
+test('manual selection of subphrase inside an entity resolves exact offsets', () => {
+  const { JSDOM } = require('jsdom');
+  const { offsetsFromRange } = require('../frontend/src/utils/selectionOffsets.js');
+
+  const sentenceText =
+    'To control both grassy and broadleaf weeds apply Atlantis 3.6 WDG (mesosulfuron+iodosulfuron) 160 g/acre or Total/Markpower 75 WG (sulfosulfuron + metsulfuron) 16 g/acre.';
+
+  const dom = new JSDOM('<!DOCTYPE html><html><body><div id="c"></div></body></html>');
+  const doc = dom.window.document;
+  const container = doc.getElementById('c');
+
+  const ent = doc.createElement('span');
+  ent.className = 'group';
+  const entText = doc.createElement('span');
+  entText.setAttribute('data-start', '108');
+  entText.setAttribute('data-end', '129');
+  entText.textContent = 'Total/Markpower 75 WG';
+  ent.appendChild(entText);
+  container.appendChild(ent);
+
+  // User selects "Markpower 75 WG" inside "Total/Markpower 75 WG" (offset 6 to 21)
+  const range = doc.createRange();
+  range.setStart(entText.firstChild, 6);
+  range.setEnd(entText.firstChild, 21);
+
+  const measured = offsetsFromRange(container, range, sentenceText);
+  assert.ok(measured);
+  assert.equal(measured.start, 114);
+  assert.equal(measured.end, 129);
+  assert.equal(measured.text, 'Markpower 75 WG');
+});

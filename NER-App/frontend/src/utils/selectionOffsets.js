@@ -1,22 +1,15 @@
 /**
  * Character offsets for a text selection inside an annotated sentence.
  *
- * The sentence is not rendered as plain text: each marked span also renders a
- * small caption beneath it with the label name and a remove button, and those
- * captions sit inside the same container. Measuring the rendered text before a
- * selection therefore counted the captions too, and the offset came out too
- * large — by 81 characters on a passage with eight spans before the selection.
- * The old code tried to recover by searching for the selected string within
- * fifty characters of that estimate and, failing that, taking the string's
- * first occurrence in the sentence. With a term that repeats, the first
- * occurrence is usually the wrong one, so selecting the third "wheat" could
- * label the first.
+ * Each text span rendered in the sentence (both unannotated text and entity spans)
+ * carries its exact local character offsets via `data-start` and `data-end`
+ * attributes. This enables direct, exact O(1) character positioning for any
+ * selection range, completely immune to any captions, chrome, margin, styling,
+ * duplicate words, or overlapping spans earlier in the sentence.
  *
- * Here the offset is measured rather than estimated: clone the range that
- * precedes the position, drop the caption subtrees from the clone, and count
- * what is left. That is the browser's own range arithmetic over exactly the
- * sentence's own characters, so it is correct for every occurrence and needs no
- * tolerance and no guessing.
+ * As a robust fallback, if `data-start` is absent on a node's container,
+ * `measureOffset` clones the preceding range, drops any caption chrome subtrees,
+ * and measures the remaining text count.
  */
 
 /** Marks an element whose text is annotation chrome, not sentence content. */
@@ -35,6 +28,92 @@ export function measureOffset(container, node, nodeOffset) {
 }
 
 /**
+ * Resolves a DOM node and offset to an exact character offset within sentenceText.
+ * Uses `data-start` / `data-end` when available, falling back to `measureOffset`.
+ */
+export function getOffsetFromPosition(container, node, nodeOffset, isEnd = false) {
+  if (!container || !node) return null;
+
+  // 1. Text node: parent element should carry data-start
+  if (node.nodeType === 3) {
+    const el = node.parentElement;
+    if (el) {
+      // If inside caption chrome, find the parent entity's text boundary
+      const caption = el.closest(`[${CAPTION_ATTR}]`);
+      if (caption) {
+        const entitySpan = caption.closest('.group');
+        if (entitySpan) {
+          const textEl = entitySpan.querySelector('[data-start]');
+          if (textEl) {
+            return isEnd
+              ? Number(textEl.getAttribute('data-end'))
+              : Number(textEl.getAttribute('data-start'));
+          }
+        }
+        return null;
+      }
+
+      const offsetEl = el.closest('[data-start]');
+      if (offsetEl && container.contains(offsetEl)) {
+        const baseStart = Number(offsetEl.getAttribute('data-start'));
+        if (Number.isFinite(baseStart)) {
+          return baseStart + nodeOffset;
+        }
+      }
+    }
+  }
+
+  // 2. Element node:
+  if (node.nodeType === 1) {
+    // If inside caption chrome
+    if (node.hasAttribute?.(CAPTION_ATTR) || node.closest?.(`[${CAPTION_ATTR}]`)) {
+      const entitySpan = node.closest('.group');
+      if (entitySpan) {
+        const textEl = entitySpan.querySelector('[data-start]');
+        if (textEl) {
+          return isEnd
+            ? Number(textEl.getAttribute('data-end'))
+            : Number(textEl.getAttribute('data-start'));
+        }
+      }
+      return null;
+    }
+
+    if (node.hasAttribute?.('data-start')) {
+      const s = Number(node.getAttribute('data-start'));
+      const e = Number(node.getAttribute('data-end'));
+      if (nodeOffset === 0) return s;
+      if (nodeOffset >= node.childNodes.length) return e;
+      const child = node.childNodes[nodeOffset];
+      if (child) return getOffsetFromPosition(container, child, 0, isEnd);
+      return s;
+    }
+
+    if (node === container || container.contains(node)) {
+      const children = Array.from(node.childNodes);
+      if (nodeOffset === 0 && children.length > 0) {
+        return getOffsetFromPosition(container, children[0], 0, isEnd);
+      }
+      if (nodeOffset >= children.length && children.length > 0) {
+        const last = children[children.length - 1];
+        return getOffsetFromPosition(
+          container,
+          last,
+          last.nodeType === 3 ? last.nodeValue.length : last.childNodes.length,
+          true
+        );
+      }
+      if (nodeOffset < children.length) {
+        return getOffsetFromPosition(container, children[nodeOffset], 0, isEnd);
+      }
+    }
+  }
+
+  // Fallback to DOM-range measurement
+  return measureOffset(container, node, nodeOffset);
+}
+
+/**
  * Offsets for a selection range, or null when it cannot be resolved against
  * this sentence. Returning null is deliberate: an unresolvable selection adds
  * nothing, which is safer than labelling the wrong words.
@@ -48,12 +127,13 @@ export function offsetsFromRange(container, range, sentenceText) {
   let start;
   let end;
   try {
-    start = measureOffset(container, range.startContainer, range.startOffset);
-    end = measureOffset(container, range.endContainer, range.endOffset);
+    start = getOffsetFromPosition(container, range.startContainer, range.startOffset, false);
+    end = getOffsetFromPosition(container, range.endContainer, range.endOffset, true);
   } catch (_) {
     return null;
   }
 
+  if (start == null || end == null) return null;
   if (end < start) [start, end] = [end, start];
 
   start = Math.max(0, Math.min(start, sentenceText.length));

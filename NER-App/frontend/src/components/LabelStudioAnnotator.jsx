@@ -42,6 +42,43 @@ export default function LabelStudioAnnotator({
       .sort((a, b) => a.start - b.start);
   }, [entities, sentenceStart, sentenceEnd]);
 
+  // In the inline text flow, resolve overlapping entities so text in sentenceText
+  // is never duplicated on screen. Human/manual additions take precedence over
+  // unreviewed pipeline spans, followed by confirmed spans and longer spans.
+  const visibleEntities = useMemo(() => {
+    const sorted = [...sentenceEntities].sort((a, b) => {
+      const aHuman =
+        a.validationStatus === 'added' || a.isManual || a.source === 'human' || a.status === 'edited'
+          ? 1
+          : 0;
+      const bHuman =
+        b.validationStatus === 'added' || b.isManual || b.source === 'human' || b.status === 'edited'
+          ? 1
+          : 0;
+      if (aHuman !== bHuman) return bHuman - aHuman;
+
+      const aConf = a.validationStatus === 'confirmed' ? 1 : 0;
+      const bConf = b.validationStatus === 'confirmed' ? 1 : 0;
+      if (aConf !== bConf) return bConf - aConf;
+
+      const aLen = (a.end || 0) - (a.start || 0);
+      const bLen = (b.end || 0) - (b.start || 0);
+      if (aLen !== bLen) return bLen - aLen;
+
+      return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
+    });
+
+    const chosen = [];
+    for (const ent of sorted) {
+      const overlaps = chosen.some((c) => ent.start < c.end && c.start < ent.end);
+      if (!overlaps) {
+        chosen.push(ent);
+      }
+    }
+
+    return chosen.sort((a, b) => a.start - b.start || a.end - b.end);
+  }, [sentenceEntities]);
+
   /*
    * Selection is read from the document rather than from a mouseup on this
    * element.
@@ -115,18 +152,26 @@ export default function LabelStudioAnnotator({
     const pieces = [];
     let currentPos = sentenceStart;
 
-    sentenceEntities.forEach((ent, entIdx) => {
+    visibleEntities.forEach((ent, entIdx) => {
       if (ent.start > currentPos) {
+        const segStart = currentPos - sentenceStart;
+        const segEnd = ent.start - sentenceStart;
         pieces.push(
-          <span key={`text-${currentPos}`} className="select-text">
-            {sentenceText.slice(currentPos - sentenceStart, ent.start - sentenceStart)}
+          <span
+            key={`text-${currentPos}`}
+            data-start={segStart}
+            data-end={segEnd}
+            className="select-text"
+          >
+            {sentenceText.slice(segStart, segEnd)}
           </span>
         );
       }
 
-      const entEndInSent = Math.min(ent.end, sentenceEnd);
+      const entStartInSent = Math.max(0, ent.start - sentenceStart);
+      const entEndInSent = Math.min(sentenceText.length, ent.end - sentenceStart);
       const entText =
-        sentenceText.slice(ent.start - sentenceStart, entEndInSent - sentenceStart) || ent.text;
+        sentenceText.slice(entStartInSent, entEndInSent) || ent.text;
       const colorStyle = getEntityColorStyle(ent.label);
       const isManual =
         ent.source === 'human' ||
@@ -161,6 +206,8 @@ export default function LabelStudioAnnotator({
           }
         >
           <span
+            data-start={entStartInSent}
+            data-end={entEndInSent}
             className={`inline px-[1px] pb-[2px] transition-colors ${
               isEditing ? 'bg-ink/[0.07]' : 'group-hover:bg-ink/[0.04]'
             } ${isRejected ? 'text-ink-faint line-through' : ''}`}
@@ -209,13 +256,20 @@ export default function LabelStudioAnnotator({
         </span>
       );
 
-      currentPos = entEndInSent;
+      currentPos = Math.max(currentPos, ent.end);
     });
 
     if (currentPos < sentenceEnd) {
+      const segStart = currentPos - sentenceStart;
+      const segEnd = sentenceText.length;
       pieces.push(
-        <span key={`text-end-${currentPos}`} className="select-text">
-          {sentenceText.slice(currentPos - sentenceStart)}
+        <span
+          key={`text-end-${currentPos}`}
+          data-start={segStart}
+          data-end={segEnd}
+          className="select-text"
+        >
+          {sentenceText.slice(segStart, segEnd)}
         </span>
       );
     }
