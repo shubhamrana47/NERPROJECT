@@ -334,9 +334,8 @@ test('validation: relabelling shows Manual badge and shifts previous top entity 
   const ui = await mount('validate');
   t.after(() => ui.close());
 
-  // Check initial runner up badge in entities to check
-  assert.ok(ui.host.textContent.includes('2nd:'));
-  assert.ok(ui.host.textContent.includes('Chemical'));
+  // Runner up token should not be displayed on the UI
+  assert.ok(!ui.host.textContent.includes('2nd:'), 'runner up is not displayed in ui');
 
   await ui.clickSpan('wheat');
   await ui.pickLabel('Disease');
@@ -344,9 +343,8 @@ test('validation: relabelling shows Manual badge and shifts previous top entity 
   // Manual badge should appear
   assert.ok(ui.host.textContent.includes('Manual'), 'Manual badge appears');
 
-  // Earlier 1st place entity (Crop) moved to 2nd place / runner up
+  // Tag on screen is updated
   assert.deepEqual(ui.captions(), ['Disease', 'Chemical']);
-  assert.ok(ui.host.textContent.includes('Crop'), 'Crop is now runner up');
 
   await ui.clickButton('Save');
   const doc = ui.getDoc();

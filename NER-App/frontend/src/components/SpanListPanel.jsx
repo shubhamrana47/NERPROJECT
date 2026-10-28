@@ -112,15 +112,6 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
           </button>
         )}
 
-        {(span.runnerUp || span.runner_up) && (
-          <span
-            className="inline-flex items-center gap-1 rounded border border-rule bg-paper px-1.5 py-0.5 text-[11px] text-ink-soft"
-            title={`Runner-up entity: ${formatEntityLabel(span.runnerUp || span.runner_up)}`}
-          >
-            <span className="font-mono text-[9.5px] uppercase tracking-tight text-ink-faint">2nd:</span>
-            <span className="font-medium text-ink">{formatEntityLabel(span.runnerUp || span.runner_up)}</span>
-          </span>
-        )}
 
         <span className="font-mono text-[10.5px] tabular-nums text-ink-faint">
           {span.start}:{span.end}
@@ -158,7 +149,6 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
   // nothing to confirm or reject: it is either right or it goes.
   const isAdded = decision === 'added';
   const isManual = Boolean(span.isManual) || decision === 'relabelled' || (span.source === 'human' && span.status === 'edited');
-  const runnerUpLabel = span.runnerUp || span.runner_up;
   const score = Number(span.confidence ?? 1);
   const sources = Array.isArray(span.sources) ? span.sources : null;
 
@@ -229,21 +219,7 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
           </button>
         )}
 
-        {runnerUpLabel && (
-          <span
-            className="inline-flex items-center gap-1 rounded border border-rule bg-paper px-1.5 py-0.5 text-[11px] text-ink-soft"
-            title={
-              isManual
-                ? `Rejected top pipeline entity moved to runner-up: ${formatEntityLabel(runnerUpLabel)}`
-                : `Runner-up entity: ${formatEntityLabel(runnerUpLabel)}`
-            }
-          >
-            <span className="font-mono text-[9.5px] uppercase tracking-tight text-ink-faint">2nd:</span>
-            <span className="font-medium text-ink">{formatEntityLabel(runnerUpLabel)}</span>
-          </span>
-        )}
-
-        {decision === 'relabelled' && span.originalLabel && span.originalLabel !== runnerUpLabel && (
+        {decision === 'relabelled' && span.originalLabel && span.originalLabel !== span.label && (
           <span className="text-[11px] text-ink-faint line-through">
             {formatEntityLabel(span.originalLabel)}
           </span>
