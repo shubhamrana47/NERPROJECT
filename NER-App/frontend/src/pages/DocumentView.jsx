@@ -208,27 +208,87 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
   const addEntity = useCallback(
     (newEnt) => {
-      setWorking((prev) => [
-        ...prev,
-        {
-          ...newEnt,
-          _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          confidence: 1.0,
-          source: 'human',
-          status: 'approved',
-          /*
-           * In a validation file a span of one's own is marked as added rather
-           * than left unreviewed: there is no pipeline proposal behind it to
-           * confirm or reject, and the distinction has to survive the export.
-           */
-          ...(isValidation ? { validationStatus: 'added' } : {}),
-        },
-      ]);
+      const start = Number(newEnt.start);
+      const end = Number(newEnt.end);
+
+      const baseline = isValidation
+        ? (passage?.originalEntities || []).find(
+            (o) => (Number(o.start) === start && Number(o.end) === end) ||
+                   (Number(o.start) < end && Number(o.end) > start)
+          )
+        : null;
+
+      setWorking((prev) => {
+        const existingIdx = prev.findIndex(
+          (e) => (Number(e.start) === start && Number(e.end) === end) ||
+                 ((e.status === 'deleted' || e.validationStatus === 'rejected') &&
+                  Number(e.start) < end && Number(e.end) > start)
+        );
+
+        if (existingIdx >= 0) {
+          const old = prev[existingIdx];
+          const origLabel = old.originalLabel || baseline?.label || old.label;
+          const origRunnerUp = old.originalRunnerUp || baseline?.runnerUp || old.runnerUp;
+          const isRelabel = isValidation && origLabel && origLabel !== newEnt.label;
+
+          const updated = {
+            ...old,
+            ...newEnt,
+            status: 'edited',
+            source: 'human',
+            isManual: true,
+            originalLabel: origLabel,
+            originalRunnerUp: origRunnerUp,
+            runnerUp: origLabel,
+            validationStatus: isValidation
+              ? isRelabel
+                ? 'relabelled'
+                : 'confirmed'
+              : undefined,
+          };
+
+          const next = [...prev];
+          next[existingIdx] = updated;
+          return next;
+        }
+
+        if (baseline) {
+          const isRelabel = baseline.label !== newEnt.label;
+          return [
+            ...prev,
+            {
+              ...newEnt,
+              _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              confidence: 1.0,
+              source: 'human',
+              status: isRelabel ? 'edited' : 'approved',
+              isManual: true,
+              originalLabel: baseline.label,
+              originalRunnerUp: baseline.runnerUp,
+              runnerUp: baseline.label,
+              validationStatus: isRelabel ? 'relabelled' : 'confirmed',
+            },
+          ];
+        }
+
+        return [
+          ...prev,
+          {
+            ...newEnt,
+            _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            confidence: 1.0,
+            source: 'human',
+            status: 'approved',
+            ...(isValidation ? { validationStatus: 'added' } : {}),
+          },
+        ];
+      });
+
       setIsDirty(true);
       isDirtyRef.current = true;
       setMessage('');
     },
-    [isValidation]
+    [isValidation, passage?.originalEntities]
   );
 
   const updateEntity = useCallback((target, changes) => {
@@ -272,8 +332,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setWorking((prev) =>
       prev.map((e) => {
         const match =
-          (target._id && e._id === target._id) ||
-          (e.start === target.start && e.end === target.end);
+          (target._id && String(e._id) === String(target._id)) ||
+          (Number(e.start) === Number(target.start) && Number(e.end) === Number(target.end));
         if (!match) return e;
 
         /*
@@ -282,6 +342,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
          * stays an addition and gains no original_type.
          */
         if (e.validationStatus === 'added') {
+          if (decision === 'confirmed') {
+            return { ...e, validationStatus: 'confirmed', status: 'approved', source: 'human', isManual: true };
+          }
+          if (decision === 'rejected') {
+            return { ...e, validationStatus: 'rejected', status: 'accepted', isManual: true };
+          }
+          if (decision === 'unreviewed') {
+            return { ...e, validationStatus: 'added', status: 'approved', source: 'human' };
+          }
           return decision === 'relabelled' ? { ...e, label: nextLabel || e.label, isManual: true } : e;
         }
 
@@ -302,8 +371,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         if (decision === 'rejected') {
           return { ...e, validationStatus: 'rejected', status: 'accepted', source: 'llm' };
         }
-        const prevFirstPlace = e.originalLabel || e.label;
-        const initialRunnerUp = e.originalRunnerUp !== undefined ? e.originalRunnerUp : e.runnerUp;
+        const baseline = (passage?.originalEntities || []).find(
+          (o) => Number(o.start) === Number(e.start) && Number(o.end) === Number(e.end)
+        );
+        const prevFirstPlace = e.originalLabel || baseline?.label || e.label;
+        const initialRunnerUp = e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.runnerUp || baseline?.runnerUp);
         return {
           ...e,
           label: nextLabel || e.label,
@@ -317,23 +389,72 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         };
       })
     );
+
+    setFocusedSpan((prev) => {
+      if (!prev) return prev;
+      const match =
+        (target._id && String(prev._id) === String(target._id)) ||
+        (Number(prev.start) === Number(target.start) && Number(prev.end) === Number(target.end));
+      if (!match) return prev;
+      if (decision === 'relabelled') {
+        return {
+          ...prev,
+          label: nextLabel || prev.label,
+          originalLabel: prev.originalLabel || prev.label,
+          validationStatus: 'relabelled',
+          status: 'edited',
+          isManual: true,
+        };
+      }
+      return { ...prev, validationStatus: decision };
+    });
+
     setIsDirty(true);
     isDirtyRef.current = true;
     setMessage('');
-  }, []);
+  }, [passage?.originalEntities]);
 
   const deleteEntity = useCallback((target) => {
-    setWorking((prev) =>
-      prev.filter((e) => {
-        if (target._id && e._id === target._id) return false;
-        if (e.start === target.start && e.end === target.end) return false;
-        return true;
-      })
+    const isPipeline = isValidation && (passage?.originalEntities || []).some(
+      (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
     );
+
+    setWorking((prev) => {
+      if (isPipeline) {
+        return prev.map((e) => {
+          const match =
+            (target._id && String(e._id) === String(target._id)) ||
+            (Number(e.start) === Number(target.start) && Number(e.end) === Number(target.end));
+          if (!match) return e;
+          return {
+            ...e,
+            status: 'deleted',
+            validationStatus: 'rejected',
+            isManual: true,
+          };
+        });
+      }
+      return prev.filter((e) => {
+        if (target._id && String(e._id) === String(target._id)) return false;
+        if (Number(e.start) === Number(target.start) && Number(e.end) === Number(target.end)) return false;
+        return true;
+      });
+    });
+
+    if (
+      focusedSpan &&
+      ((target._id && String(focusedSpan._id) === String(target._id)) ||
+        (Number(focusedSpan.start) === Number(target.start) && Number(focusedSpan.end) === Number(target.end)))
+    ) {
+      setFocusedSpan(null);
+    }
+    annotation?.setActiveEditingEntity?.(null);
+    annotation?.clearSelection?.();
+
     setIsDirty(true);
     isDirtyRef.current = true;
     setMessage('');
-  }, []);
+  }, [isValidation, passage?.originalEntities, focusedSpan, annotation]);
 
   /*
    * The label sidebar applies to whichever passage is open. Adding works in
@@ -496,6 +617,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   /** Validation: every entity still unjudged is confirmed as correct. */
   const confirmRemaining = useCallback(() => {
     const confirmed = working.map((e) => {
+      if (e.status === 'deleted') return e;
       if (!e.validationStatus || e.validationStatus === 'unreviewed') {
         const isRelabelled = Boolean(
           e.isManual || (e.originalLabel && e.label !== e.originalLabel)
@@ -549,9 +671,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
         );
 
-    if (isValidation && working.length === 0) {
-      handleNothingToValidate();
-      return;
+    if (isValidation && working.filter((e) => e.status !== 'deleted').length === 0) {
+      if (working.length === 0) {
+        handleNothingToValidate();
+        return;
+      }
     }
 
     persist(segIdx, approved, hasNext ? null : isValidation ? 'Passage validated' : 'Passage approved');
@@ -827,6 +951,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   hasNext={passageIndex < totalPassages - 1}
                   onRetryPredict={() => requestWindow(passageIndex, { force: true })}
                   onDeleteEntity={deleteEntity}
+                  focusedSpan={focusedSpan}
                 />
               </main>
 

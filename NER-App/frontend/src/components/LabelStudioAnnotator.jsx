@@ -193,6 +193,10 @@ export default function LabelStudioAnnotator({
           onClick={(e) => {
             if (readOnly) return;
             e.stopPropagation();
+            const sel = window.getSelection();
+            if (sel && !sel.isCollapsed && sel.toString().trim()) {
+              return;
+            }
             if (onFocusEntity) onFocusEntity(ent);
             if (setActiveEditingEntity) setActiveEditingEntity(ent);
             if (clearSelection) clearSelection();

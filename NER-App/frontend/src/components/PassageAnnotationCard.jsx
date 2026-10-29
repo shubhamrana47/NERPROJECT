@@ -90,6 +90,7 @@ export default function PassageAnnotationCard({
   onRetryPredict,
   onDeleteEntity,
   onFocusEntity,
+  focusedSpan = null,
 }) {
   const annotation = useAnnotation();
   const [activeTab, setActiveTab] = useState('interactive');
@@ -387,6 +388,52 @@ export default function PassageAnnotationCard({
                     />
                     {formatEntityLabel(label)}
                     {key && <span className="font-mono text-[10.5px] text-ink-faint">{key}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : isValidation && focusedSpan ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 text-[13px] text-ink-soft">
+                {focusedSpan.validationStatus === 'rejected' ? 'Re-annotating rejected' : 'Re-annotating'}{' '}
+                <span className="font-serif text-[16px] text-ink">“{focusedSpan.text}”</span>
+                <span className="ml-1.5 text-ink-faint">
+                  (currently {formatEntityLabel(focusedSpan.label)})
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => onFocusEntity && onFocusEntity(null)}
+                className="rounded border border-rule bg-sheet px-2 py-1 text-[12px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
+              >
+                Clear focus
+              </button>
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {quickLabels.map((label) => {
+                const { border } = getEntityColorStyle(label);
+                const key = ENTITY_SHORTCUTS.find((sc) => sc.label === label)?.key;
+                const isCurrent = focusedSpan.label === label && focusedSpan.validationStatus !== 'rejected';
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => annotation?.applyLabel(label)}
+                    className={`flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-[12.5px] transition ${
+                      isCurrent
+                        ? 'border-ink bg-ink text-paper font-medium'
+                        : 'border-rule-strong bg-sheet text-ink hover:border-ink hover:bg-paper'
+                    }`}
+                    title={key ? `${formatEntityLabel(label)} — press ${key}` : formatEntityLabel(label)}
+                  >
+                    <span
+                      className="h-[3px] w-3.5 rounded-full"
+                      style={{ backgroundColor: border }}
+                    />
+                    {formatEntityLabel(label)}
+                    {key && <span className={`font-mono text-[10.5px] ${isCurrent ? 'text-paper/70' : 'text-ink-faint'}`}>{key}</span>}
                   </button>
                 );
               })}

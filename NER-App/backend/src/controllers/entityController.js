@@ -142,12 +142,18 @@ exports.saveSegmentEntities = async (req, res, next) => {
             ent.originalRunnerUp = baseline.originalRunnerUp || baseline.runnerUp;
           }
 
+          const isRejected = ent.validationStatus === 'rejected' || ent.status === 'deleted';
           const wasManuallyChanged =
-            ent.validationStatus === 'relabelled' ||
-            (ent.label && baseline.label && ent.label !== (baseline.originalLabel || baseline.label)) ||
-            ent.isManual;
+            !isRejected && (
+              ent.validationStatus === 'relabelled' ||
+              (ent.label && baseline.label && ent.label !== (baseline.originalLabel || baseline.label)) ||
+              (ent.isManual && ent.label !== (baseline.originalLabel || baseline.label))
+            );
 
-          if (wasManuallyChanged) {
+          if (isRejected) {
+            ent.validationStatus = 'rejected';
+            ent.runnerUp = ent.originalRunnerUp || baseline.runnerUp;
+          } else if (wasManuallyChanged) {
             ent.isManual = true;
             ent.validationStatus = 'relabelled';
             // The rejected entity that was predicted by the pipeline that was earlier at first place

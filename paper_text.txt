@@ -1,0 +1,1297 @@
+
+=== PAGE 1 ===
+ 
+Contents lists available at ScienceDirect
+Expert Systems With Applications
+journal homepage: www.elsevier.com/locate/eswa  
+Fine-tuned encoder models with data augmentation beat ChatGPT in 
+agricultural named entity recognition and relation extraction
+Sayan De a
+ ,∗, Debarshi Kumar Sanyal b
+ , Imon Mukherjee a
+a Indian Institute of Information Technology Kalyani, 741235, India
+b Indian Association for the Cultivation of Science, Jadavpur, 700032, India
+A R T I C L E  I N F O
+Dataset link: https://github.com/Tec4Tric/ESW
+A-NER-RE
+Keywords:
+Named entity recognition
+Relation extraction
+Knowledge graph
+Text data augmentation
+ A B S T R A C T
+Agricultural research produces vast amounts of unstructured textual data, which remains largely underutilized 
+due to the lack of robust tools for automated processing. If effectively processed, this underutilized data 
+can provide critical insights to advance agricultural practices, decision-making, and sustainability. This work 
+focuses on applying Named Entity Recognition (NER) and Relation Extraction (RE) to convert unstructured 
+data into structured formats, addressing the challenges of domain-specific terminology and limited annotated 
+datasets. This scarcity is primarily due to the domain-specific terminology, contextual complexity, and 
+lack of annotated data in the agricultural domain. This study addresses these challenges by proposing 
+sophisticated data augmentation techniques, validated using large language models and human reviewers, to 
+enhance training data. We introduce AgNER-BERTa and AgRE-BERTa, two encoder-based models tailored for 
+agricultural NER and RE tasks, and compare them with state-of-the-art (SOTA) baselines, including SciBERT, 
+SpanBERT, and generative decoder models like ChatGPT. Our experiments demonstrate superior performance, 
+achieving 98% accuracy for NER and 97% for RE outperforming SOTA models. The extracted entities and 
+relations are used to construct the Agricultural Knowledge Graph (AgKG), providing structured, queryable 
+insights to support precision agriculture, policy-making, and sustainable farming practices.
+1. Introduction
+In recent years, the thrust of research in agriculture has generated 
+a large volume of information but in most cases, this information is 
+unstructured (Fountas et al., 2024). This makes it extremely difficult 
+and inefficient to extract and use the key information. It is practically 
+impossible to analyze such volumes of data manually, which is very 
+time-consuming and prone to human errors. To address this challenge, 
+Natural Language Processing (NLP) techniques, particularly NER and 
+RE, are increasingly being used to automate the identification of im-
+portant entities and their relationships (Qiao et al., 2022). This process 
+allows for the conversion of unstructured text into structured, machine-
+readable formats, facilitating more effective data utilization. However, 
+a major complication in implementing deep learning models for NER 
+and RE in the agricultural domain is the lack of large annotated datasets 
+that cover a large variety of entities. Textual data augmentation can 
+address this challenge (Shorten, Khoshgoftaar, & Furht, 2021), but 
+its implementation is challenging due to the inherent complexity of 
+natural language and the presence of domain-specific terminology.
+∗ Corresponding author.
+E-mail addresses: sayan_jrf22@iiitkalyani.ac.in (S. De), debarshi.sanyal@iacs.res.in (D.K. Sanyal), imon@iiitkalyani.ac.in (I. Mukherjee).
+1.1. Motivation
+With the increasing availability of agricultural research data which 
+is mostly unstructured, there is a growing need for automated methods 
+to extract meaningful insights efficiently. However, extracting mean-
+ingful information from unstructured text is a complex task due to 
+domain-specific terminology, contextual ambiguity, and the scarcity of 
+annotated datasets. The AgriNER dataset, earlier proposed by us De, 
+Sanyal, and Mukherjee (2023), contains thirty-six types of agricultural 
+named entities and nine types of relations including symmetric and 
+asymmetric relations, and sentences, extracted from agriculture re-
+search papers. The labeled dataset, though rich with diverse entity and 
+relation types, is quite limited in size. In this paper, we aim to enlarge 
+it automatically using Large Language Models (LLMs). Deep learning 
+models, which are increasingly being adopted with great success for 
+various NLP tasks, require large amounts of training data. The scarcity 
+of annotated datasets in agriculture often poses a significant challenge 
+to applying deep neural models like LLMs in this domain. We believe 
+that our augmented dataset will help mitigate this issue to a great 
+extent. 
+https://doi.org/10.1016/j.eswa.2025.127126
+Received 30 November 2024; Received in revised form 6 February 2025; Accepted 1 March 2025
+Expert Systems With Applications 277 (2025) 127126 
+Available online 10 March 2025 
+0957-4174/© 2025 Elsevier Ltd. All rights are reserved, including those for text and data mining, AI training, and similar technologies. 
+=== PAGE 2 ===
+S. De et al.
+1.2. Contributions
+In this work, we develop and evaluate two encoder-based models,
+AgNER-BERTa and AgRE-BERTa, specifically fine-tuned for agricul-
+tural NER and RE tasks. As an attempt to mitigate the issue of data 
+scarcity, we devise novel textual data augmentation techniques using 
+Large Language Models (LLMs), validated by human reviewers and 
+LLMs (Bedemariam et al., 2025), to enhance the AgriNER dataset. Our 
+approach ensures the generation of high-quality synthetic data while 
+preserving contextual integrity. Furthermore, we compare our models 
+against state-of-the-art baselines, including SciBERT, SpanBERT, and 
+generative decoder models such as ChatGPT1, showing that fine-tuned 
+encoder-based models significantly outperform generative models in 
+agricultural NER and RE tasks. Note that the use of encoder-based 
+models for NER and RE avoids the problem of hallucination, unlike the 
+scenario where LLMs are directly prompted to perform these tasks. The 
+extracted entities and relationships are then structured into an Agri-
+cultural Knowledge Graph (AgKG), providing a valuable resource for 
+precision agriculture, policy-making, and sustainable farming practices. 
+The code and the augmented data are publicly available on github2. The 
+main contributions of this paper are as follows:
+• We present a novel textual data augmentation approach for NER 
+and RE datasets utilizing LLMs, addressing the lack of annotated 
+agriculture data.
+• We develop and fine-tune two transformer (encoder) models,
+AgNER-BERTa and AgRE-BERTa for the NER and RE tasks within 
+the agriculture domain, outperforming several state-of-the-art 
+models by a significant margin.
+• We construct an Agricultural Knowledge Graph, AgKG, from 
+the identified entities and their relations, providing structured 
+and queryable agriculture knowledge for further research and 
+decision-making.
+The rest of our paper is organized as follows. In Section 2, we survey 
+the literature on NER and RE in the agricultural domain. We introduce 
+our dataset in Section 3. In Section 4, we describe the architecture of 
+the proposed system for NER and RE. In particular, we discuss data 
+augmentation in Section 4.1, the NER model in Section 4.2, the RE 
+model in Section 4.3, and knowledge graph construction in Section 4.4. 
+We present the experimental results in Section 5 and the analysis in 
+Section 6. In Section 7, we attempt to determine which of the two types 
+of models are more appropriate for the NER and RE tasks: encoder-
+based models or decoder-based models. We present future directions in 
+Section 8 and conclude in Section 9.
+2. Literature survey
+This section explores the existing research on NER and RE, specif-
+ically in the agricultural domain. First, the importance of natural 
+language processing in this domain is discussed, followed by a survey 
+of the advancements of NER and RE tasks in agriculture.
+2.1. Overview and importance of NLP in agriculture
+NLP has emerged as a demanding technology in various sectors that 
+revolutionize information processing. In agriculture, NLP is crucial in 
+improving productivity, sustainability, and decision-making processes. 
+Researchers can extract valuable information from the vast amount 
+of textual data by applying NLP methods. In the agriculture domain, 
+feedback from farmers, and vendors is much needed, and sentiment 
+analysis can be used here to understand the trends and market improve-
+ments (Sharma, Vora, Shaw, & Patil, 2024). NLP techniques can be 
+1 https://chatgpt.com/.
+2 https://github.com/Tec4Tric/ESWA-NER-RE.
+used to interpret weather forecasts and provide better decision-making 
+results for optimal planting and harvesting seasons (Dandrifosse et al., 
+2024), etc. Analyzing both the textual and image data, plant diseases 
+can be detected with NLP as well as CNN-based (Convolutional Neural 
+Network) techniques that improve plant health (Kothari et al., 2024). 
+In many cases, NLP techniques are used to transform the unstructured 
+data into a structure with useful information to be used further. Thus, 
+NLP has significant applications in agriculture information processing.
+2.2. Advancements of NER and RE in agriculture
+NER is a sub-task of Information Extraction (IR), that has been 
+explored in various domains such as the Biomedical and Healthcare, Fi-
+nance, Legal, News, Media, Government, Academic research, and many 
+more. It is important to identify disease names, symptoms, drugs, treat-
+ments, and medical procedures in the biomedical and healthcare do-
+main so that the deep learning models can benefit the domain (Perera, 
+Dehmer, & Emmert-Streib, 2020; Weber, Münchmeyer, Rocktäschel, 
+Habibi, & Leser, 2020). In domains like the finance sector, NER plays a 
+great role by recognizing financial entities such as companies, stocks, 
+currencies, etc to extract information from financial reports, news, 
+stock markets, etc (Jayakumar, Krishnakumar, Peddagopu, & Sridhar, 
+2020). Extracting useful information from legal documents such as 
+laws, rules and regulations, court cases, etc, NER is the solution to 
+go with textual data as legal documents are mostly in text format. 
+NER helps to extract that information and that can be used further 
+for many use cases (Naik, Patel, & Kannan, 2023). We now discuss 
+works pertinent to the agricultural domain. Malarkodi, Lex, and Devi 
+(2016) have proposed a NER dataset in agriculture with nineteen types 
+of tags and a Conditional Random Fields (CRFs) based approach to 
+implement the NER model. Guo et al. (2020) proposed an annotated 
+corpus that mainly focuses on Chinese agricultural diseases and pests. 
+A Bi-directional Long Short-Term Memory (BiLSTM) with CRF model 
+is implemented for the NER task. Later they have used a pre-trained 
+language model like BERT with a 3D CNN to improve the performance 
+scores (Guo et al., 2022). Wang, Jiang and Liu (2023) have proposed 
+a BiLSTM-CRF-based weakly supervised model to construct a knowl-
+edge graph. Wu et al. (2024) proposed an improved version of the 
+Bidirectional Gated Recurrent Unit (BI-GRU) neural network model 
+for NER of rice genes and phenotypes. Veena, Kanjirangat, and Gupta 
+(2023) proposed an unsupervised method using BERT with LDA topic 
+modeling, covering only six entities. Though deep learning techniques 
+are being applied to extract named entities in various domains, only 
+a few works have been done in the agricultural field. Hence, a NER 
+model capable of detecting a variety of agricultural named entities is 
+required for further research.
+RE methods extend the effectiveness of NER by linking the entities 
+in meaningful ways, named as relations. In Zhou, Su, Zhang, and 
+Zhang (2005), Zhou et al. proposed a Support Vector Machine (SVM) 
+based system to extract syntactic and semantic relations. Kaushik and 
+Chatterjee (2018) proposed a rule-based reasoning algorithm called 
+RelExOnt that helps automatic relationship extraction from agricultural 
+text. Zhang et al. (2019) proposed four types of deep learning models 
+for relation extraction tasks that outperform the traditional machine 
+learning models. Tymoshenko and Giuliano (2010) proposed a kernel-
+based SVM method to extract semantic relations. Recent methods such 
+as CNN (Alam et al., 2024), Graph Convolutional Network (GCN) (Zeng, 
+Zhao, Li, & Dai, 2024), BERT (Han et al., 2024) and Quantum rein-
+forcement learning (QRL) (Zhu, Mu, Wang, & Zhu, 2024) are being 
+used to extract relations. Very few works have been done in the agri-
+cultural domain with relation extraction. Qiao et al. (2021) proposed 
+a BERT-BILSTM-LSTM model to detect entities and extract relations 
+simultaneously. Further, the author created an agricultural knowledge 
+graph. Zhang et al. (2022) proposed an NER model (BERT-BiLSTM-
+CRF) and an RE model (PERT-FC) for the crop disease domain. They 
+created a knowledge graph from the extracted entities and the extracted 
+Expert Systems With Applications 277 (2025) 127126 
+2 
+=== PAGE 3 ===
+S. De et al.
+Fig. 1. Overall methodology.
+Table 1
+Total count of occurrences of each entity in the AgriNER dataset.
+ NE tags Count NE tags Count NE tags Count 
+ Agri_Pollution 8 Agri_Process 85 Agri_Waste 22  
+ Agri_Method 51 Citation 14 Chemical 54  
+ Crop 173 Date_and_Time 24 Disease 17  
+ Duration 28 Event 2 Field_Area 19  
+ Food_Item 24 Fruit 41 Humidity 1  
+ Location 202 ML_Model 52 Money 6  
+ Natural_Disaster 62 Natural_Resource 33 Nutrient 72  
+ Organism 59 Organization 41 Other 4  
+ Other_Quantity 56 Person 34 Policy 5  
+ Quantity 26 Rainfall 17 Season 39  
+ Soil 19 Technology 31 Temp 11  
+ Treatment 11 Vegetable 3 Weather 2  
+relations. Chen et al. (2023) proposed a joint NER and RE model 
+named RoBERT-Agr based on the combination of RoBERTa, Whole 
+Word Masking (WWM), and CRF algorithms. However, the code is not 
+publicly available for implementation. Obtaining original agricultural 
+data, whether in text or image form, requires significant resources. 
+To overcome this data scarcity problem, researchers have proposed 
+image data augmentation methods (De, Bhakta, Phadikar, & Majumder, 
+2022; Su, Kong, Qiao, & Sukkarieh, 2021). But, to our knowledge, 
+no textual data augmentation methods have been explored in the 
+agriculture domain. Our work is focused on textual data augmentation 
+for agriculture to facilitate the training of deep neural models for NER 
+and RE. Further, we devise separate models for NER and RE, which are 
+trained with the augmented datasets and can detect thirty-six entity 
+types and nine relation types.
+3. Dataset
+The effectiveness of a deep learning model heavily depends on its 
+dataset quality. In order to make a dataset suitable for consumption by 
+deep neural networks for tasks like NER, it is generally preprocessed 
+significantly with steps like data cleaning, conversion, organization, 
+etc. In our research, we utilized the AgriNER dataset (De et al., 2023), 
+which includes thirty-six different entities and nine types of relations. 
+The AgriNER dataset is publicly available on github3. Table  1 lists all 
+the entities along with their occurrences in the dataset, while Table  2 
+presents the count for each type of relation.
+Transitioning from the annotated JSON format originally used in 
+AgriNER to the BIO format required for the current work is a cru-
+cial pre-processing step. After this conversion is done, the dataset is 
+3 https://github.com/Tec4Tric/AgriNER.
+Table 2
+Total count of occurrences of each relation in the AgriNER dataset.
+ Relation Count Relation Count Relation Count 
+ Includes 197 Caused_By 55 Origin_Of 47  
+ Synonym_Of 119 Coreference 44 Seasonal 15  
+ Conjunction 97 Helps_In 37 Used_For 11  
+partitioned into training and test data, maintaining an 80:20 ratio. 
+This division allows for robust model training on a substantial portion 
+of the data, while the reserved test set is used to assess the model’s 
+generalization performance.
+4. Proposed methodology for NER and RE
+In this section, we describe the methodology we followed to perform 
+NER and RE on the AgriNER dataset to construct the agriculture knowl-
+edge graph, which we named AgKG. A schematic representation of the 
+complete methodology is shown in Fig.  1. More specifically, for NER 
+and RE, we have fine-tuned RoBERTa-base models. In particular, we 
+have added a shallow neural network classification head to a RoBERTa-
+base model and fine-tuned the model. Thus, we have two models: one 
+for NER, called AgNER-BERTa, as shown in Fig.  2, and another for RE, 
+called AgRE-BERTa, as shown in Fig.  3.
+4.1. Data augmentation
+Deep learning models require a huge amount of data to train with. 
+The AgriNER dataset is not large enough to fine-tune a huge deep neu-
+ral model like RoBERTa. To overcome this problem, data augmentation 
+can be used to increase the number of samples in the dataset. The com-
+bination of the original data and the augmented data may contribute 
+to better model training, and hence to the generalization performance 
+of the model. So we decided to augment the training subset of AgriNER 
+by generating synthetic examples that closely resemble the original 
+examples. Our data augmentation method utilizes an LLM, specifically
+GPT-3.5 Turbo, to generate augmented data separately for the NER 
+and RE tasks. Our goal is data augmentation for NER is to generate 
+synthetic examples similar to the examples available in the AgriNER 
+dataset such that the entities are preserved in the synthetic examples 
+while the surrounding context may be changed. In contrast, during data 
+augmentation for RE, given a triplet containing a head entity, a relation, 
+and a tail entity, a new triplet is generated where one or both entities 
+are appropriately replaced but the relationship between the entity pair 
+is same as in the original triplet.
+Expert Systems With Applications 277 (2025) 127126 
+3 
+=== PAGE 4 ===
+S. De et al.
+4.1.1. Data augmentation for NER
+We have developed Algorithm 1 to generate new sentences with 
+their corresponding BIO labels for the NER task. An LLM, here GPT-3.5 
+Turbo, indicated as model 𝑀 in Algorithm 1, is prompted to generate 
+new sentences. The prompt is depicted in Fig.  A.10 in Appendix  A. 
+In the original dataset , each example is represented as a triplet 
+𝑒𝑖 = ( 𝑆𝑖, 𝑇𝑖, 𝐿𝑖) where 𝑆𝑖 is a sentence, 𝑇𝑖 is its token sequence, and 𝐿𝑖
+is the BIO-formatted label sequence bearing one-to-one correspondence 
+with the token sequence. We denote the generated dataset by 𝐺. For 
+every example 𝑒𝑖 ∈ , 𝐺 contains 𝐾 (where 𝐾 is pre-defined and 
+typically, 𝐾 > 1) synthetic examples {𝑒(𝑖)
+𝑗 }𝐾
+𝑗=1 ‘ similar to’ 𝑒𝑖.
+Algorithm 1: Data Augmentation for NER
+Input: 𝑀, , 𝐾; /* Model, Dataset, #sentences 
+generated for each input sentence */
+Output: 𝐺; /* Generated dataset */
+1 Initialize 𝐺 as empty list;
+for 𝑒𝑖 ∈  do
+2 𝐺 ← 𝑔𝑒𝑛𝑒𝑟𝑎𝑡𝑒𝑆𝑒𝑛𝑡𝑒𝑛𝑐𝑒𝑠 (𝑀, 𝑒𝑖); /* It takes 
+𝑒𝑖 = (𝑆𝑖, 𝑇𝑖, 𝐿𝑖) and the model 𝑀 as inputs to 
+generate 𝐾 semantically similar sentences 
+𝐺 = {𝑆(𝑖)
+𝑗 ∶ 1 ≤ 𝑗 ≤ 𝐾}. */
+3 for 𝑆(𝑖)
+𝑗 ∈ 𝐺 do
+4 𝑠𝑖𝑚𝑆𝑐𝑜𝑟𝑒 ← 𝑠𝑒𝑚𝑎𝑛𝑡𝑖𝑐𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (𝑆𝑖, 𝑆(𝑖)
+𝑗 ); /* It 
+calculates the semantic similarity 
+between original sentence 𝑆𝑖 and 
+generated sentence 𝑆(𝑖)
+𝑗  */
+5 if 𝑠𝑖𝑚𝑆𝑐𝑜𝑟𝑒 ≥ 85% then
+6 𝑇 (𝑖)
+𝑗 ← 𝑡𝑜𝑘𝑒𝑛𝑖𝑧𝑒(𝑆(𝑖)
+𝑗 );
+7 𝐿(𝑖)
+𝑗 ← 𝑙𝑎𝑏𝑒𝑙(𝑆(𝑖)
+𝑗 );
+8 𝑒(𝑖)
+𝑗 ← (𝑆(𝑖)
+𝑗 , 𝑇 (𝑖)
+𝑗 , 𝐿(𝑖)
+𝑗 );
+9 𝐺 = 𝐺 ∪ 𝑒(𝑖)
+𝑗 ;
+10 else
+continue
+end 
+end 
+end 
+11 Return 𝐺;
+In particular, we use the model 𝑀 to generate the 𝐾 semantically 
+similar sentences 𝑆(𝑖)
+𝑗  (1 ≤ 𝑗 ≤ 𝐾) for each sentence 𝑆𝑖 in . Each 
+generated sentence is then tokenized and labeled with BIO tags. The 
+token list is stored in 𝑇 (𝑖)
+𝑗  and the corresponding label list in 𝐿(𝑗)
+𝑗 . For 
+example, consider a sentence 𝑆1 in an example 𝑒1 ∈ :
+𝑆1: ‘‘Apples are generally in season from late summer to late
+October.’’
+𝑇1: ⟨Apples, are, generally, in, season, from, late, summer, to, late,
+October⟩
+𝐿1: ⟨B-Fruit, O, O, O, O, O, B-Time, B-Season, O, B-Time,
+B-Date_and_Time⟩
+The model 𝑀 generates a semantically similar sentence 𝑆(1)
+1 , which 
+is then tokenized and labeled at the token level, and added to 𝐺.
+𝑆(1)
+1 : ‘‘Apples are typically harvested from late summer through
+October.’’
+𝑇 (1)
+1 : ⟨Apples, are, typically, harvested, from, late, summer, through,
+October⟩
+𝐿(1)
+1 : ⟨B-Fruit, O, O, O, O, B-Time, B-Season, O, B-Date_and_Time⟩
+LLMs like GPT suffer from hallucination problems (Alkaissi & Mc-
+Farlane, 2023; Bang et al., 2023; Goddard, 2023). In our scenario, while 
+generating new sentences, the model typically generates sentences with 
+the same entity types as in the input sentence. However, in some cases, 
+we have found that the meaning of the generated sentence is quite 
+different from that of the original sentence. To avoid including such 
+sentences in the dataset, we have added an additional step: Step 4 in 
+Algorithm 1. This step calculates the semantic similarity between an 
+original and the corresponding generated sentence using Algorithm 2.
+Algorithm 2: Semantic Similarity Score Calculation
+Input: 𝑆𝑖, 𝑆(𝑖)
+𝑗 ; /* Original and Generated sentences 
+*/
+Output: 𝑠𝑖𝑚𝑆𝑐𝑜𝑟𝑒 ; /* Semantic Similarity Score */
+1 𝑚𝑜𝑑𝑒𝑙 ← 𝑙𝑜𝑎𝑑𝑀𝑜𝑑𝑒𝑙 (SBERT model);
+2 𝑣𝑖 ← 𝑚𝑜𝑑𝑒𝑙.𝑒𝑛𝑐𝑜𝑑𝑒 (𝑆𝑖); /* encodes 𝑆𝑖 */
+3 𝑣(𝑖)
+𝑗 ← 𝑚𝑜𝑑𝑒𝑙.𝑒𝑛𝑐𝑜𝑑𝑒 (𝑆(𝑖)
+𝑗 ); /* encodes 𝑆(𝑖)
+𝑗  */
+4 𝑠𝑖𝑚𝑆𝑐𝑜𝑟𝑒 ← 𝑐𝑜𝑠𝑖𝑛𝑒𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (𝑣𝑖, 𝑣(𝑖)
+𝑗 ); /* semantic 
+similarity is calculated using cosine 
+similarity between the two sentence vectors. */
+5 Return 𝑠𝑖𝑚𝑆𝑐𝑜𝑟𝑒 ∗ 100;
+In particular, sentence embeddings 𝑣𝑖 and 𝑣(𝑖)
+𝑗  of the two sen-
+tences 𝑆𝑖 (original) and 𝑆(𝑖)
+𝐽  (generated), respectively, are first obtained 
+with the Sentence Transformer SBERT,4 specifically the paraphrase-
+MiniLM-L6-v25 model; then the cosine similarity between the em-
+beddings 𝑣𝑖 and 𝑣(𝑖)
+𝑗  is calculated using Eq. (1): 
+𝑐𝑜𝑠𝑖𝑛𝑒𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (𝑣𝑖, 𝑣(𝑖)
+𝑗 ) ∶=
+𝑣𝑖 ⋅ 𝑣(𝑖)
+𝑗
+‖𝑣𝑖‖‖𝑣(𝑖)
+𝑗 ‖
+, (1)
+where 𝑣𝑖 ⋅ 𝑣(𝑖)
+𝑗  is the dot product between the sentence embeddings 𝑆𝑖
+and 𝑆(𝑖)
+𝑗 .
+If the cosine similarity score is at least 0.85, we process the sentence 
+further by tokenizing it and labeling the tokens (Steps 5–9 in Algorithm 
+1); otherwise we discard it. Note that we manually verify the generated 
+labels of some of the synthetically produced sentences and discard the 
+generated examples with incorrect labels. Finally, we append this aug-
+mented example to 𝐺. After the algorithm terminates, the augmented 
+dataset  ∪ 𝐺 contains both the original and the augmented data.
+4.1.2. Data augmentation for RE
+The relation extraction models, unlike NER models, do not need 
+BIO-formatted data. In our AgriNER dataset, there are nine types of re-
+lations including three types of symmetric and six types of asymmetric 
+relations. After the entities and relations are identified in a sentence, 
+we construct triplets of the form ⟨ℎ𝑒𝑎𝑑_𝑒𝑛𝑡𝑖𝑡𝑦, 𝑟𝑒𝑙𝑎𝑡𝑖𝑜𝑛, 𝑡𝑎𝑖𝑙_𝑒𝑛𝑡𝑖𝑡𝑦⟩. Note 
+that for symmetric relations, if ⟨𝑒1, 𝑟, 𝑒2⟩ is a triplet, then ⟨𝑒2, 𝑟, 𝑒1⟩ is 
+also added as a triplet. We also track the provenance of each triplet 
+by including its source sentence 𝑠 with the triplet ⟨𝑒1, 𝑟, 𝑒2⟩, thereby 
+forming the extended triplet ⟨𝑒1, 𝑟, 𝑒2, 𝑠⟩. Let   denote the set of extended 
+triplets. Given  , Algorithm 3 provides a step-by-step procedure to 
+generate a set of synthetic extended triplets 𝐺 using LLM instances 
+𝑀1 and 𝑀2, respectively. The number of triplets 𝐾 that should be 
+generated from each triplet in  . Here, 𝑀1, which is used to generate 
+triplets, is a GPT-3.5 Turbo instance, and 𝑀2, which is used to validate 
+the extended triplets, is a GPT-4o instance. In this setup, the stronger 
+model serves as the verifier, increasing the likelihood of detecting 
+errors from the generator (Bedemariam et al., 2025).
+4 https://huggingface.co/sentence-transformers.
+5 https://huggingface.co/sentence-transformers/paraphrase-MiniLM-L6-v2.
+Expert Systems With Applications 277 (2025) 127126 
+4 
+=== PAGE 5 ===
+S. De et al.
+Algorithm 3: Data Augmentation for RE
+Input:  , 𝑀1, 𝑀2, 𝐾; /* Set of extended triplets, Two 
+models, triplets generated for each input 
+triplet */
+Output: 𝐺; /* Generated Triplets */
+1 𝐺 ← ∅; /* Initialize augmented triplet set */
+for each extended triplet 𝑇𝑖 = (ℎ𝑖, 𝑟𝑖, 𝑡𝑖, 𝑠𝑖) ∈   do
+/* For each 𝑇𝑖, generate 𝐾 triplets using 𝑀1 */
+2  ← 𝑔𝑒𝑛𝑒𝑟𝑎𝑡𝑒𝐸𝑥𝑡𝑒𝑛𝑑𝑒𝑑𝑇 𝑟𝑖𝑝𝑙𝑒𝑡𝑠 (𝑀1, 𝑇𝑖, 𝐾);
+for 𝑇 (𝑖)
+𝑗 ∈  do
+if 𝑟𝑖 = 𝑟(𝑖)
+𝑗  then
+𝑖𝑠𝑉 𝑎𝑙𝑖𝑑 ← 𝑉 (𝑇𝑖, 𝑇 (𝑖)
+𝑗 , 𝑀2); /* Validate using 
+𝑀2, returning True or False  */
+if 𝑖𝑠𝑉 𝑎𝑙𝑖𝑑 = True then
+3 𝐺 ← 𝐺 ∪ 𝑇 (𝑖)
+𝑗 ; /* Add triplet to 
+augmented data */
+4 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 ← 𝑐𝑜𝑛𝑐𝑎𝑡(𝑠𝑖, “ ” , 𝑠(𝑖)
+𝑗 );
+if 𝑐ℎ𝑒𝑐𝑘𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (ℎ𝑖, ℎ(𝑖)
+𝑗 ) = True then
+5 𝐺 ← 𝐺 ∪ (ℎ𝑖, 𝐶𝑜𝑟𝑒𝑓 𝑒𝑟𝑒𝑛𝑐𝑒, ℎ(𝑖)
+𝑗 , 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 );
+end 
+if 𝑐ℎ𝑒𝑐𝑘𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (𝑡𝑖, 𝑡(𝑖)
+𝑗 ) = True then
+6 𝐺 ← 𝐺 ∪ (𝑡𝑖, 𝐶𝑜𝑟𝑒𝑓 𝑒𝑟𝑒𝑛𝑐𝑒, 𝑡(𝑖)
+𝑗 , 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 );
+end 
+end 
+end 
+end 
+end 
+7 Return 𝐺;
+The model 𝑀1 generates 𝐾 semantically similar triplets 𝑇 (𝑖)
+𝑗 (1 ≤
+𝑗 ≤ 𝐾) for each triplet 𝑇𝑖 ∈  . The prompting method to generate 
+triplets is discussed in Fig.  A.11. The prompt essentially asks the LLM 
+to replace the entities with their synonyms while keeping the relation 
+unchanged. Let us look at an example of generated triplets. Consider a 
+triplet 𝑇1 = ⟨ℎ1, 𝑟1, 𝑡1, 𝑠1⟩ ∈   and 𝐾 = 1:
+• 𝑇1 = ⟨Nitrogen, Helps_In, Plant growth, “ Nitrogen helps in pro-
+moting plant growth by enhancing leaf development.”⟩,
+where ℎ𝑖 is “ Nitrogen”, 𝑟𝑖 is “ Helps_In”, 𝑡𝑖 is “ Plant growth” and 𝑠𝑖 is 
+the given sentence. Model 𝑀1 generates one semantically similar triplet 
+𝑇 (1)
+1  (since 𝐾 = 1), which is then validated by model 𝑀2.
+• 𝑇 (1)
+1 = ⟨Nitrate, Helps_In, Crop development, “ Nitrate aids in crop 
+development by enhancing the formation of leaves.”⟩.
+We use the second model 𝑀2 as the verifier for the synthetic triplets. 
+If the original relation 𝑟𝑖 ∈ 𝑇𝑖 is not the same as the relation 𝑟(𝑖)
+𝑗
+in the generated extended triplet 𝑇 (𝑖)
+𝑗 , we discard 𝑇 (𝑖)
+𝑗 . Otherwise, we 
+proceed to further validate 𝑇 (𝑖)
+𝑗 . In particular, the validator 𝑀2 takes 
+each generated extended triplet 𝑇 (𝑖)
+𝑗  along with the original extended 
+triplet 𝑇𝑖, and formulates a question to which the response is one of 
+True or False.
+𝑉 (𝑇𝑖, 𝑇 (𝑖)
+𝑗 , 𝑀2) ∶=
+{
+True, if 𝑇 (𝑖)
+𝑗  is valid,
+False, otherwise.
+The acceptance of 𝑇 (𝑖)
+𝑗  is then defined as:
+If 𝑉 (𝑇𝑖, 𝑇 (𝑖)
+𝑗 , 𝑀2) = True, then the generated triplet 𝑇 (𝑖)
+𝑗  is accepted.
+If 𝑉 (𝑇𝑖, 𝑇 (𝑖)
+𝑗 , 𝑀2) = False, then the generated triplet 𝑇 (𝑖)
+𝑗  is rejected.
+An example is as follows:
+Original Sentence: “ Nitrogen helps in promoting plant growth by 
+enhancing leaf development.”
+Generated Sentence: “ Nitrate aids in crop development by enhancing 
+the formation of leaves.”
+Validation Question: “ Does nitrate aid in crop development by en-
+hancing the formation of leaves?”
+Validation Response: True.
+Hence, if the response of 𝑉 (𝑇𝑖, 𝑇 (𝑖)
+𝑗 , 𝑀2) is true, the new extended 
+triplet 𝑇 (𝑖)
+𝑗  is added to the augmented data 𝐺. We have manually 
+verified some of the randomly chosen triplets and discarded them if 
+they were incorrect. In Fig.  A.12, we have provided the prompt for val-
+idation of the generated triplets. We have also computed the closeness 
+of an original head entity to the head entity in the newly generated 
+triplet using the 𝑐ℎ𝑒𝑐𝑘𝑆𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 function explained in Algorithm 3. If 
+the two entities are indeed similar, we form a new triplet where the two 
+head entities are related by the ‘ Coreference’ relation. Additionally, we 
+concatenate the original sentence 𝑠𝑖 ∈ 𝑇𝑖 and the generated sentence 
+𝑠(𝑖)
+𝑗 ∈ 𝑇 (𝑖)
+𝑗  into a single string 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 and add it as the source sentence 
+for this new triplet. We perform a similar operation for the respective 
+tail entities. Thus, we get two new extended triplets: 
+(ℎ𝑖, 𝐶𝑜𝑟𝑒𝑓 𝑒𝑟𝑒𝑛𝑐𝑒, ℎ(𝑖)
+𝑗 , 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 )
+(𝑡𝑖, 𝐶𝑜𝑟𝑒𝑓 𝑒𝑟𝑒𝑛𝑐𝑒, 𝑡(𝑖)
+𝑗 , 𝑠𝑐𝑜𝑛𝑐𝑎𝑡 )
+4.2. Named entity recognition
+Fig.  2 depicts the steps of building the trained AgNER-BERTa model, 
+including the data augmentation, data validation, and model fine-
+tuning steps. The architecture of RoBERTa (Liu et al., 2019) consists of 
+a multi-layer bidirectional transformer encoder, including self-attention 
+mechanisms, enabling the model to capture contextual information. 
+Fine-tuning RoBERTa for specific tasks involves adding task-specific 
+output layers while keeping the pre-trained transformer layers frozen. 
+This enables efficient transfer learning and allows the model to adapt 
+to various NLP applications. The RobertaForTokenClassifica-
+tion from the Hugging Face Transformer Library6 is used for the NER 
+task, which adds a linear token classification layer with softmax on 
+top of RobertaModel. The model processes a sentence along with 
+its BIO labels by providing input IDs, an attention mask, and the 
+corresponding labels. During model inference, the AgNER-BERTa model 
+takes new sentences, processes the input IDs, and generates contextual-
+ized vector representations for each token in the input sequence. These 
+representations capture the meaning of each token in the context of the 
+entire sentence.
+For example, given a sentence “ Nitrogen is essential for Rice.”, the 
+AgNER-BERTa model predicts the BIO labels as: ⟨B-Nutrient, O, O, O, 
+B-Crop, O⟩.
+4.3. Relation extraction
+The relation extraction architecture is visualized in Fig.  3 with 
+data augmentation and model initialization. The RoBERTa model is 
+fine-tuned with RobertaForSequenceClassification from the 
+Hugging Face Transformer Library for the Relation Extraction task, 
+which adds a sequence classification layer on top of RobertaModel. 
+The model takes a pair of entities with their relational labels and 
+corresponding sentences as input, feeding Input IDs, Attention Mask, 
+and Labels to the model. Relation classification is a multi-label and 
+multi-class classification task that allows each sample to independently 
+belong to multiple classes. Therefore, softmax activation is used to 
+6 https://huggingface.co/docs/transformers/en/model_doc/roberta.
+Expert Systems With Applications 277 (2025) 127126 
+5 
+=== PAGE 6 ===
+S. De et al.
+Fig. 2. AgNER-BERTa: Training data collection to fine-tuning.
+Fig. 3. AgRE-BERTa: Training data collection to fine-tuning.
+interpret individual class probabilities. During inference, the AgRE-
+BERTa model is fed with input IDs, attention mask of entity pairs, 
+and the corresponding sentence from the test dataset to predict the 
+relationship between the entities.
+For example, the AgRE-BERTa model predicts a relation “ Helps_In” 
+from a given pair of entities and corresponding sentence, ⟨Nitrogen, 
+Rice, “ Nitrogen is essential for Rice.”⟩.
+4.4. Constructing the agriculture knowledge graph
+We get the entities and relations from the steps above and then use 
+them to create an agriculture knowledge graph, AgKG. First, the dataset 
+of triplets is imported into Neo4j,7 a graph database management 
+system. The knowledge graph 𝐺 = ( , ) is composed of two main 
+components: nodes (or vertices)  and edges . In our system, the nodes 
+ represent the entities extracted by the AgNER-BERTa model, and 
+the edges  represent the relations between these entities, as extracted 
+by the AgRE-BERTa model. Fig.  4 presents the pipeline we have used 
+to construct the knowledge graph from raw texts using our models 
+AgNER-BERTa and AgRE-BERTa.
+7 https://neo4j.com/.
+Fig. 4. Knowledge graph construction methodology.
+Note that the AgNER-BERTa model is only designed to identify en-
+tity mentions and their types within a given sentence. For entity disam-
+biguation, we follow a simple strategy: if two entity mentions share the 
+same name and entity type in the set , we consider them to refer to the 
+same underlying entity. The AgRE-BERTa model identifies the relation-
+ships between entities for a specified pair within a sentence. If entities 
+(or nodes) of the same name and type have multiple relationships with 
+other nodes, we use the same nodes to represent these various relation-
+ships. Neo4j uses the ⟨𝑠𝑢𝑏𝑗𝑒𝑐𝑡, 𝑟𝑒𝑙𝑎𝑡𝑖𝑜𝑛𝑠ℎ𝑖𝑝, 𝑜𝑏𝑗𝑒𝑐𝑡 ⟩ format to create and 
+store the information as a knowledge graph. Our relation extraction 
+results also follow the same format as ⟨ℎ𝑒𝑎𝑑_𝑒𝑛𝑡𝑖𝑡𝑦, 𝑟𝑒𝑙𝑎𝑡𝑖𝑜𝑛, 𝑡𝑎𝑖𝑙_𝑒𝑛𝑡𝑖𝑡𝑦⟩. 
+Each subject and object represents a node in the knowledge graph in 
+this structure. The CREATE command is used to establish both the 
+nodes and the relations between them in the Neo4j system. Fig.  5 
+Expert Systems With Applications 277 (2025) 127126 
+6 
+=== PAGE 7 ===
+S. De et al.
+Table 3
+Named entities recognition and relation extraction from a given paragraph.
+ Example paragraph (𝑃 ) Detected entities with label () Extracted relations ()  
+ Bacterial leaf blight: A destructive disease 
+that affects rice yields and is widespread in 
+India. Blister blight: A disease that affects 
+tea leaves and causes significant crop losses 
+in India and other Asian countries. 
+Fusarium: A soil-borne pathogen that can 
+severely reduce crop yields if not managed 
+properly. Rice blast: A fungal disease that 
+causes significant grain yield losses. Yellow 
+rust: A disease that can cause up to 100% 
+yield loss in wheat crops.
+[Bacterial leaf blight, Disease], [rice, Crop], 
+[India, Location], [Blister blight, Disease], 
+[tea leaves, Crop], [India, Location], [Asian, 
+Location], [Fusarium, Disease], [Rice blast, 
+Disease], [fungal, Disease], [Yellow rust, 
+Disease], [wheat, Crop]
+[Bacterial leaf blight, Origin_Of, India], 
+[Bacterial leaf blight, Caused_By, Fusarium], 
+[rice, Origin_Of, India], [rice, Origin_Of, 
+Asian], [rice, Coreference, Rice blast], 
+[Blister blight, Origin_Of, India], [Blister 
+blight, Caused_By, Fusarium], [Blister 
+blight, Caused_By, fungal], [tea leaves, 
+Origin_Of, India], [tea leaves, Origin_Of, 
+Asian], [Yellow rust, Caused_By, Fungal], 
+[Rice blast, Caused_By, fungal]
+ 
+Fig. 5. The full agriculture knowledge graph, AgKG.
+Fig. 6. A zoomed subgraph of the full agriculture knowledge graph, AgKG.
+shows a snapshot of the actual knowledge graph and Fig.  6 zooms 
+into a sub-graph of it. For an instance of how triplets for a graph 
+can be readily constructed from a provided paragraph 𝑃 , see Table  3: 
+AgriNER-BERTa is employed to extract the entities with its labels as ; 
+then, AgriRE-BERTa predicts the relationships  between the entities. 
+From the extracted entities and the relations among them, we can easily 
+generate a simple knowledge graph that can be appended to the main 
+knowledge graph after entity disambiguation. NetworkX8 along with 
+PyVis9 library can be utilized to quickly visualize the generated graph. 
+For the example in Table  3, the knowledge graph is visualized in Fig. 
+7.
+8 https://networkx.org.
+9 https://pyvis.readthedocs.io.
+Fig. 7. Knowledge graph generated from the extracted entities and relations in Table 
+3.
+5. Experimental setup
+In this section, we describe a performance study for our NER and RE 
+models, AgNER-BERTa and AgRE-BERTa, respectively. All experiments 
+were conducted on the same local device on an A4500 GPU.
+We evaluate the performance of AgNER-BERTa and AgRE-BERTa
+using several baseline models. In particular, we use the following 
+encoder architectures: BERT,10 BERT-CRF (Souza, Nogueira, & Lotufo, 
+2019), DitilBERT,11 RoBERTa, SciBERT,12 SpanBERT.13 We use de-
+coder architectures that drive the popular ChatGPT tool, namely GPT-
+3.5-Turbo and GPT-4o, as accessible via the OpenAI API.14 The BERT, 
+DistilBERT, and RoBERTa are fine-tuned using the original dataset,
+without the augmented data. The BERT-CRF (NER Only), SpanBERT, and 
+SciBERT are fine-tuned using the augmented dataset to establish stronger 
+baselines. The decoder models have been used in zero-shot settings 
+where we use prompts to describe the tasks to the models. The prompts 
+utilized are detailed in Fig.  A.13 in Appendix  A. Our models AgNER-
+BERTa for the NER task and AgRE-BERTa for the RE task are based on 
+RoBERTa, but they are trained on the augmented data.
+For all models, we use AdamW as the optimizer and treat the 
+batch size 𝐵, learning rate 𝜂, warmup steps ratio 𝑤, weight decay 
+𝜆, max grad norm ∇, the number of epochs 𝜉, and dropout rate 
+𝑝 as hyperparameters for training the NER and RE tasks. Specifi-
+cally, the hyperparameter search space is defined as 𝐵 ∈ {4 , 8, 16, 32}, 
+10 https://huggingface.co/google-bert/bert-base-uncased.
+11 https://huggingface.co/distilbert/distilbert-base-uncased.
+12 https://huggingface.co/allenai/scibert_scivocab_uncased.
+13 https://huggingface.co/SpanBERT/spanbert-large-cased.
+14 https://platform.openai.com/docs/models.
+Expert Systems With Applications 277 (2025) 127126 
+7 
+=== PAGE 8 ===
+S. De et al.
+Table 4
+Hyperparameter settings of the models.
+ 
+NER
+Model name Hyper-parameters
+ Learning_rate Batch_size Num_train_epochs Dropout_rate Weight_decay Warmup_steps_ratio Max_grad_norm 
+ BERT 0.0001064 8 10 0.24697 0.00935 0.05710 4.44620  
+ BERT-CRF 0.0001322 16 15 0.20094 1.30608 0.11431 3.86408  
+ DistilBERT 0.0000293 16 5 0.16244 2.34129 0.16127 1.45864  
+ RoBERTa 0.0000978 8 11 0.11799 0.00376 0.06187 3.69607  
+ SciBERT 0.0002013 32 11 0.18481 2.70621 0.10548 4.68926  
+ SpanBERT 0.0000416 8 15 0.14701 0.00376 0.06339 2.22372  
+ AgNER-BERTa 0.0000385 8 20 0.20131 0.01032 0.00670 1.33088  
+ 
+RE
+BERT 0.0000158 8 11 0.22814 0.00015 0.08224 4.93528  
+ DistilBERT 0.0000775 8 7 0.32905 0.00340 0.01059 2.65672  
+ RoBERTa 0.0002658 16 12 0.38616 1.06028 0.10715 2.32657  
+ SciBERT 0.0000434 8 15 0.19513 0.00675 0.01568 2.92752  
+ SpanBERT 0.0000238 4 7 0.41543 0.00103 0.06542 2.31074  
+ AgRE-BERTa 0.0000323 8 16 0.20932 0.00053 0.07539 1.86310  
+𝜂 ∈ {1 𝑒−5, 2𝑒−5, 3𝑒−5, 1𝑒−4}, 𝜉 ∈ {5 , 20}, and 𝑝 ∈ {0 .1, 0.5}, 𝜆 ∈
+{1𝑒−6, 1𝑒−2}, 𝑤 ∈ {0 .0, 0.2}, ∇ ∈ {0 .5, 5.0}. Hyperparameter tuning 
+is conducted using the Optuna framework,15 which implements the 
+Tree-structured Parzen Estimator (TPE) (Watanabe, 2023) as a Bayesian 
+optimization method.
+For the AgNER-BERTa model, the optimal parameters were identi-
+fied as follows: learning rate 𝜂 = 3 .85 × 10 −5, batch size 𝐵 = 8 , and 
+number of epochs 𝜉 = 20 , weight decay 𝜆 = 0 .01 with no warmup 
+steps (𝑤 = 0 ). Similarly, for the AgRE-BERTa, the optimal parameters 
+were determined as: learning rate 𝜂 = 3 .33 × 10 −5, batch size 𝐵 = 8 , 
+number of epochs 𝜉 = 16 , dropout rate 𝑝 = 0 .20131, weight decay 
+𝜆 = 0.01032, warmup steps ratio 𝑤 = 0.00670, and max grad norm ∇ =
+1.33088. Table  4 provides the final hyper-parameter settings for training
+AgNER-BERTa, AgRE-BERTa and the Baseline-NER, and Baseline-RE
+models.
+5.1. Evaluation metrics
+To evaluate the performance of the different models, including the 
+proposed one and the baselines, Precision (𝑃 ), Recall (𝑅), and F1-score 
+(𝐹 1) are designated as evaluation metrics. Eq. (2)–(4) provides formu-
+las to calculate the Precision, Recall, and F1-score, respectively. We 
+have also calculated their macro and weighted averages. For weighted 
+averages, metrics are first calculated for each label, and then their av-
+erage weighted by support (the number of true instances for each label) 
+is computed. We have used the metrics package of scikit-learn
+library16 to compute the values of the performance metrics.
+Precision (𝑃 ) = #True Positives (𝑇 𝑃 )
+#True Positives (𝑇 𝑃 ) + # False Positives (𝐹 𝑃) (2)
+Recall (𝑅) = #True Positives (𝑇 𝑃 )
+#True Positives (𝑇 𝑃 ) + #False Negatives (𝐹 𝑁) (3)
+F1-Score (𝐹 1) = 2 × 𝑃 × 𝑅
+𝑃 + 𝑅 (4)
+5.2. Results
+In the NER task, without the augmented data, models like BERT and 
+DistilBERT perform similarly. GPT-based models struggle to identify a 
+wide range of entities in zero-shot settings. Lacking domain-specific 
+knowledge, the GPT-3.5 Turbo model has scored 45.59%, 41.08%, 
+45.18%, and 42.63%, while the improved contextual reasoning in 
+GPT-4o has performed slightly better with scores of 55.06%, 59.22%, 
+61.46%, and 57.94% in Precision, Recall, F1-score, and Accuracy, 
+respectively. The RoBERTa model achieves 82.5%, 84.09%, 83.92%, 
+and 83.25% in Precision, Recall, F1-score, and Accuracy respectively 
+without the augmented data. Finally, the augmented data is added to 
+15 https://optuna.org/.
+16 https://scikit-learn.org/1.5/api/sklearn.metrics.html.
+Table 5
+Performance of AgNER-BERTa for each entity.
+ Entity type Precision Recall F1-Score Support 
+ Agri_Method 1.00 0.99 0.99 238  
+ Agri_Pollution 0.92 0.85 0.89 55  
+ Agri_Process 1.00 0.98 0.99 337  
+ Agri_Waste 0.99 0.98 0.99 124  
+ Chemical 1.00 0.99 0.99 283  
+ Citation 1.00 1.00 1.00 104  
+ Crop 1.00 0.99 1.00 512  
+ Date_and_Time 1.00 0.97 0.99 69  
+ Disease 1.00 1.00 1.00 108  
+ Duration 0.98 1.00 0.99 103  
+ Event 1.00 1.00 1.00 10  
+ Field_Area 1.00 0.95 0.98 105  
+ Food_Item 1.00 1.00 1.00 77  
+ Fruit 1.00 0.99 1.00 115  
+ Humidity 1.00 1.00 1.00 6  
+ Location 1.00 1.00 1.00 761  
+ ML_Model 0.99 1.00 1.00 165  
+ Money 1.00 1.00 1.00 11  
+ Natural_Disaster 0.97 0.98 0.98 196  
+ Natural_Resource 0.96 0.99 0.97 94  
+ Nutrient 0.99 1.00 1.00 166  
+ Organism 0.99 0.99 0.99 492  
+ Organization 1.00 1.00 1.00 249  
+ Other 1.00 0.30 0.46 10  
+ Other_Quantity 0.97 0.98 0.98 346  
+ Person 1.00 1.00 1.00 77  
+ Policy 1.00 1.00 1.00 115  
+ Quantity 0.99 0.95 0.97 236  
+ Rainfall 1.00 0.98 0.99 58  
+ Season 1.00 1.00 1.00 89  
+ Soil 1.00 1.00 1.00 59  
+ Technology 1.00 0.94 0.97 219  
+ Temp 1.00 0.98 0.99 54  
+ Treatment 0.99 0.98 0.98 155  
+ Vegetable 1.00 1.00 1.00 14  
+ Weather 1.00 0.95 0.98 43  
+ Macro avg 0.99 0.96 0.97 5855  
+ Weighted avg 0.99 0.98 0.99 5855  
+the RoBERTa model, resulting in the maximum scores among these 
+models. Our AgNER-BERTa model, which is a fine-tuned version of 
+RoBERTa with the augmented data, achieves 99.15%, 98.23%, 99.06%, 
+and 98.89% in Precision, Recall, F1-score, and Accuracy, respectively, 
+surpassing Baseline-NER models. In comparison, the BERT-CRF, Span-
+BERT, and SciBERT attained 92%, 92%, and 95% accuracies respec-
+tively. Table  5 presents the performance results for each entity in the 
+dataset for AgNER-BERTa. Table  6 compares the performance of the 
+various models used for NER, RE, and joint models.
+On the other hand, for the RE task, without the augmented data
+models, like BERT and DistilBERT perform similarly. The RoBERTa 
+model achieves 91.06%, 90.78%, 92.55%, and 92.07% in Precision, 
+Expert Systems With Applications 277 (2025) 127126 
+8 
+=== PAGE 9 ===
+S. De et al.
+Table 6
+Performance of the models.
+ 
+NER
+Model name Evaluation metrics
+ Precision (P) Recall (R) F1-Score (F1) Accuracy 
+ BERT 0.63 0.78 0.71 0.69  
+ BERT-CRF 0.88 0.91 0.90 0.92  
+ DistilBERT 0.51 0.57 0.70 0.53  
+ RoBERTa 0.82 0.84 0.83 0.83  
+ GPT-3.5 Turbo 0.45 0.41 0.45 0.42  
+ GPT-4o 0.55 0.59 0.61 0.57  
+ SpanBERT 0.91 0.93 0.92 0.92  
+ SciBERT 0.94 0.95 0.95 0.95  
+ AgNER-BERTa 0.99 0.98 0.99 0.98  
+ 
+RE
+BERT 0.80 0.85 0.82 0.85  
+ DistilBERT 0.87 0.87 0.85 0.87  
+ RoBERTa 0.91 0.90 0.92 0.90  
+ GPT-3.5 Turbo 0.53 0.49 0.53 0.51  
+ GPT-4o 0.83 0.78 0.77 0.81  
+ SpanBERT 0.61 0.63 0.60 0.61  
+ SciBERT 0.90 0.93 0.92 0.89  
+ AgRE-BERTa 0.98 0.97 0.95 0.97  
+ Joint model SpERT.PL 0.92 0.89 0.91 0.91  
+ SciBERT 0.93 0.91 0.92 0.92  
+Table 7
+Performance of AgRE-BERTa for each relation.
+ Relations Precision Recall F1-Score Support 
+ Coreference 0.93 0.98 0.96 154  
+ Helps_In 0.98 0.98 0.98 45  
+ Includes 0.98 0.99 0.99 354  
+ Used_For 1.00 0.67 0.80 3  
+ Synonym_Of 0.93 0.88 0.90 72  
+ Seasonal 1.00 1.00 1.00 6  
+ Origin_Of 1.00 0.92 0.96 25  
+ Caused_By 1.00 0.99 0.99 247  
+ Conjunction 0.99 0.95 0.97 81  
+ Macro avg 0.98 0.95 0.95 987  
+ Weighted avg 0.97 0.97 0.97 987  
+Recall, F1-Score, and Accuracy respectively. The GPT-3.5 Turbo per-
+forms poorly due to difficulty extracting domain-specific relations with 
+53.12%, 49.57%, 53.78%, and 51.35% in Precision, Recall, F1-Score, 
+and Accuracy. GPT-4o performs better, showing a Precision of 83.96%, 
+Recall of 78.45%, F1-Score of 77.89%, and an Accuracy of 81.78%. 
+Our AgRE-BERTa model which is the fine-tuned version of RoBERTa 
+outperforms all models, achieving 97.45% F1-score on the test dataset. 
+The baseline-RE models such as SciBERT, and SpanBERT perform much 
+worse. Table  7 provides per-class evaluation metrics for the AgRE-
+BERTa model. Fig.  B.14 in Appendix  B presents a visual comparison 
+of the performance of the various models for these two tasks. Our 
+encoder-based model achieves an accuracy of 98% for NER and 97% 
+for RE, outperforming GPT-4o by 41% and 16%, respectively. Even 
+the encoder-based baseline BERT model performs better than GPT-3.5 
+Turbo and GPT-4o for both the NER and RE tasks,  likely due to its 
+training on in-domain data. We have implemented joint NER-RE models 
+using SciBERT and SpERT.PL (Santosh, Chakraborty, Dutta, Sanyal, & 
+Das, 2021), where it can be seen both the models perform nearly the 
+same with an accuracy of 92%, and 91% respectively.
+The training loss and evaluation loss of both the NER and RE models 
+have been plotted in Fig.  8 with the help of Weights & Biases.17 Fig.  8(a) 
+depicts NER training loss and evaluation loss while Fig.  8(b) represents 
+RE training loss and evaluation loss of our fine-tuned model. Fig.  9 
+illustrates NER and RE prediction examples using our fine-tuned model 
+and SciBERT model. As shown in Fig.  9 our fine-tuned model cor-
+rectly classified “ Nitrogen” as “ Nutrient”, whereas the SciBERT model 
+wrongly classified it as “ Chemical”.
+17 https://wandb.ai.
+5.3. Enhancement of AgriNER with data augmentation
+We augment the AgriNER dataset (De et al., 2023) by applying data 
+augmentation techniques that raise the size of the dataset and increase 
+the frequency of entities and their relations. We have expanded the 
+dataset not only to increase the number of entities and relations but also 
+to create a domain-specific dataset that was previously lacking in this 
+area. Tables  8 and 9 report the increased occurrences resulting from 
+these data augmentation steps. The AgriNER dataset is created from 
+180 agricultural research papers, with these data augmentation tech-
+niques we have successfully included recent domain-specific knowledge 
+to the dataset, which is not available in the dataset. Each augmented 
+data is validated by both LLMs and humans to mitigate the possibility 
+of wrong and false information.
+6. Error analysis
+Our models have performed exceedingly well overall, there are ar-
+eas like the classification of rare entities and the extraction of ambigu-
+ous relations where they went wrong. These mistakes have interesting 
+implications for future improvements.
+6.1. Data validation for NER
+The model also performs very well on recent data, such as pre-
+dicting NER and RE from recent unseen agricultural news, research 
+papers, events, etc. Due to the ambiguousness of natural language, the 
+model sometimes misclassified some rare entities. We have thoroughly 
+analyzed the misclassified entities and relations to find a solution to 
+overcome the issues. For example, consider the following sentence 𝑆
+in an example 𝑒 in the test data:
+Sentence ∶‘‘Huanglongbing is a bacterial infection that affects citrus
+trees.’’
+Tokens: ⟨Huanglongbing, is, a, bacterial, infection, that, affects, 
+citrus, trees, .⟩
+BIO Labels: ⟨B-Organism, O, O, B-Disease, I-Disease, O, O,
+B-Crop, I-Crop, O⟩
+As per our analysis, the error is likely due to the limited representation 
+of the “ Huanglongbing” entity in the raw training data (De et al., 2023). 
+It occurs only 9 times in the augmented dataset, this small sample 
+size made it difficult for the model to learn a robust representation of 
+this entity type, particularly given its semantic similarity to bacterial 
+organisms. Out of the 9 occurrences, it occurs 4 times in the test 
+data, resulting in correct classification as “ Disease” in 2 cases and 
+misclassification as “ Organism” in the remaining 2 cases, thus attaining 
+approximately 67% Precision (𝑃 ) and 50% Recall (𝑅). For a different 
+type of error, consider the following example:
+• Original Sentence: “ Nitrogen plays a crucial role in agriculture 
+by promoting plant growth, enhancing chlorophyll production, 
+and improving crop yields through its role as a key nutrient in 
+fertilizers.”
+• Generated Sentence: “ Nitrogen significantly boosts agricultural 
+productivity by supporting photosynthesis and ensuring healthier, 
+more robust crop development.”
+• Semantic Similarity Score: 80.15%
+The semantic similarity score of the original and generated sentence 
+is not greater than or equal to (≥) 85%, so we discard this sample as 
+discarded data. We have manually verified 1500 generated sentences 
+and found that only 15.6% (234) of them were semantically dissimilar 
+or did not match the entity types. As a result, only 1266 sentences were 
+further validated. This indicates that the generator model sometimes 
+hallucinates and therefore, data validation is required.
+Expert Systems With Applications 277 (2025) 127126 
+9 
+=== PAGE 10 ===
+S. De et al.
+Fig. 8. NER and RE training vs. evaluation Loss.
+Fig. 9. Our fine-tuned NER and RE performance vs. SciBERT performance.
+Table 8
+Effect of data augmentation on each named entity.
+ NE tags Count NE tags Count NE tags Count
+ Before/After Before/After Before/After
+ Agri_Pollution 8/70 Agri_Process 85/588 Agri_Waste 22/241  
+ Agri_Method 51/391 Citation 14/200 Chemical 54/507  
+ Crop 173/1476 Date_and_Time 24/222 Disease 17/306  
+ Duration 28/219 Event 2/20 Field_Area 19/133  
+ Food_Item 24/147 Fruit 41/364 Humidity 1/12  
+ Location 202/1590 ML_Model 52/316 Money 6/26  
+ Natural_Disaster 62/354 Natural_Resource 33/231 Nutrient 72/396  
+ Organism 59/698 Organization 41/439 Other 4/33  
+ Other_Quantity 56/453 Person 34/284 Policy 5/55  
+ Quantity 26/269 Rainfall 17/116 Season 39/270  
+ Soil 19/97 Technology 31/239 Temp 11/72  
+ Treatment 11/302 Vegetable 3/44 Weather 2/84  
+Table 9
+Effect of data augmentation on each relation.
+ Relation Count Relation Count Relation Count
+ Before/After Before/After Before/After
+ Includes 197/1791 Caused_By 55/1169 Origin_Of 47/136  
+ Synonym_Of 119/319 Coreference 44/829 Seasonal 15/61  
+ Conjunction 97/360 Helps_In 37/202 Used_For 11/24  
+6.2. Data validation for RE
+Generation and validation of the dataset are very time and resource-
+intensive. We have designed the data augmentation methods to guar-
+antee the successful generation and validation of sentences within the 
+dataset (De et al., 2023). Due to hallucinations, an LLM can create a 
+triplet that falsely associates a crop with a disease that it does not nor-
+mally relate to. While the designed data augmentation methods ensured 
+the successful generation and validation of sentences, limitations arose 
+due to hallucinations in the LLMs. For example, consider a sentence 𝑠
+in the RE data validation:
+Sentence ∶‘‘The fungus Apiosporina morbosa is causing a black knot
+plant disease.’’
+Relatios: ⟨Apiosporina morbosa, Caused_By, Black knot⟩
+As described in the AgriNER dataset (De et al., 2023), “ Caused_By” 
+is an asymmetric relation, hence the above example does not satisfy the 
+relation between the entities (Black knot is not caused by the fungus 
+Apiosporina morbosa). Out of 4891 synthetically generated relations, 
+the validation system flagged 660 (13.5%) relations as incorrect. These 
+errors primarily involved semantically incompatible entities. We have 
+also found that, while generating and predicting the classes of named 
+entities or relations, the GPT-based models created many new classes 
+that the dataset does not support even though we specified the exact 
+set of classes in the prompt. This is an instance of hallucination, which 
+is a major limitation of LLMs. For example, the LLM generated overly 
+generic relations, which are also absent in the relation set of our 
+Expert Systems With Applications 277 (2025) 127126 
+10 
+=== PAGE 11 ===
+S. De et al.
+dataset, such as ⟨Crop, Related To, Fertilizer⟩ instead of more specific 
+relationships like ⟨Wheat, Requires, Urea⟩ even though it was asked to 
+preserve the relation. This undesirable oversimplification limited the 
+granularity of the knowledge being extracted. Around 1.43% of the 
+relations produced by the LLM were removed by manual evaluation, 
+resulting in a total of 4170 relations.
+These constraints can be overcome by adding disambiguation tech-
+niques, few-shot learning methods, including rarer entities into the 
+dataset, and better linguistic features. Also, proper adjustment of the 
+data augmentation strategy – maintaining an optimal balance between 
+augmenting the data and preserving its integrity – significantly en-
+hances the quality of the final dataset. Together, these techniques 
+will make the system more robust and adaptable, vastly enriching 
+knowledge graphs in agriculture.
+7. Encoder or decoder: Which is a better model for NER and RE?
+NER is a token classification task that assigns a classification label to 
+each token in the input sequence. Encoder-based architecture provides 
+a rich contextual embedding for each token in a sequence, capturing 
+both the left and right context. In contrast, decoder-based architectures 
+are primarily suitable for generative tasks. They work unidirectionally, 
+predicting the next token in a sequence given the previous ones. This 
+makes them well-suited for tasks where the model needs to generate 
+text. Relation Extraction is also a classification task. Encoder-based 
+models like RoBERTa process the entire input sequence at once and are 
+typically used for tasks requiring an understanding of the full context, 
+such as classification or extraction tasks.
+In our work, the RoBERTa model is used as the leading encoder-
+based architecture, and GPT-3.5 Turbo and GPT-4o models are used as 
+the representative decoder-based architectures. Our experiments show 
+that encoder-based models are good at understanding the context in 
+NER and RE tasks (as shown in Table  6 and Fig.  B.14), where the mean-
+ing and classification of a word can depend on the context formed by 
+the surrounding words. Additionally, since the architecture and weights 
+of RoBERTa are publicly available, it can be fine-tuned for NER and 
+RE tasks, thus allowing it to utilize both its pre-trained knowledge and 
+the added domain knowledge. We have observed that the performance 
+of GPT in these tasks on the given dataset is lower. Though some 
+researchers have made attempts to build NER and RE systems with 
+GPT (Wan et al., 2023; Wang, Sun et al., 2023), the decoder model does 
+not appear to be a natural fit for this problem. Moreover, while GPT and 
+many other LLMs are closed-source, even open-source LLMs are often so 
+large that training them effectively becomes a highly computationally 
+intensive task. Another problem with LLMs is that they hallucinate. So, 
+even when they are prompted to identify entities and relations from a 
+given pre-defined set, they may generate entity types and relations from 
+outside this set. Therefore, we believe encoder-based architectures are 
+more suitable for NER and RE tasks.
+8. Future work
+Future developments of NER and RE models for the agricultural 
+domain will find interesting opportunities to enhance information ex-
+traction. The expansion of the dataset can hugely improve the precision 
+of the model to make it comprise more varied and rare entities, such 
+as specific crops and diseases. Adding the aspect of multilingualism 
+to these models is another important step because it will make it 
+possible for the researchers to process agriculture data from regions 
+worldwide. Domain-specific language models fine-tuned on large cor-
+pora of agricultural texts can also be used to improve quality in 
+entity and relation extraction. Data augmentation technologies, such as 
+adversarial methods or back-translation, will further enrich the training 
+set with diverse data to improve model performance. Error correction 
+mechanisms introducing rule-based systems or ensemble learning will 
+minimize misclassification. Such factors could transform agricultural 
+decision-making based on dynamic and data-driven solutions for crop 
+management and resource optimization, in addition to building climate 
+resilience through integrating real-time data sources with IoT sensors 
+and satellite imagery.
+9. Conclusion
+This research shows that the NER and RE systems can effectively 
+be used for better information extraction from agricultural research 
+publications, a low-resource domain. We incorporate domain-specific 
+LLM-based data augmentation strategies which are validated by both 
+the LLMs and human reviewers to enhance the performance of these 
+models in a low-resource setting. We further demonstrate the effec-
+tiveness and robustness of our approach with state-of-the-art baseline 
+comparisons, including SciBERT and SpanBERT.
+One key contribution of the work is the construction of the AgKG, 
+an amalgamation of the extracted entities and their relationships orga-
+nized into a structured and queryable format. The AgKG has practical 
+applications in agricultural decision-making, such as optimizing crop 
+management, monitoring pest outbreaks, and supporting sustainable 
+farming practices. The scalability of the AgKG and our AgNER-BERTa 
+and AgRE-BERTa model makes it a valuable resource for researchers, 
+policymakers, and practitioners and contributes to advancements in 
+precision agriculture.
+In conclusion, this work demonstrates the potential of combining 
+fine-tuned encoder-based models with augmented datasets to tackle 
+domain-specific challenges in agriculture. Future research will focus 
+on expanding the scope of the AgKG and validating the models on 
+additional datasets to enhance their generalizability and societal impact 
+further. We hope that our contributions will lead to better knowl-
+edge representation and decision-making using such knowledge graphs 
+despite the limitations of low-resource domains.
+CRediT authorship contribution statement
+Sayan De: Conceptualization, Methodology, Software, Validation, 
+Formal analysis, Investigation, Writing – Original Draft, Writing – re-
+view & editing. Debarshi Kumar Sanyal: Conceptualization, Supervi-
+sion, Writing – review & editing. Imon Mukherjee: Conceptualization, 
+Supervision, Visualization, Writing – review & editing.
+Declaration of Generative AI and AI-assisted technologies in the 
+writing process
+During the preparation of this work the authors used Grammarly 
+in order to check the spelling and the grammar. After using this tool, 
+the authors reviewed and edited the content as needed and take full 
+responsibility for the content of the publication.
+Declaration of competing interest
+The authors declare that they have no known competing finan-
+cial interests or personal relationships that could have appeared to 
+influence the work reported in this paper.
+Acknowledgment
+This work is partially supported by the ANRF, Govt. of India, grant 
+CRG/2021/000803 for the project “ Extraction, Organization and Query 
+of Scholarly Information”.
+Expert Systems With Applications 277 (2025) 127126 
+11 
+=== PAGE 12 ===
+S. De et al.
+Fig. A.10. Prompt to generate new sentences to augment NER data.
+Fig. A.11. Prompt to generate new extended triplets to augment RE data.
+Fig. A.12. Prompt to validate generated triplets produced for RE data augmentation.
+Fig. A.13. Prompt to perform NER and RE with zero-shot in-context learning for LLM.
+Appendix A. Prompts for LLMs
+This appendix presents the various prompts we have used for vari-
+ous tasks described in the paper. Recollect that we have used GPT-3.5 
+Turbo to augment the dataset that is subsequently used to train the deep 
+NER model, AgNER-BERTa. Specifically, in Algorithm 1, we prompt 
+GPT-3.5 Turbo to generate semantically similar sentences from a given 
+sentence in the dataset. The prompt that we have used is shown in 
+Fig.  A.10. In the figure, K and P represent Potassium and Phosphorus, 
+respectively.
+A similar data augmentation strategy has been used for the RE task. 
+Recollect that in Algorithm 3, we generate semantically similar triplets 
+𝐺 from the original triplets   so that the training data for the RE task 
+can be increased in volume. GPT-3.5 Turbo, denoted as model 𝑀1 in 
+Algorithm 3, is employed to generate the new extended triplets based 
+on the prompt shown in Fig.  A.11.
+In Algorithm 3, model 𝑀2, which is a GPT-4o instance, serves as an 
+agricultural domain expert and validates the triplet. The prompt for this 
+purpose is shown in Fig.  A.12. Given a triplet, the model first generates 
+a question and then it tries to answer it in either ‘ True’ or ‘ False’. Only 
+if the answer is ‘ True’, the generated triplet is accepted, as discussed in 
+Section 3.
+In our experiments on entity and relation extraction, we have 
+prompted GPT-3.5 Turbo and GPT-4o models in zero-shot in-context 
+learning mode as baselines. Fig.  A.13 describes the prompt we have 
+used for this purpose.
+Appendix B. Graphical comparison of model performance
+We present the Precision, Recall, F1-Score, and Accuracy results 
+for the AgNER-BERTa and AgRE-BERTa models. Fig.  B.14 shows the 
+outcomes from Table  6.
+Expert Systems With Applications 277 (2025) 127126 
+12 
+=== PAGE 13 ===
+S. De et al.
+Fig. B.14. Performance comparison of various NER and RE Models.
+Data availability
+The code and the augmented data are publicly available on github 
+https://github.com/Tec4Tric/ESWA-NER-RE.
+References
+Alam, I., Samiullah, M., Kabir, U., Woo, S., Leung, C. K., & Nguyen, H. H. (2024). 
+SREMIC: Spatial relation extraction-based malware image classification. In 2024 
+18th international conference on ubiquitous information management and communication 
+(pp. 1–8). IEEE.
+Alkaissi, H., & McFarlane, S. I. (2023). Artificial hallucinations in ChatGPT: implications 
+in scientific writing. Cureus, 15(2).
+Bang, Y., Cahyawijaya, S., Lee, N., Dai, W., Su, D., Wilie, B., et al. (2023). A multitask, 
+multilingual, multimodal evaluation of ChatGPT on reasoning, hallucination, and 
+interactivity. arXiv preprint arXiv:2302.04023.
+Bedemariam, R., Perez, N., Bhaduri, S., Kapoor, S., Gil, A., Conjar, E., et al. (2025). 
+Potential and perils of large language models as judges of unstructured textual 
+data. arXiv preprint arXiv:2501.08167.
+Chen, T., Qian, Y., Wang, Y., Chen, X., Ouyang, D., Dong, S., et al. (2023). RoBERT-Agr: 
+An entity relationship extraction model of massive agricultural text based on the 
+RoBERTa and CRF algorithm. In 2023 IEEE 8th international conference on big data 
+analytics (pp. 113–120).
+Dandrifosse, S., Jago, A., Huart, J. P., Michaud, V., Planchon, V., & Rosillon, D. (2024). 
+Automatic quality control of weather data for timely decisions in agriculture. Smart 
+Agricultural Technology, Article 100445.
+De, S., Bhakta, I., Phadikar, S., & Majumder, K. (2022). Agricultural image augmen-
+tation with generative adversarial networks gans. In International conference on 
+computational intelligence in pattern recognition (pp. 335–344). Springer.
+De, S., Sanyal, D. K., & Mukherjee, I. (2023). AgriNER: An NER dataset of agricultural 
+entities for the semantic web. In European semantic web conference (pp. 59–63). 
+Springer.
+Fountas, S., Espejo-García, B., Kasimati, A., Gemtou, M., Panoutsopoulos, H., & 
+Anastasiou, E. (2024). Agriculture 5.0: Cutting-edge technologies, trends, and 
+challenges. IT Professional, 26(1), 40–47.
+Goddard, J. (2023). Hallucinations in ChatGPT: a cautionary tale for biomedical 
+researchers. The American Journal of Medicine, 136(11), 1059–1060.
+Guo, X., Lu, S., Tang, Z., Bai, Z., Diao, L., Zhou, H., et al. (2022). CG-ANER: 
+Enhanced contextual embeddings and glyph features-based agricultural named 
+entity recognition. Computers and Electronics in Agriculture, 194, Article 106776.
+Guo, X., Zhou, H., Su, J., Hao, X., Tang, Z., Diao, L., et al. (2020). Chinese agricultural 
+diseases and pests named entity recognition with multi-scale local context features 
+and self-attention mechanism. Computers and Electronics in Agriculture, 179, Article 
+105830.
+Han, R., Peng, T., Wang, B., Liu, L., Tiwari, P., & Wan, X. (2024). Document-level 
+relation extraction with relation correlations. Neural Networks, 171, 14–24.
+Jayakumar, H., Krishnakumar, M. S., Peddagopu, V. V. V., & Sridhar, R. (2020). 
+RNN based question answer generation and ranking for financial documents using 
+financial NER. S¯Adhan¯A, 45, 1–10.
+Kaushik, N., & Chatterjee, N. (2018). Automatic relationship extraction from agri-
+cultural text for ontology construction. Information Processing in Agriculture, 5(1), 
+60–73.
+Kothari, S., Bagane, P., Mishra, M., Kulshrestha, S., Asrani, Y., & Maheswari, V. (2024). 
+CropGuard: Empowering agriculture with AI driven plant disease detection chatbot. 
+International Journal of Intelligent Systems and Applications in Engineering, 12(12s), 
+530–537.
+Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., et al. (2019). RoBERTa: A 
+robustly optimized bert pretraining approach. arXiv preprint arXiv:1907.11692.
+Malarkodi, C., Lex, E., & Devi, S. L. (2016). Named entity recognition for the 
+agricultural domain. Research in Computing Science, 117(1), 121–132.
+Naik, V., Patel, P., & Kannan, R. (2023). Legal entity extraction: An experimental study 
+of NER approach for legal documents. International Journal of Advanced Computer 
+Science and Applications, 14(3).
+Perera, N., Dehmer, M., & Emmert-Streib, F. (2020). Named entity recognition and 
+relation detection for biomedical information extraction. Frontiers in Cell and 
+Developmental Biology, 8, 673.
+Qiao, B., Zou, Z., Huang, Y., Fang, K., Zhu, X., & Chen, Y. (2021). A joint model for 
+entity and relation extraction based on BERT. Neural Computing and Applications, 
+34(5), 3471–3481.
+Qiao, B., Zou, Z., Huang, Y., Fang, K., Zhu, X., & Chen, Y. (2022). A joint model for 
+entity and relation extraction based on BERT. Neural Computing and Applications, 
+1–11.
+Santosh, T. Y. S. S., Chakraborty, P., Dutta, S., Sanyal, D. K., & Das, P. P. (2021). 
+Joint entity and relation extraction from scientific documents: Role of linguistic 
+information and entity types.. EEKE@ JCDL, 21, 15–19.
+Sharma, A., Vora, D., Shaw, K., & Patil, S. (2024). Sentiment analysis-based recom-
+mendation system for agricultural products. International Journal of Information 
+Technology, 16(2), 761–778.
+Shorten, C., Khoshgoftaar, T. M., & Furht, B. (2021). Text data augmentation for deep 
+learning. Journal of Big Data, 8(1), 101.
+Souza, F., Nogueira, R., & Lotufo, R. (2019). Portuguese named entity recognition using 
+BERT-CRF. arXiv preprint arXiv:1909.10649.
+Expert Systems With Applications 277 (2025) 127126 
+13 
+=== PAGE 14 ===
+S. De et al.
+Su, D., Kong, H., Qiao, Y., & Sukkarieh, S. (2021). Data augmentation for deep learning 
+based semantic segmentation and crop-weed classification in agricultural robotics. 
+Computers and Electronics in Agriculture, 190, Article 106418.
+Tymoshenko, K., & Giuliano, C. (2010). FBK-irst: Semantic relation extraction using cyc. 
+In Proceedings of the 5th international workshop on semantic evaluation (pp. 214–217).
+Veena, G., Kanjirangat, V., & Gupta, D. (2023). AGRONER: An unsupervised agriculture 
+named entity recognition using weighted distributional semantic model. Expert 
+Systems with Applications, 229, Article 120440.
+Wan, Z., Cheng, F., Mao, Z., Liu, Q., Song, H., Li, J., et al. (2023). GPT-RE: In-
+context learning for relation extraction using large language models. arXiv preprint 
+arXiv:2305.02105.
+Wang, L., Jiang, J., Song, J., & Liu, J. (2023). A weakly-supervised method for named 
+entity recognition of agricultural knowledge graph. Intelligent Automation & Soft 
+Computing, 37(1).
+Wang, S., Sun, X., Li, X., Ouyang, R., Wu, F., Zhang, T., et al. (2023). GPT-NER: Named 
+entity recognition via large language models. arXiv preprint arXiv:2304.10428.
+Watanabe, S. (2023). Tree-structured parzen estimator: Understanding its algorithm 
+components and their roles for better empirical performance. arXiv preprint arXiv:
+2304.11127.
+Weber, L., Münchmeyer, J., Rocktäschel, T., Habibi, M., & Leser, U. (2020). HUNER: 
+improving biomedical NER with pretraining. Bioinformatics, 36(1), 295–302.
+Wu, K., Xu, L., Li, X., Zhang, Y., Yue, Z., Gao, Y., et al. (2024). Named entity recognition 
+of rice genes and phenotypes based on BiGRU neural networks. Computational 
+Biology and Chemistry, 108, Article 107977.
+Zeng, D., Zhao, C., Li, D., & Dai, J. (2024). BDCore: Bidirectional decoding with 
+co-graph representation for joint entity and relation extraction. Knowledge-Based 
+Systems, 294, Article 111781.
+Zhang, W., Wang, C., Wu, H., Zhao, C., Teng, G., Huang, S., et al. (2022). Research 
+on the Chinese named-entity–relation-extraction method for crop diseases based on 
+BERT. Agronomy, 12(9).
+Zhang, K., Xia, C., Liu, G., Wang, W., Wu, Y., Zhang, Y., et al. (2019). Chinese 
+agricultural entity relation extraction via deep learning. In Intelligent computing 
+methodologies: 15th international conference, ICIC 2019, nanchang, China, August 3–6, 
+2019, proceedings, part III 15 (pp. 528–534). Springer.
+Zhou, G., Su, J., Zhang, J., & Zhang, M. (2005). Exploring various knowledge in 
+relation extraction. In Proceedings of the 43rd annual meeting of the association for 
+computational linguistics (pp. 427–434).
+Zhu, X., Mu, Y., Wang, X., & Zhu, W. (2024). Efficient relation extraction via quantum 
+reinforcement learning. Complex & Intelligent Systems, 1–10.
+Expert Systems With Applications 277 (2025) 127126 
+14 
