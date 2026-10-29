@@ -305,8 +305,12 @@ test('validation: an added entity is removed rather than rejected', async (t) =>
   assert.ok(row, 'the added span is in the list');
   assert.match(row.textContent, /you added this/);
   assert.ok(
-    ![...row.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Wrong'),
-    'there is nothing to mark wrong: the annotator put it there'
+    [...row.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Wrong'),
+    'Wrong button is present and functional'
+  );
+  assert.ok(
+    [...row.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Correct'),
+    'Correct button is present and functional'
   );
 
   const remove = [...row.querySelectorAll('button')].find(

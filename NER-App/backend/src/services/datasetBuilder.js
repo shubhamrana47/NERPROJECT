@@ -357,6 +357,10 @@ function buildValidatedRecords(documents) {
         const decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
         let status = decided?.validationStatus || 'unreviewed';
 
+        if (decided?.status === 'deleted') {
+          status = 'rejected';
+        }
+
         const isLabelChanged =
           decided &&
           decided.label &&
@@ -407,7 +411,7 @@ function buildValidatedRecords(documents) {
        */
       const keyed = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
       const additions = (seg.entities || [])
-        .filter((e) => !keyed.has(`${e.start}:${e.end}`))
+        .filter((e) => !keyed.has(`${e.start}:${e.end}`) && e.status !== 'deleted' && e.validationStatus !== 'rejected')
         .sort((a, b) => a.start - b.start || a.end - b.end)
         .map((e) => {
           counts.added += 1;

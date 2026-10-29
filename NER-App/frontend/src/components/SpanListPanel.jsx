@@ -252,53 +252,69 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
       </div>
 
       <div className="mt-1.5 flex items-center gap-1.5">
-        {isAdded ? (
+        <button
+          type="button"
+          onClick={() => onDecide(span, decision === 'confirmed' ? 'unreviewed' : 'confirmed')}
+          className={`rounded border px-2 py-0.5 text-[11.5px] transition ${
+            decision === 'confirmed'
+              ? 'border-ink bg-ink text-paper font-medium'
+              : 'border-rule bg-sheet text-ink hover:border-rule-strong'
+          }`}
+          title="Mark this entity as correct"
+        >
+          Correct
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecide(span, decision === 'rejected' ? 'unreviewed' : 'rejected')}
+          className={`rounded border px-2 py-0.5 text-[11.5px] transition ${
+            decision === 'rejected'
+              ? 'border-hand bg-hand text-paper font-medium'
+              : 'border-rule bg-sheet text-hand hover:border-hand/50'
+          }`}
+          title="Mark this entity as wrong"
+        >
+          Wrong
+        </button>
+        {rejected && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-ink transition hover:border-rule-strong"
+            title="Re-annotate this rejected entity with another label"
+          >
+            Re-annotate
+          </button>
+        )}
+        {isAdded && (
           <button
             type="button"
             onClick={() => onDelete && onDelete(span)}
             className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-hand transition hover:border-hand/50"
+            title="Remove this added span"
           >
             Remove
           </button>
-        ) : rejected ? (
-          <button
-            type="button"
-            onClick={() => onDecide(span, 'unreviewed')}
-            className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-ink transition hover:border-rule-strong"
-          >
-            Put it back
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => onDecide(span, 'confirmed')}
-              className={`rounded border px-2 py-0.5 text-[11.5px] transition ${
-                decision === 'confirmed'
-                  ? 'border-ink bg-ink text-paper'
-                  : 'border-rule bg-sheet text-ink hover:border-rule-strong'
-              }`}
-            >
-              Correct
-            </button>
-            <button
-              type="button"
-              onClick={() => onDecide(span, 'rejected')}
-              className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-hand transition hover:border-hand/50"
-            >
-              Wrong
-            </button>
-          </>
         )}
-        {decision && !rejected && !isAdded && (
+        {rejected ? (
           <button
             type="button"
             onClick={() => onDecide(span, 'unreviewed')}
             className="ml-auto text-[11px] text-ink-faint transition hover:text-ink"
+            title="Undo rejection"
+          >
+            Put it back
+          </button>
+        ) : decision && decision !== 'unreviewed' ? (
+          <button
+            type="button"
+            onClick={() => onDecide(span, 'unreviewed')}
+            className="ml-auto text-[11px] text-ink-faint transition hover:text-ink"
+            title="Reset decision"
           >
             Undo
           </button>
-        )}
+        ) : null}
       </div>
     </li>
   );
