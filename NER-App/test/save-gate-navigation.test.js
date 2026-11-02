@@ -176,16 +176,30 @@ test('navigation to next passage is gated by DB save completion and blocked on f
   let headerPassageText = host.textContent;
   assert.ok(headerPassageText.includes('1 / 2'), 'on passage 1');
 
-  // 2. Click "Save and continue" while server fails (shouldFailSave = true)
+  // 2. Since data was changed, verify "Done, continue" is disabled and blocked
   const getContinueBtn = () =>
     [...host.querySelectorAll('button')].find(
       (b) => b.textContent.includes('continue') || b.textContent.includes('Continue')
     );
+  const getSaveBtn = () =>
+    [...host.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save');
 
+  const continueBtn = getContinueBtn();
+  assert.ok(continueBtn, 'continue button exists');
+  assert.equal(continueBtn.disabled, true, 'Done, continue is disabled when changes are unsaved');
+
+  // Attempting to click continue while dirty does NOT advance:
   await act(async () => {
-    const btn = getContinueBtn();
-    assert.ok(btn, 'Save and continue button exists');
-    btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    continueBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+  assert.ok(host.textContent.includes('1 / 2'), 'still on passage 1');
+  assert.equal(saveCalls, 0, 'no save attempted by continue');
+
+  // 3. User clicks "Save" while server fails (shouldFailSave = true):
+  await act(async () => {
+    const saveBtn = getSaveBtn();
+    assert.ok(saveBtn, 'Save button exists');
+    saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
   // Verify user is BLOCKED on Passage 1 and did NOT advance:
@@ -196,27 +210,42 @@ test('navigation to next passage is gated by DB save completion and blocked on f
     'error message is displayed to user'
   );
 
-  // 3. Now let save succeed:
+  // 4. Now let save succeed:
   shouldFailSave = false;
 
   await act(async () => {
-    const btn = getContinueBtn();
-    btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const saveBtn = getSaveBtn();
+    saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+  assert.equal(saveCalls, 2, 'second save was attempted and succeeded');
+
+  // Verify continue button is now ENABLED after successful save:
+  const enabledContinueBtn = getContinueBtn();
+  assert.equal(enabledContinueBtn.disabled, false, 'continue button enabled after save');
+
+  await act(async () => {
+    enabledContinueBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
-  // Verify that only after DB save succeeded, user advances to Passage 2:
-  assert.ok(host.textContent.includes('2 / 2'), 'advanced to passage 2 after successful DB save');
+  // Verify that only after DB save succeeded and continue clicked, user advances to Passage 2:
+  assert.ok(host.textContent.includes('2 / 2'), 'advanced to passage 2 after successful DB save and continue');
 
-  // 4. Now tag 'cotton' on Passage 2
+  // 5. Now tag 'cotton' on Passage 2
   await selectAndTag(0, 'cotton', 'Crop');
 
-  // 5. Click "Save and continue" on Passage 2
+  // Save changes on Passage 2 first:
+  await act(async () => {
+    const saveBtn = getSaveBtn();
+    saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  // 6. Click "Done, continue" on Passage 2
   await act(async () => {
     const btn = getContinueBtn();
     btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
-  // 6. Navigate back to Passage 1:
+  // 7. Navigate back to Passage 1:
   const prevBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.trim() === '‹');
   assert.ok(prevBtn, 'previous button exists');
 
@@ -242,4 +271,130 @@ test('navigation to next passage is gated by DB save completion and blocked on f
   assert.equal(p2Entities.length, 1);
   assert.equal(p2Entities[0].text, 'cotton');
   assert.equal(p2Entities[0].label, 'Crop');
+});
+
+test('if no change in data user can click done and continue immediately, and discarding changes enables continuing', async () => {
+  const TEXT1 = 'For wheat sown after mid-December, apply 55 kg DAP.';
+  const TEXT2 = 'Spray imidacloprid on cotton to control pests.';
+
+  const doc = {
+    _id: 'doc_no_change_test',
+    filename: 'no_change_test.jsonl',
+    kind: 'annotate',
+    threshold: 0.75,
+    stats: {},
+    segments: [
+      {
+        index: 0,
+        text: TEXT1,
+        passageTag: 'PUN-01',
+        section: 'Passage 1',
+        nerStatus: 'done',
+        entities: [],
+        originalEntities: [],
+        sourceRecord: { text: TEXT1 },
+      },
+      {
+        index: 1,
+        text: TEXT2,
+        passageTag: 'PUN-02',
+        section: 'Passage 2',
+        nerStatus: 'done',
+        entities: [],
+        originalEntities: [],
+        sourceRecord: { text: TEXT2 },
+      },
+    ],
+  };
+
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+  dom.window.alert = () => {};
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
+    MouseEvent: dom.window.MouseEvent,
+    getComputedStyle: dom.window.getComputedStyle,
+    alert: () => {},
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+
+  global.fetch = async (url, opts = {}) => {
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(doc),
+      json: async () => ({ ok: true, savedEntities: [] }),
+    };
+  };
+
+  require(buildHarness());
+  const act = globalThis.__act;
+  const mounted = await globalThis.__mount(doc);
+  const host = mounted.host;
+
+  // 1. Initially, no change made on Passage 1.
+  assert.ok(host.textContent.includes('1 / 2'), 'on passage 1');
+  const getContinueBtn = () =>
+    [...host.querySelectorAll('button')].find(
+      (b) => b.textContent.includes('continue') || b.textContent.includes('Continue')
+    );
+
+  const initialContinueBtn = getContinueBtn();
+  assert.equal(initialContinueBtn.disabled, false, 'Done, continue is enabled when NO changes made');
+
+  // 2. Click continue immediately: user moves forward to Passage 2!
+  await act(async () => {
+    initialContinueBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+  assert.ok(host.textContent.includes('2 / 2'), 'moved to passage 2 without needing save');
+
+  // 3. On Passage 2: make a selection and tag 'cotton'
+  const sentences = [...host.querySelectorAll('div')].filter((d) => d.className?.includes('font-serif'));
+  const walker = dom.window.document.createTreeWalker(sentences[0], dom.window.NodeFilter.SHOW_TEXT);
+  let node;
+  let hit = null;
+  while ((node = walker.nextNode())) {
+    const at = node.nodeValue.indexOf('cotton');
+    if (at !== -1) {
+      hit = { node, at };
+      break;
+    }
+  }
+  const range = dom.window.document.createRange();
+  range.setStart(hit.node, hit.at);
+  range.setEnd(hit.node, hit.at + 'cotton'.length);
+  const selection = dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  await act(async () => {
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  const cropBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.includes('Crop'));
+  await act(async () => {
+    cropBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  // Now data was changed on Passage 2: Done, continue is DISABLED!
+  const dirtyContinueBtn = getContinueBtn();
+  assert.equal(dirtyContinueBtn.disabled, true, 'Done, continue is disabled when dirty');
+
+  // Discard button is available
+  const discardBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Discard changes');
+  assert.ok(discardBtn, 'Discard changes button exists');
+
+  // Click Discard changes:
+  await act(async () => {
+    discardBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  // Verify unsaved changes were discarded and continue button is now ENABLED:
+  const resumedContinueBtn = getContinueBtn();
+  assert.equal(resumedContinueBtn.disabled, false, 'Done, continue is enabled after discarding changes');
+
+  mounted.unmount();
+  dom.window.close();
 });
