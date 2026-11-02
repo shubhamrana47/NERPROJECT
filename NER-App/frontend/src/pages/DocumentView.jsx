@@ -27,7 +27,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   const [predicting, setPredicting] = useState(false);
 
   // The spans of the passage on screen, shared by the text and the span list.
-  const [working, setWorking] = useState([]);
+  const [working, _setWorking] = useState([]);
+  const workingRef = useRef([]);
+  const setWorking = useCallback((updater) => {
+    _setWorking((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      workingRef.current = next;
+      return next;
+    });
+  }, []);
   const [isDirty, setIsDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [focusedSpan, setFocusedSpan] = useState(null);
@@ -162,6 +170,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           if (seg.index === passage?.index && isDirtyRef.current) {
             return { ...seg, nerStatus: got.nerStatus };
           }
+          // Never overwrite a passage that already has human work or saved entities
+          const hasHumanWork = (seg.entities || []).some(
+            (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited' || e.isManual || e.validationStatus
+          );
+          if (hasHumanWork || (seg.entities || []).length > 0) {
+            return { ...seg, nerStatus: got.nerStatus || 'done' };
+          }
           return {
             ...seg,
             nerStatus: got.nerStatus,
@@ -169,7 +184,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             originalEntities: got.originalEntities || [],
           };
         });
-        applyDoc({ ...base, segments, stats: res.stats || base.stats });
+        applyDoc({ ...base, segments, stats: computeStatsLocal(segments) });
       } catch (e) {
         // Let the window be asked for again after a failure.
         wanted.forEach((i) => requestedRef.current.delete(`${current._id}:${i}`));
@@ -191,8 +206,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   // Re-sync when the passage changes, or when the document refreshes while
   // nothing is being edited here.
   useEffect(() => {
-    const incoming = passage?.entities || [];
+    const currentSegments = docRef.current?.segments || passages;
+    const currentPassage = currentSegments[passageIndex] || passage;
+    const incoming = currentPassage?.entities || [];
     setWorking(incoming);
+    workingRef.current = incoming;
     setIsDirty(false);
     isDirtyRef.current = false;
     setFocusedSpan(null);
@@ -202,7 +220,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, [passageIndex, doc._id]);
 
   useEffect(() => {
-    if (!isDirtyRef.current) setWorking(passage?.entities || []);
+    if (!isDirtyRef.current) {
+      const currentSegments = docRef.current?.segments || passages;
+      const currentPassage = currentSegments[passageIndex] || passage;
+      const incoming = currentPassage?.entities || [];
+      setWorking(incoming);
+      workingRef.current = incoming;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passage?.entities]);
 
@@ -511,7 +535,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       const sorted = [...entities].sort((a, b) => a.start - b.start || a.end - b.end);
       const base = docRef.current;
       const segments = (base.segments || []).map((seg) =>
-        seg.index === segIndex ? { ...seg, entities: sorted } : seg
+        seg.index === segIndex ? { ...seg, entities: sorted, nerStatus: 'done' } : seg
       );
       applyDoc({ ...base, segments, stats: computeStatsLocal(segments) });
 
@@ -525,7 +549,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           throw e;
         });
         // Pick up stored ids, but only while this passage is untouched since.
-        if (Array.isArray(res?.savedEntities) && pendingRef.current <= 1) {
+        if (Array.isArray(res?.savedEntities)) {
           const now = docRef.current;
           const seg = (now.segments || []).find((s) => s.index === segIndex);
           const stored = [...res.savedEntities].sort(
@@ -533,7 +557,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           );
           if (sameSpans(seg?.entities || [], stored)) {
             const segments2 = (now.segments || []).map((s) =>
-              s.index === segIndex ? { ...s, entities: stored } : s
+              s.index === segIndex ? { ...s, entities: stored, nerStatus: 'done' } : s
             );
             applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
             const activePassage = now.segments?.[currentPassageIndexRef.current];
@@ -556,15 +580,18 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
       if (clamped === passageIndex) return;
 
-      if (isDirtyRef.current && passage) {
-        const segIdx = passage.index != null ? passage.index : passageIndex;
-        persist(segIdx, working, null);
+      if (isDirtyRef.current) {
+        const currentSegments = docRef.current?.segments || passages;
+        const currentPassage = currentSegments[passageIndex] || passage;
+        const segIdx = currentPassage?.index != null ? currentPassage.index : passageIndex;
+        persist(segIdx, workingRef.current, null);
       }
 
       currentPassageIndexRef.current = clamped;
       setPassageIndex(clamped);
 
-      const nextPassage = passages[clamped];
+      const currentSegments = docRef.current?.segments || passages;
+      const nextPassage = currentSegments[clamped];
       setWorking(nextPassage?.entities || []);
       setIsDirty(false);
       isDirtyRef.current = false;
@@ -585,38 +612,38 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
    * marked cannot be missing from the file they are handed.
    */
   const flushPending = useCallback(async () => {
-    if (isDirtyRef.current && passage) {
-      const segIdx = passage.index != null ? passage.index : passageIndex;
-      persist(segIdx, working, null);
+    if (isDirtyRef.current) {
+      const currentSegments = docRef.current?.segments || passages;
+      const currentPassage = currentSegments[passageIndex] || passage;
+      const segIdx = currentPassage?.index != null ? currentPassage.index : passageIndex;
+      persist(segIdx, workingRef.current, null);
     }
-    try {
-      await queueRef.current;
-    } catch (_) {
-      // persist() has already reported the failure and re-flagged the passage
-    }
-  }, [passage, passageIndex, persist, working]);
+    await queueRef.current;
+  }, [passage, passageIndex, passages, persist]);
 
   useEffect(() => {
     annotation?.registerFlush?.(flushPending);
   }, [annotation?.registerFlush, flushPending]);
 
   const handleSave = useCallback(() => {
-    if (passage) persist(passage.index != null ? passage.index : passageIndex, working, 'Saved');
-  }, [passage, passageIndex, persist, working]);
+    const currentSegments = docRef.current?.segments || passages;
+    const currentPassage = currentSegments[passageIndex] || passage;
+    if (currentPassage) persist(currentPassage.index != null ? currentPassage.index : passageIndex, workingRef.current, 'Saved');
+  }, [passage, passageIndex, passages, persist]);
 
   const approveAll = useCallback(() => {
-    const approved = working.map((e) =>
+    const approved = workingRef.current.map((e) =>
       e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
     );
     setWorking(approved);
     setIsDirty(true);
     isDirtyRef.current = true;
     return approved;
-  }, [working]);
+  }, [setWorking]);
 
   /** Validation: every entity still unjudged is confirmed as correct. */
   const confirmRemaining = useCallback(() => {
-    const confirmed = working.map((e) => {
+    const confirmed = workingRef.current.map((e) => {
       if (e.status === 'deleted') return e;
       if (!e.validationStatus || e.validationStatus === 'unreviewed') {
         const isRelabelled = Boolean(
@@ -635,7 +662,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     setIsDirty(true);
     isDirtyRef.current = true;
     return confirmed;
-  }, [working]);
+  }, [setWorking]);
 
   /** Validation: a passage holding nothing still has to be acknowledged. */
   const handleNothingToValidate = useCallback(async () => {
@@ -667,12 +694,12 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     // passage, then move on the same way the annotation path does.
     const approved = isValidation
       ? confirmRemaining()
-      : working.map((e) =>
+      : workingRef.current.map((e) =>
           e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
         );
 
-    if (isValidation && working.filter((e) => e.status !== 'deleted').length === 0) {
-      if (working.length === 0) {
+    if (isValidation && workingRef.current.filter((e) => e.status !== 'deleted').length === 0) {
+      if (workingRef.current.length === 0) {
         handleNothingToValidate();
         return;
       }
@@ -685,7 +712,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       currentPassageIndexRef.current = nextIdx;
       setPassageIndex(nextIdx);
 
-      const nextPassage = passages[nextIdx];
+      const currentSegments = docRef.current?.segments || passages;
+      const nextPassage = currentSegments[nextIdx];
       setWorking(nextPassage?.entities || []);
       setIsDirty(false);
       isDirtyRef.current = false;

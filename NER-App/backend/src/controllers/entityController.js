@@ -200,6 +200,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
     }
 
     seg.entities = kept.sort((a, b) => a.start - b.start || a.end - b.end);
+    seg.nerStatus = 'done';
 
     // "Nothing to validate" was true of an empty passage; adding a span to it
     // makes that claim stale, so it is withdrawn rather than left behind.

@@ -72,6 +72,7 @@ exports.saveLineEntities = async (req, res, next) => {
     seg.entities = [...otherEntities, ...normalizedLineEntities].sort(
       (a, b) => a.start - b.start || a.end - b.end
     );
+    seg.nerStatus = 'done';
 
     // Recompute document statistics
     doc.stats = computeStats(

@@ -48,7 +48,7 @@ exports.labelStudioExport = async (req, res, next) => {
         }));
 
       const annotations = active.map((e, aIdx) => {
-        const isManual = e.source === 'human' || e.status === 'edited';
+        const isManual = e.source === 'human' || e.status === 'edited' || Boolean(e.isManual);
         return {
           id: `ann_${s.index}_${aIdx}`,
           from_name: 'label',
@@ -108,7 +108,9 @@ exports.trainingData = async (req, res, next) => {
     docs.forEach((d) =>
       d.segments.forEach((s) => {
         const eligible = s.entities.filter((e) =>
-          ['accepted', 'approved', 'edited'].includes(e.status)
+          ['accepted', 'approved', 'edited'].includes(e.status) &&
+          e.validationStatus !== 'rejected' &&
+          e.status !== 'deleted'
         );
 
         if (format === 'lines' || asJsonl) {
