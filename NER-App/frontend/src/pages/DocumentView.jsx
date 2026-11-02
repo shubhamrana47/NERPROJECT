@@ -37,6 +37,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     });
   }, []);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [message, setMessage] = useState('');
   const [focusedSpan, setFocusedSpan] = useState(null);
 
@@ -551,20 +553,20 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         // Pick up stored ids, but only while this passage is untouched since.
         if (Array.isArray(res?.savedEntities)) {
           const now = docRef.current;
-          const seg = (now.segments || []).find((s) => s.index === segIndex);
           const stored = [...res.savedEntities].sort(
             (a, b) => a.start - b.start || a.end - b.end
           );
-          if (sameSpans(seg?.entities || [], stored)) {
-            const segments2 = (now.segments || []).map((s) =>
-              s.index === segIndex ? { ...s, entities: stored, nerStatus: 'done' } : s
-            );
-            applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
-            const activePassage = now.segments?.[currentPassageIndexRef.current];
-            const isStillActive =
-              activePassage &&
-              (activePassage.index === segIndex || currentPassageIndexRef.current === segIndex);
-            if (isStillActive && !isDirtyRef.current) setWorking(stored);
+          const segments2 = (now.segments || []).map((s) =>
+            s.index === segIndex ? { ...s, entities: stored, nerStatus: 'done' } : s
+          );
+          applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
+          const activePassage = now.segments?.[currentPassageIndexRef.current];
+          const isStillActive =
+            activePassage &&
+            (activePassage.index === segIndex || currentPassageIndexRef.current === segIndex);
+          if (isStillActive && !isDirtyRef.current) {
+            setWorking(stored);
+            workingRef.current = stored;
           }
         }
         return res;
@@ -576,7 +578,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   const goToRef = useRef(() => {});
 
   const goTo = useCallback(
-    (nextIndex) => {
+    async (nextIndex) => {
+      if (isSavingRef.current) return;
       const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
       if (clamped === passageIndex) return;
 
@@ -584,7 +587,18 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         const currentSegments = docRef.current?.segments || passages;
         const currentPassage = currentSegments[passageIndex] || passage;
         const segIdx = currentPassage?.index != null ? currentPassage.index : passageIndex;
-        persist(segIdx, workingRef.current, null);
+        setIsSaving(true);
+        isSavingRef.current = true;
+        setError('');
+        try {
+          await persist(segIdx, workingRef.current, null);
+        } catch (err) {
+          setError(`Cannot move to next passage: saving failed (${err.message}).`);
+          return;
+        } finally {
+          setIsSaving(false);
+          isSavingRef.current = false;
+        }
       }
 
       currentPassageIndexRef.current = clamped;
@@ -592,14 +606,16 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
       const currentSegments = docRef.current?.segments || passages;
       const nextPassage = currentSegments[clamped];
-      setWorking(nextPassage?.entities || []);
+      const nextEntities = nextPassage?.entities || [];
+      setWorking(nextEntities);
+      workingRef.current = nextEntities;
       setIsDirty(false);
       isDirtyRef.current = false;
       setFocusedSpan(null);
       annotation?.clearSelection?.();
       annotation?.setActiveEditingEntity?.(null);
     },
-    [passage, passageIndex, passages, persist, totalPassages, working, annotation]
+    [passage, passageIndex, passages, persist, totalPassages, annotation]
   );
 
   useEffect(() => {
@@ -616,7 +632,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       const currentSegments = docRef.current?.segments || passages;
       const currentPassage = currentSegments[passageIndex] || passage;
       const segIdx = currentPassage?.index != null ? currentPassage.index : passageIndex;
-      persist(segIdx, workingRef.current, null);
+      await persist(segIdx, workingRef.current, null);
     }
     await queueRef.current;
   }, [passage, passageIndex, passages, persist]);
@@ -625,10 +641,22 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     annotation?.registerFlush?.(flushPending);
   }, [annotation?.registerFlush, flushPending]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (isSavingRef.current) return;
     const currentSegments = docRef.current?.segments || passages;
     const currentPassage = currentSegments[passageIndex] || passage;
-    if (currentPassage) persist(currentPassage.index != null ? currentPassage.index : passageIndex, workingRef.current, 'Saved');
+    if (!currentPassage) return;
+    const segIdx = currentPassage.index != null ? currentPassage.index : passageIndex;
+    setIsSaving(true);
+    isSavingRef.current = true;
+    try {
+      await persist(segIdx, workingRef.current, 'Saved to database');
+    } catch (err) {
+      setError(`Save failed: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+      isSavingRef.current = false;
+    }
   }, [passage, passageIndex, passages, persist]);
 
   const approveAll = useCallback(() => {
@@ -678,15 +706,14 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
     try {
       await acknowledgeEmptyPassage(base._id, segIndex);
+      if (passageIndex < totalPassages - 1) await goToRef.current(passageIndex + 1);
     } catch (e) {
       setError(`That could not be recorded: ${e.message}`);
     }
-
-    if (passageIndex < totalPassages - 1) goToRef.current(passageIndex + 1);
   }, [applyDoc, flash, passage, passageIndex, totalPassages]);
 
-  const handleApprove = useCallback(() => {
-    if (!passage) return;
+  const handleApprove = useCallback(async () => {
+    if (isSavingRef.current || !passage) return;
     const segIdx = passage.index != null ? passage.index : passageIndex;
     const hasNext = passageIndex < totalPassages - 1;
 
@@ -700,30 +727,60 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
     if (isValidation && workingRef.current.filter((e) => e.status !== 'deleted').length === 0) {
       if (workingRef.current.length === 0) {
-        handleNothingToValidate();
+        setIsSaving(true);
+        isSavingRef.current = true;
+        try {
+          await handleNothingToValidate();
+        } finally {
+          setIsSaving(false);
+          isSavingRef.current = false;
+        }
         return;
       }
     }
 
-    persist(segIdx, approved, hasNext ? null : isValidation ? 'Passage validated' : 'Passage approved');
+    setIsSaving(true);
+    isSavingRef.current = true;
+    setError('');
 
-    if (hasNext) {
-      const nextIdx = passageIndex + 1;
-      currentPassageIndexRef.current = nextIdx;
-      setPassageIndex(nextIdx);
+    try {
+      // 1. Wait for database save to complete and confirm
+      await persist(
+        segIdx,
+        approved,
+        hasNext ? null : isValidation ? 'Passage validated' : 'Passage approved'
+      );
 
-      const currentSegments = docRef.current?.segments || passages;
-      const nextPassage = currentSegments[nextIdx];
-      setWorking(nextPassage?.entities || []);
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      setFocusedSpan(null);
-      annotation?.clearSelection?.();
-      annotation?.setActiveEditingEntity?.(null);
-    } else {
-      setWorking(approved);
-      setIsDirty(false);
-      isDirtyRef.current = false;
+      // 2. Only move to the next passage once the save has completed in the DB
+      if (hasNext) {
+        const nextIdx = passageIndex + 1;
+        currentPassageIndexRef.current = nextIdx;
+        setPassageIndex(nextIdx);
+
+        const currentSegments = docRef.current?.segments || passages;
+        const nextPassage = currentSegments[nextIdx];
+        const nextEntities = nextPassage?.entities || [];
+        setWorking(nextEntities);
+        workingRef.current = nextEntities;
+        setIsDirty(false);
+        isDirtyRef.current = false;
+        setFocusedSpan(null);
+        annotation?.clearSelection?.();
+        annotation?.setActiveEditingEntity?.(null);
+      } else {
+        setWorking(approved);
+        workingRef.current = approved;
+        setIsDirty(false);
+        isDirtyRef.current = false;
+      }
+    } catch (err) {
+      // If saving to DB failed, remain on the current passage so work is not lost!
+      setError(`Failed to save to database: ${err.message}. Please click Save to try again.`);
+      setIsDirty(true);
+      isDirtyRef.current = true;
+    } finally {
+      setIsSaving(false);
+      isSavingRef.current = false;
     }
   }, [
     confirmRemaining,
@@ -734,7 +791,6 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     passages,
     persist,
     totalPassages,
-    working,
     annotation,
   ]);
 
@@ -768,6 +824,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     const onKeyDown = (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
       if (viewMode !== 'focus') return;
+      if (isSavingRef.current) return;
       if (e.key === 'ArrowRight') {
         if (passageIndex < totalPassages - 1) {
           e.preventDefault();
@@ -969,6 +1026,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   passageNumber={passageIndex + 1}
                   totalPassages={totalPassages}
                   isDirty={isDirty}
+                  isSaving={isSaving}
                   message={message}
                   onApprove={handleApprove}
                   onSave={handleSave}

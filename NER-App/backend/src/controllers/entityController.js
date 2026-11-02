@@ -152,6 +152,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
 
           if (isRejected) {
             ent.validationStatus = 'rejected';
+            ent.status = 'deleted';
             ent.runnerUp = ent.originalRunnerUp || baseline.runnerUp;
           } else if (wasManuallyChanged) {
             ent.isManual = true;
@@ -168,17 +169,26 @@ exports.saveSegmentEntities = async (req, res, next) => {
           }
         } else {
           const text = seg.text || '';
+          let s = Number(ent.start);
+          let e = Number(ent.end);
+          while (s < e && /\s/.test(text[s])) s += 1;
+          while (e > s && /\s/.test(text[e - 1])) e -= 1;
+          const slice = text.slice(s, e);
+          const rawText = String(ent.text || '').trim();
           const describesItsText =
-            Number.isInteger(ent.start) &&
-            Number.isInteger(ent.end) &&
-            ent.start >= 0 &&
-            ent.end > ent.start &&
-            ent.end <= text.length &&
-            text.slice(ent.start, ent.end).trim() === ent.text;
+            Number.isInteger(s) &&
+            Number.isInteger(e) &&
+            s >= 0 &&
+            e > s &&
+            e <= text.length &&
+            (slice.trim() === rawText || slice.trim().toLowerCase() === rawText.toLowerCase());
           if (!describesItsText || !ent.label) {
             refused += 1;
             continue;
           }
+          ent.start = s;
+          ent.end = e;
+          ent.text = slice.trim();
           // A person's own span: not something to confirm or reject, so it
           // carries no baseline label and no model score.
           ent.validationStatus = 'added';
