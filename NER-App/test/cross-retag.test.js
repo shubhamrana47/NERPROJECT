@@ -217,6 +217,9 @@ test('when approve and continue is clicked all changes must be saved and reflect
     dapWrongBtn.dispatchEvent(new globalThis.MouseEvent('click', { bubbles: true }));
   });
 
+  // Save changes
+  await ui.clickButton('Save');
+
   // Now click Approve and continue
   await ui.clickButton('continue');
 
@@ -255,6 +258,9 @@ test('clicking cross to delete an entity without retagging must reflect in expor
   let rows = ui.entitiesToCheckRows();
   assert.equal(rows.length, 1);
   assert.ok(!rows.some(r => r.textContent.includes('wheat')));
+
+  // Save changes
+  await ui.clickButton('Save');
 
   // Now click approve and continue
   await ui.clickButton('continue');
@@ -330,6 +336,9 @@ test('rejecting preannotated text with Wrong button and re-annotating it with an
   rows = ui.entitiesToCheckRows();
   const relabelledDapRow = rows.find((r) => r.textContent.includes('DAP'));
   assert.match(relabelledDapRow.textContent, /Nutrient/, 'DAP now has Nutrient label');
+
+  // Save changes
+  await ui.clickButton('Save');
 
   // 5. Click "Approve and continue"
   await ui.clickButton('continue');

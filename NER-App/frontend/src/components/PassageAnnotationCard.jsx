@@ -83,6 +83,7 @@ export default function PassageAnnotationCard({
   message,
   onApprove,
   onSave,
+  onDiscard,
   onReset,
   onNext,
   onPrev,
@@ -190,9 +191,9 @@ export default function PassageAnnotationCard({
             <button
               type="button"
               onClick={onPrev}
-              disabled={!hasPrev || isSaving}
-              className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30"
-              title="Previous passage (←)"
+              disabled={!hasPrev || isSaving || isDirty}
+              className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
+              title={isDirty ? "Cannot leave passage with unsaved changes" : "Previous passage (‹)"}
             >
               ‹
             </button>
@@ -202,9 +203,9 @@ export default function PassageAnnotationCard({
             <button
               type="button"
               onClick={onNext}
-              disabled={!hasNext || isSaving}
-              className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30"
-              title="Next passage (→)"
+              disabled={!hasNext || isSaving || isDirty}
+              className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
+              title={isDirty ? "Cannot leave passage with unsaved changes" : "Next passage (›)"}
             >
               ›
             </button>
@@ -242,7 +243,9 @@ export default function PassageAnnotationCard({
           ) : isDirty ? (
             <>
               <span className="h-1.5 w-1.5 rounded-full bg-hand" />
-              <span className="text-ink-soft">Unsaved changes in this passage.</span>
+              <span className="text-ink-soft">
+                Unsaved changes. Please save or discard them before continuing.
+              </span>
             </>
           ) : (
             <>
@@ -315,11 +318,23 @@ export default function PassageAnnotationCard({
                 >
                   {isValidation ? 'Undo decisions' : 'Reset passage'}
                 </button>
+                {isDirty && onDiscard && (
+                  <button
+                    type="button"
+                    onClick={onDiscard}
+                    disabled={isSaving}
+                    className="rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] text-ink-soft transition hover:border-rule-strong hover:text-hand disabled:opacity-40"
+                    title="Discard unsaved changes made to this passage"
+                  >
+                    Discard changes
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onNext}
-                  disabled={!hasNext || isSaving}
-                  className="rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] text-ink-soft transition hover:border-rule-strong hover:text-ink disabled:opacity-40"
+                  disabled={!hasNext || isSaving || isDirty}
+                  className="rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] text-ink-soft transition hover:border-rule-strong hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={isDirty ? "Cannot skip with unsaved changes" : "Skip"}
                 >
                   Skip
                 </button>
@@ -327,23 +342,34 @@ export default function PassageAnnotationCard({
                   type="button"
                   onClick={onSave}
                   disabled={isSaving}
-                  className="flex items-center gap-1.5 rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] text-ink transition hover:border-rule-strong disabled:opacity-50"
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium transition disabled:opacity-50 ${
+                    isDirty
+                      ? 'border border-ink bg-ink text-paper hover:bg-ink/90 shadow-sm'
+                      : 'border border-rule bg-sheet text-ink hover:border-rule-strong'
+                  }`}
+                  title={isDirty ? "Save changes to database (Ctrl+S)" : "Save to database"}
                 >
-                  {isSaving && isDirty ? <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-soft" /> : null}
+                  {isSaving && isDirty ? <Loader2 className="h-3.5 w-3.5 animate-spin text-paper" /> : null}
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={onApprove}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSaving || isDirty}
+                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium transition ${
+                    isDirty
+                      ? 'border border-rule bg-paper text-ink-faint cursor-not-allowed opacity-50'
+                      : 'bg-ink text-paper hover:bg-ink/90 disabled:opacity-50 disabled:cursor-not-allowed'
+                  }`}
                   title={
-                    isValidation
-                      ? 'Approve every span here and go to the next passage (A)'
-                      : 'Save all annotations here and go to the next passage (A)'
+                    isDirty
+                      ? 'Please save or discard your changes before continuing'
+                      : isValidation
+                        ? 'Approve every span here and go to the next passage (A)'
+                        : 'Done and go to the next passage (A)'
                   }
                 >
-                  {isSaving ? (
+                  {isSaving && !isDirty ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-paper" />
                       <span>Saving...</span>
@@ -356,7 +382,7 @@ export default function PassageAnnotationCard({
                           : undecided > 0
                             ? `Mark ${undecided} correct and continue`
                             : 'Done, continue'
-                        : 'Save and continue'}
+                        : 'Done, continue'}
                       <span className="rounded bg-paper/25 px-1.5 py-px font-mono text-[10.5px]">A</span>
                     </>
                   )}

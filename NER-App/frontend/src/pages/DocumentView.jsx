@@ -532,6 +532,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     (segIndex, entities, note) => {
       setError('');
       setIsDirty(false);
+      isDirtyRef.current = false;
       if (note) flash(note);
 
       const sorted = [...entities].sort((a, b) => a.start - b.start || a.end - b.end);
@@ -548,6 +549,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         const res = await saveSegmentEntities(docId, segIndex, payload).catch((e) => {
           setError(`That passage could not be saved: ${e.message}. Press Save to try again.`);
           setIsDirty(true);
+          isDirtyRef.current = true;
           throw e;
         });
         // Pick up stored ids, but only while this passage is untouched since.
@@ -584,21 +586,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       if (clamped === passageIndex) return;
 
       if (isDirtyRef.current) {
-        const currentSegments = docRef.current?.segments || passages;
-        const currentPassage = currentSegments[passageIndex] || passage;
-        const segIdx = currentPassage?.index != null ? currentPassage.index : passageIndex;
-        setIsSaving(true);
-        isSavingRef.current = true;
-        setError('');
-        try {
-          await persist(segIdx, workingRef.current, null);
-        } catch (err) {
-          setError(`Cannot move to next passage: saving failed (${err.message}).`);
-          return;
-        } finally {
-          setIsSaving(false);
-          isSavingRef.current = false;
-        }
+        setError('Please save or discard your changes before moving to another passage.');
+        return;
       }
 
       currentPassageIndexRef.current = clamped;
@@ -615,7 +604,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       annotation?.clearSelection?.();
       annotation?.setActiveEditingEntity?.(null);
     },
-    [passage, passageIndex, passages, persist, totalPassages, annotation]
+    [passageIndex, passages, totalPassages, annotation]
   );
 
   useEffect(() => {
@@ -649,15 +638,36 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     const segIdx = currentPassage.index != null ? currentPassage.index : passageIndex;
     setIsSaving(true);
     isSavingRef.current = true;
+    setError('');
     try {
       await persist(segIdx, workingRef.current, 'Saved to database');
+      setIsDirty(false);
+      isDirtyRef.current = false;
     } catch (err) {
       setError(`Save failed: ${err.message}`);
+      setIsDirty(true);
+      isDirtyRef.current = true;
     } finally {
       setIsSaving(false);
       isSavingRef.current = false;
     }
   }, [passage, passageIndex, passages, persist]);
+
+  const handleDiscard = useCallback(() => {
+    if (!passage) return;
+    const currentSegments = docRef.current?.segments || passages;
+    const currentPassage = currentSegments[passageIndex] || passage;
+    const savedEntities = (currentPassage?.entities || []).map((e) => ({ ...e }));
+    setWorking(savedEntities);
+    workingRef.current = savedEntities;
+    setIsDirty(false);
+    isDirtyRef.current = false;
+    setFocusedSpan(null);
+    annotation?.clearSelection?.();
+    annotation?.setActiveEditingEntity?.(null);
+    setError('');
+    flash('Changes discarded');
+  }, [annotation, flash, passage, passageIndex, passages]);
 
   const approveAll = useCallback(() => {
     const approved = workingRef.current.map((e) =>
@@ -714,6 +724,10 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
   const handleApprove = useCallback(async () => {
     if (isSavingRef.current || !passage) return;
+    if (isDirtyRef.current) {
+      setError('Please save or discard your changes before continuing.');
+      return;
+    }
     const segIdx = passage.index != null ? passage.index : passageIndex;
     const hasNext = passageIndex < totalPassages - 1;
 
@@ -805,7 +819,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     }
     const baseline = (passage.originalEntities || []).map((e) => ({ ...e }));
     setWorking(baseline);
+    workingRef.current = baseline;
     setIsDirty(false);
+    isDirtyRef.current = false;
     flash('Back to model output');
     const docId = docRef.current._id;
     const segments = (docRef.current.segments || []).map((seg) =>
@@ -839,8 +855,17 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         }
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
       if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
+        if (isDirtyRef.current) {
+          setError('Please save or discard your changes before continuing.');
+          return;
+        }
         handleApprove();
       }
     };
@@ -1030,6 +1055,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   message={message}
                   onApprove={handleApprove}
                   onSave={handleSave}
+                  onDiscard={handleDiscard}
                   onReset={handleReset}
                   onNext={() => goTo(passageIndex + 1)}
                   onPrev={() => goTo(passageIndex - 1)}
