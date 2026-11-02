@@ -327,7 +327,11 @@ export default function PassageAnnotationCard({
                   type="button"
                   onClick={onApprove}
                   className="flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
-                  title="Approve every span here and go to the next passage (A)"
+                  title={
+                    isValidation
+                      ? 'Approve every span here and go to the next passage (A)'
+                      : 'Save all annotations here and go to the next passage (A)'
+                  }
                 >
                   {isValidation
                     ? entities.length === 0
@@ -335,7 +339,7 @@ export default function PassageAnnotationCard({
                       : undecided > 0
                         ? `Mark ${undecided} correct and continue`
                         : 'Done, continue'
-                    : 'Approve and continue'}
+                    : 'Save and continue'}
                   <span className="rounded bg-paper/25 px-1.5 py-px font-mono text-[10.5px]">A</span>
                 </button>
               </div>

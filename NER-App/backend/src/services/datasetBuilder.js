@@ -60,7 +60,12 @@ const isDeleted = (e) => e.status === 'deleted';
 
 /** A person signed off: approved it, edited it, or added it by hand. */
 const isVerifiedSpan = (e) =>
-  e.source === 'human' || e.status === 'approved' || e.status === 'edited';
+  e.source === 'human' ||
+  e.status === 'approved' ||
+  e.status === 'edited' ||
+  Boolean(e.isManual) ||
+  e.validationStatus === 'relabelled' ||
+  e.validationStatus === 'confirmed';
 
 function tokenize(text) {
   const tokens = [];
@@ -169,16 +174,29 @@ function prepareSpans(text, textStart, entities, options, issues) {
     while (end > start && /\s/.test(text[end - 1])) end -= 1;
 
     if (text.slice(start, end) !== recorded) {
-      // Accept a correction only where the recorded text sits exactly at the
-      // nearby position; anything less certain is dropped, not guessed at.
-      const near = text.indexOf(recorded, Math.max(0, start - 25));
-      if (near !== -1 && Math.abs(near - start) <= 30) {
-        start = near;
-        end = near + recorded.length;
-        issues.offset_realigned += 1;
+      if (text.slice(start, end).toLowerCase() === recorded.toLowerCase()) {
+        // Casing difference between recorded text and passage text; offsets are exact.
       } else {
-        issues.offset_mismatch_dropped += 1;
-        continue;
+        // Accept a correction only where the recorded text sits exactly at the
+        // nearby position; anything less certain is dropped, not guessed at.
+        const near = text.indexOf(recorded, Math.max(0, start - 25));
+        if (near !== -1 && Math.abs(near - start) <= 30) {
+          start = near;
+          end = near + recorded.length;
+          issues.offset_realigned += 1;
+        } else {
+          const lowerText = text.toLowerCase();
+          const lowerRec = recorded.toLowerCase();
+          const nearLower = lowerText.indexOf(lowerRec, Math.max(0, start - 25));
+          if (nearLower !== -1 && Math.abs(nearLower - start) <= 30) {
+            start = nearLower;
+            end = nearLower + recorded.length;
+            issues.offset_realigned += 1;
+          } else {
+            issues.offset_mismatch_dropped += 1;
+            continue;
+          }
+        }
       }
     }
 
@@ -197,17 +215,19 @@ function prepareSpans(text, textStart, entities, options, issues) {
 
   // Strongest first where two spans claim the same characters: verified beats
   // unverified, longer beats shorter, higher confidence breaks ties.
-  candidates.sort(
-    (a, b) =>
-      a.start - b.start ||
-      b.end - b.start - (a.end - a.start) ||
-      Number(b.verified) - Number(a.verified) ||
-      b.confidence - a.confidence
-  );
+  candidates.sort((a, b) => {
+    const vDiff = Number(b.verified) - Number(a.verified);
+    if (vDiff !== 0) return vDiff;
+    const lenA = a.end - a.start;
+    const lenB = b.end - b.start;
+    if (lenA !== lenB) return lenB - lenA;
+    const confDiff = (b.confidence || 0) - (a.confidence || 0);
+    if (confDiff !== 0) return confDiff;
+    return a.start - b.start;
+  });
 
   const spans = [];
   const seen = new Set();
-  let lastEnd = -1;
 
   for (const span of candidates) {
     const key = `${span.start}:${span.end}:${span.label}`;
@@ -215,13 +235,15 @@ function prepareSpans(text, textStart, entities, options, issues) {
       issues.duplicates_removed += 1;
       continue;
     }
-    if (options.resolveOverlaps && span.start < lastEnd) {
-      issues.overlaps_removed += 1;
-      continue;
+    if (options.resolveOverlaps) {
+      const overlaps = spans.some((s) => span.start < s.end && s.start < span.end);
+      if (overlaps) {
+        issues.overlaps_removed += 1;
+        continue;
+      }
     }
     seen.add(key);
     spans.push(span);
-    lastEnd = Math.max(lastEnd, span.end);
   }
 
   spans.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -347,7 +369,7 @@ function buildValidatedRecords(documents) {
 
       const decisions = new Map();
       (seg.entities || []).forEach((e) => {
-        decisions.set(`${e.start}:${e.end}`, e);
+        decisions.set(`${Number(e.start)}:${Number(e.end)}`, e);
       });
 
       const original = Array.isArray(source.entities) ? source.entities : [];
@@ -411,7 +433,7 @@ function buildValidatedRecords(documents) {
        */
       const keyed = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
       const additions = (seg.entities || [])
-        .filter((e) => !keyed.has(`${e.start}:${e.end}`) && e.status !== 'deleted' && e.validationStatus !== 'rejected')
+        .filter((e) => !keyed.has(`${Number(e.start)}:${Number(e.end)}`) && e.status !== 'deleted' && e.validationStatus !== 'rejected')
         .sort((a, b) => a.start - b.start || a.end - b.end)
         .map((e) => {
           counts.added += 1;

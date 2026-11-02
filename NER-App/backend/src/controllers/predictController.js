@@ -100,26 +100,33 @@ exports.predictSegments = async (req, res, next) => {
       results = await runNER(targets.map((seg) => ({ index: seg.index, text: seg.text })));
     } catch (err) {
       // Mark the window so the client can offer a retry rather than spinning.
-      targets.forEach((seg) => {
-        seg.nerStatus = 'error';
+      const freshDoc = (await Document.findById(req.params.id)) || doc;
+      targets.forEach((targetSeg) => {
+        const seg = freshDoc.segments.find((s) => s.index === targetSeg.index);
+        if (seg) seg.nerStatus = 'error';
       });
-      await doc.save();
+      await freshDoc.save();
       return res.status(502).json({
         error: `The model service did not answer: ${err.message}`,
         predicted: targets.map((seg) => ({ index: seg.index, nerStatus: 'error', entities: [] })),
-        pending: countPending(doc),
+        pending: countPending(freshDoc),
       });
     }
 
     const byIndex = Object.fromEntries(results.map((r) => [r.id, r.entities]));
 
-    targets.forEach((seg) => {
+    // Re-fetch the fresh document to avoid overwriting concurrent edits on other segments
+    const freshDoc = (await Document.findById(req.params.id)) || doc;
+
+    targets.forEach((targetSeg) => {
+      const seg = freshDoc.segments.find((s) => s.index === targetSeg.index);
+      if (!seg) return;
       // Never overwrite a person's work: if anything here was annotated by
       // hand, keep it and simply mark the passage as done.
       const touchedByHand = (seg.entities || []).some(
-        (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited'
+        (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited' || e.isManual
       );
-      if (!touchedByHand) {
+      if (!touchedByHand && (seg.entities || []).length === 0) {
         const routed = (byIndex[seg.index] || []).map((e) => routeEntity(e, threshold));
         seg.entities = routed;
         seg.originalEntities = JSON.parse(JSON.stringify(routed));
@@ -127,22 +134,25 @@ exports.predictSegments = async (req, res, next) => {
       seg.nerStatus = 'done';
     });
 
-    doc.stats = computeStats(
-      doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
+    freshDoc.stats = computeStats(
+      freshDoc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
-    await doc.save();
+    await freshDoc.save();
 
     res.json({
       ok: true,
       // Only the predicted passages travel back, never the whole document.
-      predicted: targets.map((seg) => ({
-        index: seg.index,
-        nerStatus: seg.nerStatus,
-        entities: seg.entities,
-        originalEntities: seg.originalEntities,
-      })),
-      stats: doc.stats,
-      pending: countPending(doc),
+      predicted: targets.map((targetSeg) => {
+        const seg = freshDoc.segments.find((s) => s.index === targetSeg.index) || targetSeg;
+        return {
+          index: seg.index,
+          nerStatus: seg.nerStatus,
+          entities: seg.entities,
+          originalEntities: seg.originalEntities,
+        };
+      }),
+      stats: freshDoc.stats,
+      pending: countPending(freshDoc),
     });
   } catch (err) {
     next(err);

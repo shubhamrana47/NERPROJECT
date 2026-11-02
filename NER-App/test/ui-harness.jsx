@@ -69,9 +69,10 @@ globalThis.__act = act;
 
 globalThis.__mount = async (which) => {
   // 'header' mounts the top bar too, which is where Export lives.
-  const withHeader = which.endsWith('+header');
-  const kind = withHeader ? which.slice(0, -'+header'.length) : which;
-  const doc = kind === 'validate' ? validateDoc : kind === 'tagged' ? taggedDoc : annotateDoc;
+  const isCustom = typeof which === 'object' && which !== null;
+  const withHeader = isCustom ? Boolean(which.withHeader) : which.endsWith('+header');
+  const kind = isCustom ? which.kind || 'annotate' : withHeader ? which.slice(0, -'+header'.length) : which;
+  const doc = isCustom ? (which.doc || which) : kind === 'validate' ? validateDoc : kind === 'tagged' ? taggedDoc : annotateDoc;
   const host = globalThis.document.getElementById('root');
   const root = createRoot(host);
   let current = JSON.parse(JSON.stringify(doc));
