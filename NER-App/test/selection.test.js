@@ -166,7 +166,7 @@ async function mount(which, { recordCalls = false } = {}) {
 
   const clickButton = async (label) => {
     const button = [...mounted.host.querySelectorAll('button')].find(
-      (b) => b.textContent.trim() === label
+      (b) => b.textContent.trim() === label || b.textContent.includes(label) || b.getAttribute('title')?.includes(label)
     );
     assert.ok(button, `no "${label}" button on screen`);
     await act(async () => {

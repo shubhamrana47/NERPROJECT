@@ -12,6 +12,7 @@ import SpanListPanel from '../components/SpanListPanel.jsx';
 import LeftAnnotationSidebar from '../components/LeftAnnotationSidebar.jsx';
 import EntityPaletteSidebar from '../components/EntityPaletteSidebar.jsx';
 import AnnotationBottomBar from '../components/AnnotationBottomBar.jsx';
+import UnsavedChangesModal from '../components/UnsavedChangesModal.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import { computeStatsLocal, sameSpans, stripTempId } from '../utils/annotationState.js';
 
@@ -38,6 +39,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, []);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [pendingNavigationIndex, setPendingNavigationIndex] = useState(null);
   const isSavingRef = useRef(false);
   const [message, setMessage] = useState('');
   const [focusedSpan, setFocusedSpan] = useState(null);
@@ -580,13 +583,14 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   const goToRef = useRef(() => {});
 
   const goTo = useCallback(
-    async (nextIndex) => {
+    async (nextIndex, { force = false } = {}) => {
       if (isSavingRef.current) return;
       const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, totalPassages - 1));
       if (clamped === passageIndex) return;
 
-      if (isDirtyRef.current) {
-        setError('Please save or discard your changes before moving to another passage.');
+      if (!force && isDirtyRef.current) {
+        setPendingNavigationIndex(clamped);
+        setShowUnsavedChangesModal(true);
         return;
       }
 
@@ -630,29 +634,6 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     annotation?.registerFlush?.(flushPending);
   }, [annotation?.registerFlush, flushPending]);
 
-  const handleSave = useCallback(async () => {
-    if (isSavingRef.current) return;
-    const currentSegments = docRef.current?.segments || passages;
-    const currentPassage = currentSegments[passageIndex] || passage;
-    if (!currentPassage) return;
-    const segIdx = currentPassage.index != null ? currentPassage.index : passageIndex;
-    setIsSaving(true);
-    isSavingRef.current = true;
-    setError('');
-    try {
-      await persist(segIdx, workingRef.current, 'Saved to database');
-      setIsDirty(false);
-      isDirtyRef.current = false;
-    } catch (err) {
-      setError(`Save failed: ${err.message}`);
-      setIsDirty(true);
-      isDirtyRef.current = true;
-    } finally {
-      setIsSaving(false);
-      isSavingRef.current = false;
-    }
-  }, [passage, passageIndex, passages, persist]);
-
   const handleDiscard = useCallback(() => {
     if (!passage) return;
     const currentSegments = docRef.current?.segments || passages;
@@ -667,7 +648,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     annotation?.setActiveEditingEntity?.(null);
     setError('');
     flash('Changes discarded');
-  }, [annotation, flash, passage, passageIndex, passages]);
+  }, [annotation, flash, passage, passageIndex, passages, setWorking]);
 
   const approveAll = useCallback(() => {
     const approved = workingRef.current.map((e) =>
@@ -722,76 +703,71 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     }
   }, [applyDoc, flash, passage, passageIndex, totalPassages]);
 
-  const handleApprove = useCallback(async () => {
-    if (isSavingRef.current || !passage) return;
-    if (isDirtyRef.current) {
-      setError('Please save or discard your changes before continuing.');
-      return;
-    }
-    const segIdx = passage.index != null ? passage.index : passageIndex;
-    const hasNext = passageIndex < totalPassages - 1;
+  /**
+   * Approves all text annotations on the current page and stores/saves them in the database.
+   */
+  const handleApproveAndSaveAll = useCallback(async () => {
+    if (isSavingRef.current || !passage) return false;
+    const currentSegments = docRef.current?.segments || passages;
+    const currentPassage = currentSegments[passageIndex] || passage;
+    if (!currentPassage) return false;
+    const segIdx = currentPassage.index != null ? currentPassage.index : passageIndex;
 
-    // Validation: confirm whatever is still undecided, or acknowledge an empty
-    // passage, then move on the same way the annotation path does.
-    const approved = isValidation
-      ? confirmRemaining()
-      : workingRef.current.map((e) =>
-          e.status === 'deleted' ? e : { ...e, status: 'approved', source: e.source || 'human' }
-        );
-
-    if (isValidation && workingRef.current.filter((e) => e.status !== 'deleted').length === 0) {
-      if (workingRef.current.length === 0) {
+    let approved = [];
+    if (isValidation) {
+      const activeNonDeleted = workingRef.current.filter((e) => e.status !== 'deleted');
+      if (activeNonDeleted.length === 0 && workingRef.current.length === 0) {
         setIsSaving(true);
         isSavingRef.current = true;
         try {
           await handleNothingToValidate();
+          setIsDirty(false);
+          isDirtyRef.current = false;
+          return true;
+        } catch (err) {
+          setError(`Save failed: ${err.message}`);
+          return false;
         } finally {
           setIsSaving(false);
           isSavingRef.current = false;
         }
-        return;
       }
+      approved = confirmRemaining();
+      approved = approved.map((e) =>
+        e.status === 'deleted'
+          ? e
+          : { ...e, status: 'approved', source: e.source || 'human' }
+      );
+    } else {
+      approved = workingRef.current.map((e) =>
+        e.status === 'deleted'
+          ? e
+          : { ...e, status: 'approved', source: e.source || 'human' }
+      );
     }
 
+    setWorking(approved);
+    workingRef.current = approved;
     setIsSaving(true);
     isSavingRef.current = true;
     setError('');
 
     try {
-      // 1. Wait for database save to complete and confirm
       await persist(
         segIdx,
         approved,
-        hasNext ? null : isValidation ? 'Passage validated' : 'Passage approved'
+        isValidation
+          ? 'All annotations validated & saved to database'
+          : 'All annotations approved & saved to database'
       );
-
-      // 2. Only move to the next passage once the save has completed in the DB
-      if (hasNext) {
-        const nextIdx = passageIndex + 1;
-        currentPassageIndexRef.current = nextIdx;
-        setPassageIndex(nextIdx);
-
-        const currentSegments = docRef.current?.segments || passages;
-        const nextPassage = currentSegments[nextIdx];
-        const nextEntities = nextPassage?.entities || [];
-        setWorking(nextEntities);
-        workingRef.current = nextEntities;
-        setIsDirty(false);
-        isDirtyRef.current = false;
-        setFocusedSpan(null);
-        annotation?.clearSelection?.();
-        annotation?.setActiveEditingEntity?.(null);
-      } else {
-        setWorking(approved);
-        workingRef.current = approved;
-        setIsDirty(false);
-        isDirtyRef.current = false;
-      }
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      return true;
     } catch (err) {
-      // If saving to DB failed, remain on the current passage so work is not lost!
-      setError(`Failed to save to database: ${err.message}. Please click Save to try again.`);
+      setError(`Save failed: ${err.message}. Please click Approve & Save All to try again.`);
       setIsDirty(true);
       isDirtyRef.current = true;
+      return false;
     } finally {
       setIsSaving(false);
       isSavingRef.current = false;
@@ -804,9 +780,36 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     passageIndex,
     passages,
     persist,
-    totalPassages,
-    annotation,
+    setWorking,
   ]);
+
+  const handleSave = handleApproveAndSaveAll;
+  const handleApprove = handleApproveAndSaveAll;
+
+  const handleModalSaveAndProceed = useCallback(async () => {
+    if (pendingNavigationIndex == null) return;
+    const target = pendingNavigationIndex;
+    const success = await handleApproveAndSaveAll();
+    if (success) {
+      setShowUnsavedChangesModal(false);
+      setPendingNavigationIndex(null);
+      goTo(target, { force: true });
+    }
+  }, [goTo, handleApproveAndSaveAll, pendingNavigationIndex]);
+
+  const handleModalDiscardAndProceed = useCallback(() => {
+    if (pendingNavigationIndex == null) return;
+    const target = pendingNavigationIndex;
+    handleDiscard();
+    setShowUnsavedChangesModal(false);
+    setPendingNavigationIndex(null);
+    goTo(target, { force: true });
+  }, [goTo, handleDiscard, pendingNavigationIndex]);
+
+  const handleModalCancel = useCallback(() => {
+    setShowUnsavedChangesModal(false);
+    setPendingNavigationIndex(null);
+  }, []);
 
   const handleReset = useCallback(() => {
     if (!passage) return;
@@ -862,11 +865,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       }
       if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        if (isDirtyRef.current) {
-          setError('Please save or discard your changes before continuing.');
-          return;
-        }
-        handleApprove();
+        handleApproveAndSaveAll();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -1053,8 +1052,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   isDirty={isDirty}
                   isSaving={isSaving}
                   message={message}
-                  onApprove={handleApprove}
-                  onSave={handleSave}
+                  onApproveAndSaveAll={handleApproveAndSaveAll}
+                  onApprove={handleApproveAndSaveAll}
+                  onSave={handleApproveAndSaveAll}
                   onDiscard={handleDiscard}
                   onReset={handleReset}
                   onNext={() => goTo(passageIndex + 1)}
@@ -1128,6 +1128,15 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         viewMode={viewMode}
         onToggleViewMode={() => setViewMode((m) => (m === 'focus' ? 'overview' : 'focus'))}
         onBeforeExport={flushPending}
+      />
+
+      <UnsavedChangesModal
+        isOpen={showUnsavedChangesModal}
+        onClose={handleModalCancel}
+        onSaveAndProceed={handleModalSaveAndProceed}
+        onDiscardAndProceed={handleModalDiscardAndProceed}
+        isSaving={isSaving}
+        targetPageNumber={pendingNavigationIndex != null ? pendingNavigationIndex + 1 : null}
       />
     </div>
   );
