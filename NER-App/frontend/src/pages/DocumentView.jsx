@@ -244,16 +244,16 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
       const baseline = isValidation
         ? (passage?.originalEntities || []).find(
-            (o) => (Number(o.start) === start && Number(o.end) === end) ||
-                   (Number(o.start) < end && Number(o.end) > start)
+            (o) => Number(o.start) === start && Number(o.end) === end
+          ) ||
+          (passage?.sourceRecord?.entities || []).find(
+            (o) => Number(o.start) === start && Number(o.end) === end
           )
         : null;
 
       setWorking((prev) => {
         const existingIdx = prev.findIndex(
-          (e) => (Number(e.start) === start && Number(e.end) === end) ||
-                 ((e.status === 'deleted' || e.validationStatus === 'rejected') &&
-                  Number(e.start) < end && Number(e.end) > start)
+          (e) => Number(e.start) === start && Number(e.end) === end
         );
 
         if (existingIdx >= 0) {
@@ -447,8 +447,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, [passage?.originalEntities]);
 
   const deleteEntity = useCallback((target) => {
-    const isPipeline = isValidation && (passage?.originalEntities || []).some(
-      (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
+    const isPipeline = isValidation && (
+      (passage?.originalEntities || []).some(
+        (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
+      ) ||
+      (passage?.sourceRecord?.entities || []).some(
+        (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
+      )
     );
 
     setWorking((prev) => {

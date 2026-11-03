@@ -376,7 +376,24 @@ function buildValidatedRecords(documents) {
       const counts = { confirmed: 0, rejected: 0, relabelled: 0, added: 0, unreviewed: 0 };
 
       const judged = original.map((orig) => {
-        const decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
+        let decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
+
+        // If no exact offset decision was found for this pipeline entity, check if an active entity
+        // in seg.entities overlaps with it. If a human added/edited a span that overlaps this range,
+        // the original proposal has been superseded/rejected.
+        if (!decided) {
+          const overlapping = (seg.entities || []).find(
+            (e) =>
+              Number(e.start) < Number(orig.end) &&
+              Number(e.end) > Number(orig.start) &&
+              e.status !== 'deleted' &&
+              e.validationStatus !== 'rejected'
+          );
+          if (overlapping) {
+            decided = { validationStatus: 'rejected', status: 'deleted' };
+          }
+        }
+
         let status = decided?.validationStatus || 'unreviewed';
 
         if (decided?.status === 'deleted') {
