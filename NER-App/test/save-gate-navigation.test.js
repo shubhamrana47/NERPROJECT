@@ -399,3 +399,165 @@ test('if no change in data user can click done and continue immediately, and dis
   mounted.unmount();
   dom.window.close();
 });
+
+test('edits made on the same page remain intact and reflected in UI and DB after clicking Approve & Save All', async () => {
+  const TEXT = 'For wheat sown after mid-December, apply 55 kg DAP per acre at sowing.';
+  const doc = {
+    _id: 'doc_same_page_test',
+    filename: 'same_page_test.jsonl',
+    kind: 'annotate',
+    threshold: 0.75,
+    stats: {},
+    segments: [
+      {
+        index: 0,
+        text: TEXT,
+        passageTag: 'PUN-01',
+        section: 'Passage 1',
+        nerStatus: 'done',
+        entities: [
+          {
+            _id: 'ent_wheat',
+            text: 'wheat',
+            label: 'Crop',
+            start: TEXT.indexOf('wheat'),
+            end: TEXT.indexOf('wheat') + 5,
+            confidence: 0.95,
+            status: 'accepted',
+            source: 'model',
+          },
+          {
+            _id: 'ent_dap',
+            text: 'DAP',
+            label: 'Chemical',
+            start: TEXT.indexOf('DAP'),
+            end: TEXT.indexOf('DAP') + 3,
+            confidence: 0.9,
+            status: 'accepted',
+            source: 'model',
+          },
+        ],
+        originalEntities: [
+          {
+            _id: 'ent_wheat',
+            text: 'wheat',
+            label: 'Crop',
+            start: TEXT.indexOf('wheat'),
+            end: TEXT.indexOf('wheat') + 5,
+            confidence: 0.95,
+            status: 'accepted',
+            source: 'model',
+          },
+          {
+            _id: 'ent_dap',
+            text: 'DAP',
+            label: 'Chemical',
+            start: TEXT.indexOf('DAP'),
+            end: TEXT.indexOf('DAP') + 3,
+            confidence: 0.9,
+            status: 'accepted',
+            source: 'model',
+          },
+        ],
+        sourceRecord: { text: TEXT },
+      },
+    ],
+  };
+
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
+    MouseEvent: dom.window.MouseEvent,
+    Event: dom.window.Event,
+    getComputedStyle: dom.window.getComputedStyle,
+    alert: () => {},
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+
+  let savedPayload = null;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (opts.method === 'PUT') {
+      savedPayload = JSON.parse(opts.body).entities;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          savedEntities: savedPayload.map((e, idx) => ({ ...e, _id: e._id || `db_id_${idx}` })),
+          stats: {},
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  require(buildHarness());
+  const act = globalThis.__act;
+  const mounted = await globalThis.__mount({ doc });
+  const host = mounted.host;
+
+  // 1. Relabel 'wheat' from Crop to Disease in sidebar
+  const spanButtons = [...host.querySelectorAll('aside button')];
+  const wheatCropBtn = spanButtons.find((b) => b.textContent.includes('Crop'));
+  assert.ok(wheatCropBtn, 'wheat label button found');
+  await act(async () => {
+    wheatCropBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  const select = host.querySelector('aside select');
+  assert.ok(select, 'select dropdown appeared');
+  select.value = 'Disease';
+  await act(async () => {
+    select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  });
+
+  // Verify UI shows Disease before save
+  let captions = [...host.querySelectorAll('[data-caption]')].map((c) => c.textContent.replace('×', '').trim());
+  assert.ok(captions.includes('Disease'), 'wheat is now Disease in UI');
+
+  // 2. Delete DAP
+  const dapSpan = [...host.querySelectorAll('span.group')].find((s) => s.textContent.includes('DAP'));
+  const crossBtn = [...dapSpan.querySelectorAll('button')].find(
+    (b) => b.getAttribute('title')?.includes('Remove') || b.textContent.includes('×')
+  );
+  await act(async () => {
+    crossBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  captions = [...host.querySelectorAll('[data-caption]')].map((c) => c.textContent.replace('×', '').trim());
+  assert.ok(!captions.includes('Chemical'), 'DAP is deleted from UI');
+
+  // 3. Click "Approve & Save All"
+  const saveBtn = [...host.querySelectorAll('button')].find(
+    (b) => b.textContent.includes('Approve & Save All') || b.textContent.includes('Save')
+  );
+  assert.ok(saveBtn, 'Approve & Save All button found');
+  await act(async () => {
+    saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+
+  // 4. Assert on the SAME page:
+  // - wheat is still Disease (did not revert to Crop!)
+  // - DAP is still deleted (did not revert or revive!)
+  // - wheat row in sidebar has "yours" / manual indication
+  captions = [...host.querySelectorAll('[data-caption]')].map((c) => c.textContent.replace('×', '').trim());
+  assert.deepEqual(captions, ['Disease'], 'only Disease remains on same page, wheat did NOT revert to Crop');
+
+  const sidebarRows = [...host.querySelectorAll('aside li')].map((r) => r.textContent.trim());
+  assert.ok(sidebarRows.some((r) => r.includes('wheat') && r.includes('Disease') && r.includes('yours')), 'wheat is marked as yours in sidebar');
+
+  // 5. Assert DB payload has the updated annotations with source='human' and isManual=true
+  assert.ok(savedPayload, 'DB save occurred');
+  assert.equal(savedPayload.length, 1, 'only 1 entity saved');
+  assert.equal(savedPayload[0].text, 'wheat');
+  assert.equal(savedPayload[0].label, 'Disease');
+  assert.equal(savedPayload[0].source, 'human');
+  assert.equal(savedPayload[0].isManual, true);
+
+  mounted.unmount();
+  dom.window.close();
+});

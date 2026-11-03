@@ -45,7 +45,7 @@ function LabelPicker({ span, onPick, onCancel }) {
 function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocused }) {
   const [editing, setEditing] = useState(false);
   const color = getEntityColorStyle(span.label);
-  const isManual = span.source === 'human' || span.status === 'edited';
+  const isManual = span.source === 'human' || span.status === 'edited' || Boolean(span.isManual);
   const approved = span.status === 'approved';
   const confidence = Number(span.confidence ?? 1);
 
@@ -148,7 +148,7 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
   // A span someone added has no pipeline proposal behind it, so there is
   // nothing to confirm or reject: it is either right or it goes.
   const isAdded = decision === 'added';
-  const isManual = Boolean(span.isManual) || decision === 'relabelled' || (span.source === 'human' && span.status === 'edited');
+  const isManual = Boolean(span.isManual) || decision === 'relabelled' || isAdded || span.source === 'human' || span.status === 'edited';
   const score = Number(span.confidence ?? 1);
   const sources = Array.isArray(span.sources) ? span.sources : null;
 
