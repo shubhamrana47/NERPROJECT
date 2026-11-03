@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, RotateCw } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
 import { ENTITY_SHORTCUTS, getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
@@ -81,6 +81,7 @@ export default function PassageAnnotationCard({
   isDirty,
   isSaving = false,
   message,
+  onApproveAndSaveAll,
   onApprove,
   onSave,
   onDiscard,
@@ -95,6 +96,7 @@ export default function PassageAnnotationCard({
   focusedSpan = null,
 }) {
   const annotation = useAnnotation();
+  const handleApproveSave = onApproveAndSaveAll || onSave || onApprove;
   const [activeTab, setActiveTab] = useState('interactive');
 
   // Why a selection did not turn into a span, when it did not.
@@ -191,9 +193,9 @@ export default function PassageAnnotationCard({
             <button
               type="button"
               onClick={onPrev}
-              disabled={!hasPrev || isSaving || isDirty}
+              disabled={!hasPrev || isSaving}
               className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
-              title={isDirty ? "Cannot leave passage with unsaved changes" : "Previous passage (‹)"}
+              title={isDirty ? "Previous page (unsaved changes will prompt save)" : "Previous page (‹)"}
             >
               ‹
             </button>
@@ -203,9 +205,9 @@ export default function PassageAnnotationCard({
             <button
               type="button"
               onClick={onNext}
-              disabled={!hasNext || isSaving || isDirty}
+              disabled={!hasNext || isSaving}
               className="px-2.5 py-1.5 text-ink-soft transition hover:bg-paper hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
-              title={isDirty ? "Cannot leave passage with unsaved changes" : "Next passage (›)"}
+              title={isDirty ? "Next page (unsaved changes will prompt save)" : "Next page (›)"}
             >
               ›
             </button>
@@ -329,63 +331,63 @@ export default function PassageAnnotationCard({
                     Discard changes
                   </button>
                 )}
+                {hasPrev && (
+                  <button
+                    type="button"
+                    onClick={onPrev}
+                    disabled={isSaving}
+                    className="flex items-center gap-1 rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] font-medium text-ink-soft transition hover:border-rule-strong hover:bg-paper hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={isDirty ? "Previous page (unsaved changes will prompt save)" : "Previous page (‹)"}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span>Prev</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={onNext}
-                  disabled={!hasNext || isSaving || isDirty}
-                  className="rounded-md border border-rule bg-sheet px-3 py-2 text-[13px] text-ink-soft transition hover:border-rule-strong hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={isDirty ? "Cannot skip with unsaved changes" : "Skip"}
-                >
-                  Skip
-                </button>
-                <button
-                  type="button"
-                  onClick={onSave}
+                  onClick={handleApproveSave}
                   disabled={isSaving}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium transition disabled:opacity-50 ${
+                  className={`flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[13px] font-medium transition disabled:opacity-50 ${
                     isDirty
                       ? 'border border-ink bg-ink text-paper hover:bg-ink/90 shadow-sm'
-                      : 'border border-rule bg-sheet text-ink hover:border-rule-strong'
-                  }`}
-                  title={isDirty ? "Save changes to database (Ctrl+S)" : "Save to database"}
-                >
-                  {isSaving && isDirty ? <Loader2 className="h-3.5 w-3.5 animate-spin text-paper" /> : null}
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={onApprove}
-                  disabled={isSaving || isDirty}
-                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium transition ${
-                    isDirty
-                      ? 'border border-rule bg-paper text-ink-faint cursor-not-allowed opacity-50'
-                      : 'bg-ink text-paper hover:bg-ink/90 disabled:opacity-50 disabled:cursor-not-allowed'
+                      : 'border border-rule bg-sheet text-ink hover:border-rule-strong hover:bg-paper'
                   }`}
                   title={
                     isDirty
-                      ? 'Please save or discard your changes before continuing'
-                      : isValidation
-                        ? 'Approve every span here and go to the next passage (A)'
-                        : 'Done and go to the next passage (A)'
+                      ? "Approve all annotations and save to database (Ctrl+S / A)"
+                      : "All annotations approved & saved to database (Ctrl+S / A)"
                   }
                 >
-                  {isSaving && !isDirty ? (
+                  {isSaving ? (
                     <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-paper" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-current" />
                       <span>Saving...</span>
                     </>
                   ) : (
                     <>
-                      {isValidation
-                        ? entities.length === 0
-                          ? 'Nothing to validate'
-                          : undecided > 0
-                            ? `Mark ${undecided} correct and continue`
-                            : 'Done, continue'
-                        : 'Done, continue'}
-                      <span className="rounded bg-paper/25 px-1.5 py-px font-mono text-[10.5px]">A</span>
+                      <Check className="h-3.5 w-3.5 text-current" />
+                      <span>Approve & Save All</span>
+                      <span
+                        className={`ml-1 rounded px-1.5 py-px font-mono text-[10.5px] ${
+                          isDirty
+                            ? 'bg-paper/20 text-paper'
+                            : 'bg-paper text-ink-soft border border-rule'
+                        }`}
+                      >
+                        A
+                      </span>
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={onNext}
+                  disabled={!hasNext || isSaving}
+                  className="flex items-center gap-1.5 rounded-md border border-rule bg-sheet px-3.5 py-2 text-[13px] font-medium text-ink transition hover:border-rule-strong hover:bg-paper disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={hasNext ? (isDirty ? "Next page (unsaved changes will prompt save)" : "Next page (›)") : "You are on the last page"}
+                >
+                  <span>Next</span>
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>

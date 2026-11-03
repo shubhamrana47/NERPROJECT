@@ -174,19 +174,19 @@ test('revisiting previous passages preserves all annotations across navigation a
   let captions = [...host.querySelectorAll('[data-caption]')].map((c) => c.textContent.replace('×', '').trim());
   assert.ok(captions.includes('Chemical'), 'DAP is tagged as Chemical on passage 1');
 
-  // 2. Click "Save" then "Done, continue"
-  const saveBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save');
+  // 2. Click "Approve & Save All" then "Next"
+  const saveBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.includes('Save'));
   await act(async () => {
     saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
-  const continueBtn = [...host.querySelectorAll('button')].find((b) =>
-    b.textContent.toLowerCase().includes('continue')
+  const nextBtn = [...host.querySelectorAll('button')].find((b) =>
+    b.textContent.includes('Next') || b.textContent.toLowerCase().includes('continue')
   );
-  assert.ok(continueBtn, 'continue button found');
+  assert.ok(nextBtn, 'next button found');
 
   await act(async () => {
-    continueBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    nextBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
   // Verify on passage 2
@@ -197,15 +197,15 @@ test('revisiting previous passages preserves all annotations across navigation a
   captions = [...host.querySelectorAll('[data-caption]')].map((c) => c.textContent.replace('×', '').trim());
   assert.ok(captions.includes('Crop'), 'cotton is tagged as Crop on passage 2');
 
-  // 4. Click "Save" then "Done, continue" to go to passage 3
+  // 4. Click "Approve & Save All" then "Next" to go to passage 3
   await act(async () => {
-    const sBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save');
+    const sBtn = [...host.querySelectorAll('button')].find((b) => b.textContent.includes('Save'));
     sBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
   await act(async () => {
     const btn = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent.toLowerCase().includes('continue')
+      b.textContent.includes('Next') || b.textContent.toLowerCase().includes('continue')
     );
     btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
