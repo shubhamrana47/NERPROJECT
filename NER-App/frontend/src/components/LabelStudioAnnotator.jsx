@@ -174,8 +174,11 @@ export default function LabelStudioAnnotator({
         sentenceText.slice(entStartInSent, entEndInSent) || ent.text;
       const colorStyle = getEntityColorStyle(ent.label);
       const isManual =
+        Boolean(ent.isManual) ||
         ent.source === 'human' ||
         ent.status === 'edited' ||
+        ent.validationStatus === 'added' ||
+        ent.validationStatus === 'relabelled' ||
         ent._id?.toString().startsWith('temp_');
       const isFresh = String(ent._id || '').startsWith('temp_');
       const isRejected = ent.validationStatus === 'rejected';

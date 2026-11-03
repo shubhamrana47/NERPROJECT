@@ -112,7 +112,7 @@ export default function PassageAnnotationCard({
 
   const modelSpans = (passage.originalEntities || []).length;
   const yourSpans = entities.filter(
-    (e) => e.source === 'human' || e.status === 'edited' || String(e._id || '').startsWith('temp_')
+    (e) => Boolean(e.isManual) || e.source === 'human' || e.status === 'edited' || String(e._id || '').startsWith('temp_')
   ).length;
 
   const decided = entities.filter(

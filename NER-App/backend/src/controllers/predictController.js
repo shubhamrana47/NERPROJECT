@@ -126,7 +126,7 @@ exports.predictSegments = async (req, res, next) => {
       const touchedByHand = (seg.entities || []).some(
         (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited' || e.isManual
       );
-      if (!touchedByHand && (seg.entities || []).length === 0) {
+      if (!touchedByHand && (seg.entities || []).length === 0 && seg.nerStatus !== 'done') {
         const routed = (byIndex[seg.index] || []).map((e) => routeEntity(e, threshold));
         seg.entities = routed;
         seg.originalEntities = JSON.parse(JSON.stringify(routed));

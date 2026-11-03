@@ -171,11 +171,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         const segments = (base.segments || []).map((seg) => {
           const got = byIndex.get(seg.index);
           if (!got) return seg;
-          // A passage being annotated right now keeps what is on screen.
-          if (seg.index === passage?.index && isDirtyRef.current) {
-            return { ...seg, nerStatus: got.nerStatus };
+          // Never overwrite the passage currently on screen or anything already saved/done
+          if (passage && Number(seg.index) === Number(passage.index)) {
+            return { ...seg, nerStatus: got.nerStatus || seg.nerStatus || 'done' };
           }
-          // Never overwrite a passage that already has human work or saved entities
+          if (seg.nerStatus === 'done') {
+            return seg;
+          }
           const hasHumanWork = (seg.entities || []).some(
             (e) => e.source === 'human' || e.status === 'approved' || e.status === 'edited' || e.isManual || e.validationStatus
           );
@@ -225,7 +227,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, [passageIndex, doc._id]);
 
   useEffect(() => {
-    if (!isDirtyRef.current) {
+    if (!isDirtyRef.current && !isSavingRef.current) {
       const currentSegments = docRef.current?.segments || passages;
       const currentPassage = currentSegments[passageIndex] || passage;
       const incoming = currentPassage?.entities || [];
@@ -308,6 +310,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             confidence: 1.0,
             source: 'human',
             status: 'approved',
+            isManual: true,
             ...(isValidation ? { validationStatus: 'added' } : {}),
           },
         ];
@@ -541,7 +544,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       const sorted = [...entities].sort((a, b) => a.start - b.start || a.end - b.end);
       const base = docRef.current;
       const segments = (base.segments || []).map((seg) =>
-        seg.index === segIndex ? { ...seg, entities: sorted, nerStatus: 'done' } : seg
+        Number(seg.index) === Number(segIndex) ? { ...seg, entities: sorted, nerStatus: 'done' } : seg
       );
       applyDoc({ ...base, segments, stats: computeStatsLocal(segments) });
 
@@ -562,13 +565,13 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             (a, b) => a.start - b.start || a.end - b.end
           );
           const segments2 = (now.segments || []).map((s) =>
-            s.index === segIndex ? { ...s, entities: stored, nerStatus: 'done' } : s
+            Number(s.index) === Number(segIndex) ? { ...s, entities: stored, nerStatus: 'done' } : s
           );
           applyDoc({ ...now, segments: segments2, stats: res.stats || now.stats });
           const activePassage = now.segments?.[currentPassageIndexRef.current];
           const isStillActive =
             activePassage &&
-            (activePassage.index === segIndex || currentPassageIndexRef.current === segIndex);
+            (Number(activePassage.index) === Number(segIndex) || Number(currentPassageIndexRef.current) === Number(segIndex));
           if (isStillActive && !isDirtyRef.current) {
             setWorking(stored);
             workingRef.current = stored;
@@ -715,7 +718,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
     let approved = [];
     if (isValidation) {
-      const activeNonDeleted = workingRef.current.filter((e) => e.status !== 'deleted');
+      const activeNonDeleted = workingRef.current.filter((e) => e.status !== 'deleted' && e.validationStatus !== 'rejected');
       if (activeNonDeleted.length === 0 && workingRef.current.length === 0) {
         setIsSaving(true);
         isSavingRef.current = true;
@@ -733,17 +736,41 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         }
       }
       approved = confirmRemaining();
-      approved = approved.map((e) =>
-        e.status === 'deleted'
-          ? e
-          : { ...e, status: 'approved', source: e.source || 'human' }
-      );
+      approved = approved.map((e) => {
+        if (e.status === 'deleted' || e.validationStatus === 'rejected') {
+          return { ...e, status: 'deleted', validationStatus: 'rejected' };
+        }
+        const isRelabelled = e.validationStatus === 'relabelled' || Boolean(e.originalLabel && e.label !== e.originalLabel);
+        const isAdded = e.validationStatus === 'added';
+        const isUserModified = Boolean(e.isManual || isRelabelled || isAdded || e.source === 'human' || e.status === 'edited');
+        return {
+          ...e,
+          status: 'approved',
+          source: isUserModified ? 'human' : (e.source || 'human'),
+          isManual: isUserModified,
+          validationStatus: isRelabelled
+            ? 'relabelled'
+            : isAdded
+            ? 'added'
+            : (e.validationStatus || 'confirmed'),
+        };
+      });
     } else {
-      approved = workingRef.current.map((e) =>
-        e.status === 'deleted'
-          ? e
-          : { ...e, status: 'approved', source: e.source || 'human' }
-      );
+      approved = workingRef.current.map((e) => {
+        if (e.status === 'deleted') return e;
+        const isUserModified = Boolean(
+          e.isManual ||
+          e.source === 'human' ||
+          e.status === 'edited' ||
+          (e.originalLabel && e.label !== e.originalLabel)
+        );
+        return {
+          ...e,
+          status: 'approved',
+          source: isUserModified ? 'human' : (e.source || 'human'),
+          isManual: isUserModified,
+        };
+      });
     }
 
     setWorking(approved);

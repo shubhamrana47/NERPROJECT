@@ -128,7 +128,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
         source: e.source || 'human',
         runnerUp: e.runnerUp !== undefined ? e.runnerUp : (e.runner_up !== undefined ? e.runner_up : undefined),
         originalRunnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.original_runner_up !== undefined ? e.original_runner_up : undefined),
-        isManual: Boolean(e.isManual || e.validationStatus === 'relabelled' || (e.source === 'human' && e.status === 'edited')),
+        isManual: Boolean(e.isManual || e.validationStatus === 'relabelled' || e.validationStatus === 'added' || (e.source === 'human' && (e.status === 'edited' || e.status === 'approved'))),
       };
 
       if (isValidation) {
@@ -156,6 +156,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
             ent.runnerUp = ent.originalRunnerUp || baseline.runnerUp;
           } else if (wasManuallyChanged) {
             ent.isManual = true;
+            ent.source = 'human';
             ent.validationStatus = 'relabelled';
             // The rejected entity that was predicted by the pipeline that was earlier at first place
             // moves to second place / runner up, and the previous runner up entity disappears:
@@ -193,6 +194,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
           // carries no baseline label and no model score.
           ent.validationStatus = 'added';
           ent.source = 'human';
+          ent.isManual = true;
           ent.confidence = 1.0;
           ent.originalLabel = undefined;
         }
