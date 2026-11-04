@@ -261,3 +261,170 @@ test('removing "per acre" and manually annotating "acre" as Field_Area overwrite
     dom.window.close();
   }
 });
+
+test('no duplicate entities are produced when exporting or saving a document that already had appended human spans in sourceRecord.entities', async () => {
+  const TEXT =
+    'Farmers are advised to sow varieties PBW 752, PBW 771 and PBW 757 under late sown irrigated conditions. For wheat sown after 15th December, apply 55 kg DAP or 155 kg single super-phosphate per acre at sowing. DAP is used as source of phosphorus however, if single superphosphate is used then apply 20 kg urea per acre.';
+
+  // Pipeline entity: "per acre" at 189..197, replaced by "acre" at 193..197
+  // Pipeline entity: "superphosphate" at 266..280, replaced by "single superphosphate" at 259..280
+  const docWithRoundTripDuplicates = fakeDoc({
+    _id: 'v_dedup',
+    filename: 'pun1.jsonl',
+    kind: 'validate',
+    segments: [
+      {
+        index: 0,
+        text: TEXT,
+        passageTag: 'PUN-0001',
+        nerStatus: 'done',
+        entities: [
+          {
+            text: 'acre',
+            label: 'Field_Area',
+            start: 193,
+            end: 197,
+            status: 'edited',
+            source: 'human',
+            sources: ['manual'],
+            isManual: true,
+            validationStatus: 'relabelled',
+            originalText: 'per acre',
+            originalLabel: 'Field_Area',
+            originalStart: 189,
+            originalEnd: 197,
+            originalSources: ['llm', 'rx_rate'],
+            rejectedAnnotation: {
+              text: 'per acre',
+              label: 'Field_Area',
+              type: 'Field_Area',
+              start: 189,
+              end: 197,
+              sources: ['llm', 'rx_rate'],
+              source: 'llm',
+              confidence: 1,
+            },
+          },
+          // Legacy duplicate at the same offsets from a previous round-trip
+          {
+            text: 'acre',
+            label: 'Field_Area',
+            start: 193,
+            end: 197,
+            status: 'approved',
+            source: 'human',
+            sources: ['human'],
+            validationStatus: 'added',
+          },
+          // Untouched pipeline entity "superphosphate" alongside overlapping human "single superphosphate"
+          {
+            text: 'superphosphate',
+            label: 'Chemical',
+            start: 266,
+            end: 280,
+            status: 'approved',
+            source: 'llm',
+            sources: ['llm'],
+            validationStatus: 'confirmed',
+          },
+          {
+            text: 'single superphosphate',
+            label: 'Chemical',
+            start: 259,
+            end: 280,
+            status: 'approved',
+            source: 'human',
+            sources: ['human'],
+            isManual: true,
+            validationStatus: 'added',
+          },
+        ],
+        originalEntities: [
+          {
+            text: 'per acre',
+            label: 'Field_Area',
+            start: 189,
+            end: 197,
+            sources: ['llm', 'rx_rate'],
+          },
+          {
+            text: 'superphosphate',
+            label: 'Chemical',
+            start: 266,
+            end: 280,
+            sources: ['llm'],
+          },
+          // Polluted human entry in originalEntities from older upload
+          {
+            text: 'acre',
+            label: 'Field_Area',
+            start: 193,
+            end: 197,
+            sources: ['human'],
+          },
+        ],
+        sourceRecord: {
+          passage_id: '3817e6a6596d',
+          passage_tag: 'PUN-0001',
+          text: TEXT,
+          entities: [
+            {
+              text: 'per acre',
+              type: 'Field_Area',
+              start: 189,
+              end: 197,
+              score: 1,
+              sources: ['llm', 'rx_rate'],
+            },
+            {
+              text: 'superphosphate',
+              type: 'Chemical',
+              start: 266,
+              end: 280,
+              score: 1,
+              sources: ['llm'],
+            },
+            // Previously exported human-added entries in sourceRecord.entities
+            {
+              text: 'acre',
+              type: 'Field_Area',
+              start: 193,
+              end: 197,
+              score: 1,
+              sources: ['human'],
+              validation: { status: 'added' },
+            },
+            {
+              text: 'single superphosphate',
+              type: 'Chemical',
+              start: 259,
+              end: 280,
+              score: 1,
+              sources: ['human'],
+              validation: { status: 'added' },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  // 1. Even before re-saving, buildValidatedRecords must produce 0 duplicates:
+  const { records: beforeSave } = buildValidatedRecords([docWithRoundTripDuplicates]);
+  assert.equal(beforeSave[0].entities.length, 2, 'only the 2 overwritten pipeline entities are exported (no duplicates at the end)');
+  assert.equal(beforeSave[0].entities[0].text, 'acre');
+  assert.deepEqual(beforeSave[0].entities[0].sources, ['manual']);
+  assert.equal(beforeSave[0].entities[0].rejected_annotation.text, 'per acre');
+  assert.equal(beforeSave[0].entities[1].text, 'single superphosphate');
+  assert.deepEqual(beforeSave[0].entities[1].sources, ['manual']);
+  assert.equal(beforeSave[0].entities[1].rejected_annotation.text, 'superphosphate');
+
+  // 2. When saveSegmentEntities runs, the database segment is also deduplicated to 2 entities:
+  Document.findById = async () => docWithRoundTripDuplicates;
+  await invoke(entityController.saveSegmentEntities, {
+    params: { id: 'v_dedup', segmentIndex: '0' },
+    query: { lean: '1' },
+    body: { entities: docWithRoundTripDuplicates.segments[0].entities },
+  });
+  assert.equal(docWithRoundTripDuplicates.segments[0].entities.length, 2, 'DB segment entities deduplicated to 2');
+});

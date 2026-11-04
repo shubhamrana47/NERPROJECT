@@ -5,6 +5,31 @@ const { computeStats } = require('../services/nerService');
 /** With ?lean=1 the reply carries counts instead of the whole document. */
 const isLean = (req) => req.query.lean === '1' || req.query.lean === 'true';
 
+/** True if an entity in originalEntities/sourceRecord was added by a human rather than proposed by the pipeline. */
+function isHumanAddedBaseline(e) {
+  if (!e || typeof e !== 'object') return false;
+  if (e.validationStatus === 'added' || e.validation?.status === 'added') return true;
+  const rej = e.rejectedAnnotation || e.rejected_annotation || e.validation?.rejected_annotation;
+  if (
+    rej &&
+    Array.isArray(rej.sources) &&
+    rej.sources.some((s) => s !== 'human' && s !== 'manual')
+  ) {
+    return false;
+  }
+  if (
+    Array.isArray(e.originalSources) &&
+    e.originalSources.some((s) => s !== 'human' && s !== 'manual')
+  ) {
+    return false;
+  }
+  const srcs = Array.isArray(e.sources) ? e.sources : e.source ? [e.source] : [];
+  if (srcs.length > 0 && srcs.every((s) => s === 'human' || s === 'manual')) {
+    return true;
+  }
+  return false;
+}
+
 /** Builds a structured record of a rejected pipeline annotation and its sources. */
 function buildRejectedRecord(baseline, rawSourceEnt) {
   if (!baseline && !rawSourceEnt) return undefined;
@@ -175,14 +200,17 @@ exports.saveSegmentEntities = async (req, res, next) => {
     if (!seg) return res.status(404).json({ error: 'Segment not found' });
 
     const isValidation = doc.kind === 'validate';
-    const rawSourceEntities = Array.isArray(seg.sourceRecord?.entities)
+    const rawSourceEntities = (Array.isArray(seg.sourceRecord?.entities)
       ? seg.sourceRecord.entities
-      : [];
+      : []
+    ).filter((o) => !isHumanAddedBaseline(o));
     const rawByOffset = new Map(
       rawSourceEntities.map((o) => [`${Number(o.start)}:${Number(o.end)}`, o])
     );
 
-    const baselineList = Array.isArray(seg.originalEntities) ? seg.originalEntities : [];
+    const baselineList = (Array.isArray(seg.originalEntities) ? seg.originalEntities : []).filter(
+      (b) => !isHumanAddedBaseline(b)
+    );
     const baselineOf = new Map(
       baselineList.map((b) => [
         `${Number(b.originalStart !== undefined ? b.originalStart : b.start)}:${Number(
@@ -212,7 +240,24 @@ exports.saveSegmentEntities = async (req, res, next) => {
     const rawKept = [];
 
     for (const e of entities) {
-      const incomingRej = e.rejectedAnnotation || e.rejected_annotation;
+      let incomingRej = e.rejectedAnnotation || e.rejected_annotation;
+      if (incomingRej) {
+        const rejKey = `${Number(incomingRej.start)}:${Number(incomingRej.end)}`;
+        const rejHasPipelineSource =
+          Array.isArray(incomingRej.sources) &&
+          incomingRej.sources.some((s) => s !== 'human' && s !== 'manual');
+        if (!baselineOf.has(rejKey) && !rawByOffset.has(rejKey) && !rejHasPipelineSource) {
+          incomingRej = undefined;
+        }
+      }
+
+      const rawOrigKey =
+        e.originalStart !== undefined && e.originalEnd !== undefined
+          ? `${Number(e.originalStart)}:${Number(e.originalEnd)}`
+          : null;
+      const validOrigCoords =
+        rawOrigKey && (baselineOf.has(rawOrigKey) || rawByOffset.has(rawOrigKey));
+
       const ent = {
         text: String(e.text || '').trim(),
         label: String(e.label || '').trim(),
@@ -222,11 +267,14 @@ exports.saveSegmentEntities = async (req, res, next) => {
         status: e.status || 'approved',
         source: e.source || 'human',
         sources: Array.isArray(e.sources) ? e.sources.map(String) : undefined,
-        originalLabel: e.originalLabel,
-        originalText: e.originalText,
-        originalStart: e.originalStart !== undefined ? Number(e.originalStart) : undefined,
-        originalEnd: e.originalEnd !== undefined ? Number(e.originalEnd) : undefined,
-        originalSources: Array.isArray(e.originalSources) ? e.originalSources.map(String) : undefined,
+        originalLabel: validOrigCoords ? e.originalLabel : undefined,
+        originalText: validOrigCoords ? e.originalText : undefined,
+        originalStart: validOrigCoords ? Number(e.originalStart) : undefined,
+        originalEnd: validOrigCoords ? Number(e.originalEnd) : undefined,
+        originalSources:
+          validOrigCoords && Array.isArray(e.originalSources)
+            ? e.originalSources.map(String)
+            : undefined,
         rejectedAnnotation: incomingRej || undefined,
         runnerUp: e.runnerUp !== undefined ? e.runnerUp : (e.runner_up !== undefined ? e.runner_up : undefined),
         originalRunnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.original_runner_up !== undefined ? e.original_runner_up : undefined),
@@ -257,7 +305,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
       );
 
       if (!baseline && ent.status !== 'deleted' && ent.validationStatus !== 'rejected') {
-        // Find overlapping baseline entities that are NOT active in the incoming payload (i.e. were removed/rejected)
+        // First priority: overlapping baseline entities that were removed/rejected
         const overlappingRemovedBaselines = baselineList.filter((b) => {
           const bStart = Number(b.originalStart !== undefined ? b.originalStart : b.start);
           const bEnd = Number(b.originalEnd !== undefined ? b.originalEnd : b.end);
@@ -267,9 +315,22 @@ exports.saveSegmentEntities = async (req, res, next) => {
           return ent.start < bEnd && ent.end > bStart;
         });
 
-        if (overlappingRemovedBaselines.length === 1) {
+        if (overlappingRemovedBaselines.length >= 1) {
           baseline = overlappingRemovedBaselines[0];
           isSpanModifiedReplacement = true;
+        } else {
+          // Second priority: overlapping baseline entities where the user added a modified span overlapping the pipeline span
+          const overlappingActiveBaselines = baselineList.filter((b) => {
+            const bStart = Number(b.originalStart !== undefined ? b.originalStart : b.start);
+            const bEnd = Number(b.originalEnd !== undefined ? b.originalEnd : b.end);
+            const bKey = `${bStart}:${bEnd}`;
+            if (claimedBaselineKeys.has(bKey)) return false;
+            return ent.start < bEnd && ent.end > bStart && bKey !== exactKey;
+          });
+          if (overlappingActiveBaselines.length === 1) {
+            baseline = overlappingActiveBaselines[0];
+            isSpanModifiedReplacement = true;
+          }
         }
       }
 
@@ -446,19 +507,49 @@ exports.saveSegmentEntities = async (req, res, next) => {
       rawKept.push(ent);
     }
 
-    // Filter out any separate deleted/rejected entry whose baseline key was claimed and overwritten in-place
-    const kept = rawKept.filter((ent) => {
+    // Filter out any separate entry whose baseline key was claimed and overwritten in-place,
+    // any deleted human-added entry (which has no pipeline baseline), and deduplicate by start:end
+    const filteredKept = rawKept.filter((ent) => {
+      const exactKey = `${ent.start}:${ent.end}`;
+      const origKey = `${ent.originalStart !== undefined ? ent.originalStart : ent.start}:${
+        ent.originalEnd !== undefined ? ent.originalEnd : ent.end
+      }`;
       const isRej = ent.status === 'deleted' || ent.validationStatus === 'rejected';
       if (isRej) {
-        const key = `${ent.originalStart !== undefined ? ent.originalStart : ent.start}:${
-          ent.originalEnd !== undefined ? ent.originalEnd : ent.end
-        }`;
-        if (claimedBaselineKeys.has(key)) {
+        if (claimedBaselineKeys.has(origKey) || claimedBaselineKeys.has(exactKey)) {
           return false;
         }
+        // A human-added span that was deleted has no pipeline baseline and should not stay as rejected
+        if (!baselineOf.has(origKey) && !baselineOf.has(exactKey)) {
+          return false;
+        }
+      } else if (claimedBaselineKeys.has(exactKey) && origKey === exactKey) {
+        // An untouched baseline span whose key was claimed by a modified replacement span
+        return false;
       }
       return true;
     });
+
+    const dedupMap = new Map();
+    for (const ent of filteredKept) {
+      const k = `${ent.start}:${ent.end}`;
+      const existing = dedupMap.get(k);
+      if (!existing) {
+        dedupMap.set(k, ent);
+      } else {
+        const entIsActive = ent.status !== 'deleted' && ent.validationStatus !== 'rejected';
+        const existingIsActive = existing.status !== 'deleted' && existing.validationStatus !== 'rejected';
+        const entHasRej = Boolean(ent.rejectedAnnotation);
+        const existingHasRej = Boolean(existing.rejectedAnnotation);
+        if (
+          (entIsActive && !existingIsActive) ||
+          (entIsActive === existingIsActive && entHasRej && !existingHasRej)
+        ) {
+          dedupMap.set(k, ent);
+        }
+      }
+    }
+    const kept = [...dedupMap.values()];
 
     // Update segment-level rejectedAnnotations log with all rejected / overwritten pipeline annotations
     const rejectedList = [];
