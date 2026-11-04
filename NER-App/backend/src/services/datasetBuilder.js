@@ -350,6 +350,37 @@ function runnerUpOverlay(orig, runnerUp) {
   return out;
 }
 
+/** True if an entity in sourceRecord.entities was added by a human in a previous export rather than proposed by the pipeline. */
+function isHumanAddedBaseline(e) {
+  if (!e || typeof e !== 'object') return false;
+  if (e.validationStatus === 'added' || e.validation?.status === 'added') return true;
+  const rej = e.rejectedAnnotation || e.rejected_annotation || e.validation?.rejected_annotation;
+  if (
+    rej &&
+    Array.isArray(rej.sources) &&
+    rej.sources.some((s) => s !== 'human' && s !== 'manual')
+  ) {
+    return false;
+  }
+  if (
+    Array.isArray(e.originalSources) &&
+    e.originalSources.some((s) => s !== 'human' && s !== 'manual')
+  ) {
+    return false;
+  }
+  if (
+    Array.isArray(e.validation?.original_sources) &&
+    e.validation.original_sources.some((s) => s !== 'human' && s !== 'manual')
+  ) {
+    return false;
+  }
+  const srcs = Array.isArray(e.sources) ? e.sources : e.source ? [e.source] : [];
+  if (srcs.length > 0 && srcs.every((s) => s === 'human' || s === 'manual')) {
+    return true;
+  }
+  return false;
+}
+
 function buildValidatedRecords(documents) {
   const records = [];
   const totals = { entities: 0, confirmed: 0, rejected: 0, relabelled: 0, added: 0,
@@ -367,22 +398,49 @@ function buildValidatedRecords(documents) {
               entities: [],
             });
 
+      const rawOriginal = Array.isArray(source.entities) ? source.entities : [];
+      const original = rawOriginal.filter((orig) => !isHumanAddedBaseline(orig));
+      const originalKeySet = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
+
+      // Deduplicate seg.entities by start:end, preferring active spans and spans with rejectedAnnotation
+      const dedupSegMap = new Map();
+      for (const e of seg.entities || []) {
+        const k = `${Number(e.start)}:${Number(e.end)}`;
+        const existing = dedupSegMap.get(k);
+        if (!existing) {
+          dedupSegMap.set(k, e);
+        } else {
+          const eActive = e.status !== 'deleted' && e.validationStatus !== 'rejected';
+          const exActive = existing.status !== 'deleted' && existing.validationStatus !== 'rejected';
+          const eRej = Boolean(e.rejectedAnnotation || e.rejected_annotation);
+          const exRej = Boolean(existing.rejectedAnnotation || existing.rejected_annotation);
+          if ((eActive && !exActive) || (eActive === exActive && eRej && !exRej)) {
+            dedupSegMap.set(k, e);
+          }
+        }
+      }
+      const segEntities = [...dedupSegMap.values()];
+
       const decisions = new Map();
       const replacedDecisions = new Map();
-      (seg.entities || []).forEach((e) => {
+      segEntities.forEach((e) => {
         decisions.set(`${Number(e.start)}:${Number(e.end)}`, e);
         const origStart = e.originalStart !== undefined ? Number(e.originalStart) : e.rejectedAnnotation?.start;
         const origEnd = e.originalEnd !== undefined ? Number(e.originalEnd) : e.rejectedAnnotation?.end;
         if (
           origStart !== undefined &&
           origEnd !== undefined &&
-          (Number(origStart) !== Number(e.start) || Number(origEnd) !== Number(e.end))
+          (Number(origStart) !== Number(e.start) || Number(origEnd) !== Number(e.end)) &&
+          e.status !== 'deleted' &&
+          e.validationStatus !== 'rejected'
         ) {
-          replacedDecisions.set(`${Number(origStart)}:${Number(origEnd)}`, e);
+          const rKey = `${Number(origStart)}:${Number(origEnd)}`;
+          if (!replacedDecisions.has(rKey)) {
+            replacedDecisions.set(rKey, e);
+          }
         }
       });
 
-      const original = Array.isArray(source.entities) ? source.entities : [];
       const counts = { confirmed: 0, rejected: 0, relabelled: 0, added: 0, unreviewed: 0 };
       const consumedReplacementSpans = new Set();
 
@@ -391,38 +449,48 @@ function buildValidatedRecords(documents) {
         let decided = decisions.get(origKey);
         let isSpanReplaced = false;
 
-        if (!decided && replacedDecisions.has(origKey)) {
-          decided = replacedDecisions.get(origKey);
-          isSpanReplaced = true;
-          consumedReplacementSpans.add(`${Number(decided.start)}:${Number(decided.end)}`);
+        if (replacedDecisions.has(origKey)) {
+          const rep = replacedDecisions.get(origKey);
+          const repKey = `${Number(rep.start)}:${Number(rep.end)}`;
+          if (!consumedReplacementSpans.has(repKey)) {
+            decided = rep;
+            isSpanReplaced = true;
+            consumedReplacementSpans.add(repKey);
+          }
         }
 
-        // If no exact offset decision was found for this pipeline entity, check if an active entity
-        // in seg.entities overlaps with it.
-        if (!decided) {
-          const overlapping = (seg.entities || []).filter(
-            (e) =>
-              Number(e.start) < Number(orig.end) &&
-              Number(e.end) > Number(orig.start) &&
-              e.status !== 'deleted' &&
-              e.validationStatus !== 'rejected'
-          );
-          if (overlapping.length === 1) {
+        // Check if an unconsumed active manual/human entity with different offsets overlaps this pipeline entity
+        if (!isSpanReplaced) {
+          const isDecidedInactive =
+            !decided || decided.status === 'deleted' || decided.validationStatus === 'rejected';
+          const overlapping = segEntities.filter((e) => {
+            const eKey = `${Number(e.start)}:${Number(e.end)}`;
+            if (eKey === origKey) return false;
+            if (originalKeySet.has(eKey)) return false;
+            if (consumedReplacementSpans.has(eKey)) return false;
+            if (e.status === 'deleted' || e.validationStatus === 'rejected') return false;
+            return Number(e.start) < Number(orig.end) && Number(e.end) > Number(orig.start);
+          });
+
+          if (overlapping.length >= 1) {
             const candidate = overlapping[0];
-            // Check how many original pipeline spans this candidate overlaps
             const overlappedOriginals = original.filter(
               (o) => Number(candidate.start) < Number(o.end) && Number(candidate.end) > Number(o.start)
             );
-            // If it replaces a single pipeline span whose original offsets are no longer active, overwrite it in-place
-            if (overlappedOriginals.length === 1 && !decisions.has(origKey)) {
+            const candidateIsManual = Boolean(
+              candidate.isManual ||
+                candidate.source === 'human' ||
+                candidate.source === 'manual' ||
+                candidate.validationStatus === 'added' ||
+                candidate.validationStatus === 'relabelled'
+            );
+            if (overlappedOriginals.length === 1 && (isDecidedInactive || candidateIsManual)) {
               decided = candidate;
               isSpanReplaced = true;
               consumedReplacementSpans.add(`${Number(candidate.start)}:${Number(candidate.end)}`);
-            } else {
+            } else if (isDecidedInactive) {
               decided = { validationStatus: 'rejected', status: 'deleted' };
             }
-          } else if (overlapping.length > 1) {
-            decided = { validationStatus: 'rejected', status: 'deleted' };
           }
         }
 
@@ -537,12 +605,13 @@ function buildValidatedRecords(documents) {
        * round trip, which is how they stay out of the pipeline baseline on
        * re-import.
        */
-      const keyed = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
-      const additions = (seg.entities || [])
+      const judgedSpanKeys = new Set(judged.map((j) => `${Number(j.start)}:${Number(j.end)}`));
+      const additions = segEntities
         .filter(
           (e) =>
-            !keyed.has(`${Number(e.start)}:${Number(e.end)}`) &&
+            !originalKeySet.has(`${Number(e.start)}:${Number(e.end)}`) &&
             !consumedReplacementSpans.has(`${Number(e.start)}:${Number(e.end)}`) &&
+            !judgedSpanKeys.has(`${Number(e.start)}:${Number(e.end)}`) &&
             e.status !== 'deleted' &&
             e.validationStatus !== 'rejected'
         )

@@ -362,8 +362,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           ];
         }
 
-        // Check if there is an overlapping pipeline/model span that was removed/rejected
-        const overlappingRemovedIdx = prev.findIndex((e) => {
+        // Check if there is an overlapping pipeline/model span that was removed/rejected,
+        // or an overlapping pipeline/model span that is being modified directly
+        let overlappingIdx = prev.findIndex((e) => {
           const isRej = e.status === 'deleted' || e.validationStatus === 'rejected';
           if (!isRej) return false;
           const eStart = Number(e.originalStart !== undefined ? e.originalStart : e.start);
@@ -371,8 +372,16 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           return start < eEnd && end > eStart;
         });
 
-        if (overlappingRemovedIdx >= 0) {
-          const removedEnt = prev[overlappingRemovedIdx];
+        if (overlappingIdx < 0) {
+          overlappingIdx = prev.findIndex((e) => {
+            if (e.status === 'deleted' || e.validationStatus === 'rejected') return false;
+            if (e.validationStatus === 'added' || e.rejectedAnnotation) return false;
+            return start < Number(e.end) && end > Number(e.start);
+          });
+        }
+
+        if (overlappingIdx >= 0) {
+          const removedEnt = prev[overlappingIdx];
           const bStart = Number(removedEnt.originalStart !== undefined ? removedEnt.originalStart : removedEnt.start);
           const bEnd = Number(removedEnt.originalEnd !== undefined ? removedEnt.originalEnd : removedEnt.end);
           const rawEnt = (passage?.sourceRecord?.entities || []).find(
@@ -402,7 +411,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           };
 
           const next = [...prev];
-          next[overlappingRemovedIdx] = overwritten;
+          next[overlappingIdx] = overwritten;
           return next;
         }
 
@@ -1165,16 +1174,23 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
   const workingSpans = useMemo(() => {
     const pText = passage?.text || '';
-    return [...working]
-      .filter((e) => {
-        if (!e || e.status === 'deleted') return false;
-        // Strict boundary check: ensure span belongs to current passage text
-        if (pText && (e.start < 0 || e.end > pText.length || e.start >= e.end)) {
-          return false;
-        }
-        return true;
-      })
-      .sort((a, b) => a.start - b.start);
+    const valid = [...working].filter((e) => {
+      if (!e || e.status === 'deleted') return false;
+      // Strict boundary check: ensure span belongs to current passage text
+      if (pText && (e.start < 0 || e.end > pText.length || e.start >= e.end)) {
+        return false;
+      }
+      return true;
+    });
+    const byKey = new Map();
+    for (const span of valid) {
+      const k = `${span.start}:${span.end}`;
+      const existing = byKey.get(k);
+      if (!existing || (!existing.rejectedAnnotation && span.rejectedAnnotation)) {
+        byKey.set(k, span);
+      }
+    }
+    return [...byKey.values()].sort((a, b) => a.start - b.start);
   }, [working, passage?.text]);
 
   /*

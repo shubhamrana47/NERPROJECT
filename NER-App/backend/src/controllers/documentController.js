@@ -11,7 +11,23 @@ const { computeStats } = require('../services/nerService');
 const VALIDATION_STATUSES = ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'];
 
 /** A span a person added is not part of what the pipeline proposed. */
-const isAddedByHand = (e) => e && e.validationStatus === 'added';
+const isAddedByHand = (e) => {
+  if (!e || typeof e !== 'object') return false;
+  if (e.validationStatus === 'added' || e.validation?.status === 'added') return true;
+  if (
+    e.rejectedAnnotation ||
+    e.rejected_annotation ||
+    (Array.isArray(e.originalSources) &&
+      e.originalSources.some((s) => s !== 'human' && s !== 'manual'))
+  ) {
+    return false;
+  }
+  const srcs = Array.isArray(e.sources) ? e.sources : e.source ? [e.source] : [];
+  if (srcs.length > 0 && srcs.every((s) => s === 'human' || s === 'manual')) {
+    return true;
+  }
+  return false;
+};
 
 /**
  * Entities that arrived with a pipeline file, loaded as they are.
@@ -135,7 +151,26 @@ function buildProvidedEntities(provided, text, ingest) {
     ingest.provided += 1;
   }
 
-  return out.sort((a, b) => a.start - b.start || a.end - b.end);
+  // Deduplicate spans at the exact same start:end offsets (e.g. if an already-overwritten span
+  // and a legacy appended 'human' span both exist at the same offsets in the uploaded file).
+  const bySpanKey = new Map();
+  for (const item of out) {
+    const k = `${item.start}:${item.end}`;
+    const existing = bySpanKey.get(k);
+    if (!existing) {
+      bySpanKey.set(k, item);
+    } else {
+      const itemHasRej = Boolean(item.rejectedAnnotation);
+      const existingHasRej = Boolean(existing.rejectedAnnotation);
+      const itemIsPipeline = !isAddedByHand(item);
+      const existingIsPipeline = !isAddedByHand(existing);
+      if ((itemHasRej && !existingHasRej) || (itemIsPipeline && !existingIsPipeline)) {
+        bySpanKey.set(k, item);
+      }
+    }
+  }
+
+  return [...bySpanKey.values()].sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
 // POST /api/documents
