@@ -368,28 +368,60 @@ function buildValidatedRecords(documents) {
             });
 
       const decisions = new Map();
+      const replacedDecisions = new Map();
       (seg.entities || []).forEach((e) => {
         decisions.set(`${Number(e.start)}:${Number(e.end)}`, e);
+        const origStart = e.originalStart !== undefined ? Number(e.originalStart) : e.rejectedAnnotation?.start;
+        const origEnd = e.originalEnd !== undefined ? Number(e.originalEnd) : e.rejectedAnnotation?.end;
+        if (
+          origStart !== undefined &&
+          origEnd !== undefined &&
+          (Number(origStart) !== Number(e.start) || Number(origEnd) !== Number(e.end))
+        ) {
+          replacedDecisions.set(`${Number(origStart)}:${Number(origEnd)}`, e);
+        }
       });
 
       const original = Array.isArray(source.entities) ? source.entities : [];
       const counts = { confirmed: 0, rejected: 0, relabelled: 0, added: 0, unreviewed: 0 };
+      const consumedReplacementSpans = new Set();
 
       const judged = original.map((orig) => {
-        let decided = decisions.get(`${Number(orig.start)}:${Number(orig.end)}`);
+        const origKey = `${Number(orig.start)}:${Number(orig.end)}`;
+        let decided = decisions.get(origKey);
+        let isSpanReplaced = false;
+
+        if (!decided && replacedDecisions.has(origKey)) {
+          decided = replacedDecisions.get(origKey);
+          isSpanReplaced = true;
+          consumedReplacementSpans.add(`${Number(decided.start)}:${Number(decided.end)}`);
+        }
 
         // If no exact offset decision was found for this pipeline entity, check if an active entity
-        // in seg.entities overlaps with it. If a human added/edited a span that overlaps this range,
-        // the original proposal has been superseded/rejected.
+        // in seg.entities overlaps with it.
         if (!decided) {
-          const overlapping = (seg.entities || []).find(
+          const overlapping = (seg.entities || []).filter(
             (e) =>
               Number(e.start) < Number(orig.end) &&
               Number(e.end) > Number(orig.start) &&
               e.status !== 'deleted' &&
               e.validationStatus !== 'rejected'
           );
-          if (overlapping) {
+          if (overlapping.length === 1) {
+            const candidate = overlapping[0];
+            // Check how many original pipeline spans this candidate overlaps
+            const overlappedOriginals = original.filter(
+              (o) => Number(candidate.start) < Number(o.end) && Number(candidate.end) > Number(o.start)
+            );
+            // If it replaces a single pipeline span whose original offsets are no longer active, overwrite it in-place
+            if (overlappedOriginals.length === 1 && !decisions.has(origKey)) {
+              decided = candidate;
+              isSpanReplaced = true;
+              consumedReplacementSpans.add(`${Number(candidate.start)}:${Number(candidate.end)}`);
+            } else {
+              decided = { validationStatus: 'rejected', status: 'deleted' };
+            }
+          } else if (overlapping.length > 1) {
             decided = { validationStatus: 'rejected', status: 'deleted' };
           }
         }
@@ -405,11 +437,19 @@ function buildValidatedRecords(documents) {
           decided.label &&
           orig.type &&
           decided.label.trim().toLowerCase() !== orig.type.trim().toLowerCase();
+        const isTextOrOffsetChanged =
+          isSpanReplaced ||
+          (decided &&
+            ((decided.text && orig.text && decided.text.trim() !== orig.text.trim()) ||
+              (decided.start !== undefined && Number(decided.start) !== Number(orig.start)) ||
+              (decided.end !== undefined && Number(decided.end) !== Number(orig.end))));
         const isManuallyChanged =
           Boolean(decided?.isManual) &&
-          (isLabelChanged || Boolean(decided?.originalLabel && decided.label !== decided.originalLabel));
+          (isLabelChanged ||
+            isTextOrOffsetChanged ||
+            Boolean(decided?.originalLabel && decided.label !== decided.originalLabel));
 
-        if (status === 'relabelled' || isLabelChanged || isManuallyChanged) {
+        if (status === 'relabelled' || isLabelChanged || isTextOrOffsetChanged || isManuallyChanged) {
           status = 'relabelled';
         }
 
@@ -423,6 +463,55 @@ function buildValidatedRecords(documents) {
         counts[status] += 1;
 
         if (status === 'relabelled') {
+          if (isTextOrOffsetChanged) {
+            const rejSources = Array.isArray(decided.rejectedAnnotation?.sources)
+              ? decided.rejectedAnnotation.sources
+              : Array.isArray(orig.sources)
+              ? orig.sources
+              : orig.source
+              ? [orig.source]
+              : ['llm'];
+            const rejectedAnnotation = {
+              text: decided.rejectedAnnotation?.text || decided.originalText || orig.text,
+              type: decided.rejectedAnnotation?.type || decided.originalLabel || orig.type,
+              label: decided.rejectedAnnotation?.label || decided.originalLabel || orig.type,
+              start:
+                decided.rejectedAnnotation?.start !== undefined
+                  ? Number(decided.rejectedAnnotation.start)
+                  : Number(orig.start),
+              end:
+                decided.rejectedAnnotation?.end !== undefined
+                  ? Number(decided.rejectedAnnotation.end)
+                  : Number(orig.end),
+              sources: rejSources,
+              source: decided.rejectedAnnotation?.source || rejSources[0] || 'llm',
+              score:
+                decided.rejectedAnnotation?.confidence !== undefined
+                  ? Number(decided.rejectedAnnotation.confidence)
+                  : Number(orig.score ?? 1),
+            };
+            return {
+              ...orig,
+              text: decided.text,
+              type: decided.label || orig.type,
+              start: Number(decided.start),
+              end: Number(decided.end),
+              sources: ['manual'],
+              source: 'manual',
+              ...runnerUpOverlay(orig, decided.runnerUp || decided.originalLabel || orig.type),
+              rejected_annotation: rejectedAnnotation,
+              validation: {
+                status: 'relabelled',
+                original_type: decided.originalLabel || orig.type,
+                original_text: rejectedAnnotation.text,
+                original_start: rejectedAnnotation.start,
+                original_end: rejectedAnnotation.end,
+                original_sources: rejSources,
+                rejected_annotation: rejectedAnnotation,
+              },
+            };
+          }
+
           return {
             ...orig,
             // The corrected type is what a consumer reads; what the pipeline
@@ -450,7 +539,13 @@ function buildValidatedRecords(documents) {
        */
       const keyed = new Set(original.map((o) => `${Number(o.start)}:${Number(o.end)}`));
       const additions = (seg.entities || [])
-        .filter((e) => !keyed.has(`${Number(e.start)}:${Number(e.end)}`) && e.status !== 'deleted' && e.validationStatus !== 'rejected')
+        .filter(
+          (e) =>
+            !keyed.has(`${Number(e.start)}:${Number(e.end)}`) &&
+            !consumedReplacementSpans.has(`${Number(e.start)}:${Number(e.end)}`) &&
+            e.status !== 'deleted' &&
+            e.validationStatus !== 'rejected'
+        )
         .sort((a, b) => a.start - b.start || a.end - b.end)
         .map((e) => {
           counts.added += 1;

@@ -82,9 +82,20 @@ function buildProvidedEntities(provided, text, ingest) {
       parsedRunnerUp = CANONICAL_TYPES.includes(clean) ? clean : normalizeLabel(clean);
     }
 
-    const origLabel = restored === 'added' ? undefined : String(block?.original_type || label);
-    const isManuallyChanged = restored === 'relabelled' || Boolean(raw.isManual);
+    const origLabel = restored === 'added' ? undefined : String(block?.original_type || raw.rejected_annotation?.type || raw.rejected_annotation?.label || label);
+    const isManuallyChanged = restored === 'relabelled' || Boolean(raw.isManual) || Boolean(raw.rejected_annotation);
     const finalRunnerUp = isManuallyChanged && origLabel ? origLabel : parsedRunnerUp;
+
+    const rawSources = Array.isArray(raw.sources)
+      ? raw.sources.map((s) => String(s))
+      : raw.source
+      ? [String(raw.source)]
+      : undefined;
+
+    const rejBlock = raw.rejected_annotation || raw.rejectedAnnotation || block?.rejected_annotation;
+    const origSources = Array.isArray(rejBlock?.sources)
+      ? rejBlock.sources.map((s) => String(s))
+      : rawSources;
 
     out.push({
       text: entityText,
@@ -94,11 +105,32 @@ function buildProvidedEntities(provided, text, ingest) {
       confidence: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 1,
       status: statusFor[restored],
       source: restored === 'unreviewed' || restored === 'rejected' ? 'llm' : 'human',
+      sources: rawSources,
       validationStatus: restored,
       originalLabel: origLabel,
+      originalText: rejBlock?.text || entityText,
+      originalStart: rejBlock?.start !== undefined ? Number(rejBlock.start) : start,
+      originalEnd: rejBlock?.end !== undefined ? Number(rejBlock.end) : end,
+      originalSources: origSources,
       runnerUp: finalRunnerUp,
       originalRunnerUp: parsedRunnerUp,
       isManual: isManuallyChanged,
+      ...(rejBlock
+        ? {
+            rejectedAnnotation: {
+              text: String(rejBlock.text || entityText),
+              label: String(rejBlock.label || rejBlock.type || origLabel || label),
+              type: String(rejBlock.type || rejBlock.label || origLabel || label),
+              start: rejBlock.start !== undefined ? Number(rejBlock.start) : start,
+              end: rejBlock.end !== undefined ? Number(rejBlock.end) : end,
+              sources: Array.isArray(rejBlock.sources) ? rejBlock.sources.map(String) : origSources || ['llm'],
+              source: String(rejBlock.source || (Array.isArray(rejBlock.sources) && rejBlock.sources[0]) || 'llm'),
+              confidence: Number.isFinite(Number(rejBlock.confidence ?? rejBlock.score ?? raw.score))
+                ? Number(rejBlock.confidence ?? rejBlock.score ?? raw.score)
+                : 1,
+            },
+          }
+        : {}),
     });
     ingest.provided += 1;
   }
@@ -212,7 +244,16 @@ exports.upload = async (req, res, next) => {
            * round trip they arrive in the file like any other entity, and
            * without this they would show up as something the pipeline proposed.
            */
-          originalEntities: entities.filter((e) => !isAddedByHand(e)).map((e) => ({ ...e })),
+          originalEntities: entities
+            .filter((e) => !isAddedByHand(e))
+            .map((e) => ({
+              ...e,
+              text: e.originalText || e.text,
+              label: e.originalLabel || e.label,
+              start: e.originalStart !== undefined ? e.originalStart : e.start,
+              end: e.originalEnd !== undefined ? e.originalEnd : e.end,
+              sources: e.originalSources || e.sources,
+            })),
           nerStatus: 'provided',
           ...(acknowledged ? { nothingToValidate: true } : {}),
         };
@@ -249,11 +290,17 @@ exports.upload = async (req, res, next) => {
             end: Number(e.end),
             confidence: e.confidence !== undefined ? Number(e.confidence) : 1,
             status: e.status || (e.source === 'human' ? 'approved' : 'accepted'),
-            source: e.source === 'human' ? 'human' : 'model',
+            source: e.source === 'human' || e.source === 'manual' ? e.source : 'model',
+            sources: Array.isArray(e.sources) ? e.sources : undefined,
             originalLabel: e.originalLabel,
+            originalText: e.originalText,
+            originalStart: e.originalStart,
+            originalEnd: e.originalEnd,
+            originalSources: e.originalSources,
+            rejectedAnnotation: e.rejectedAnnotation || e.rejected_annotation,
             runnerUp: e.runnerUp || e.runner_up,
             originalRunnerUp: e.originalRunnerUp || e.original_runner_up || e.runnerUp || e.runner_up,
-            isManual: Boolean(e.isManual || e.source === 'human' || e.status === 'edited'),
+            isManual: Boolean(e.isManual || e.source === 'human' || e.source === 'manual' || e.status === 'edited'),
           }))
           .filter(
             (e) =>

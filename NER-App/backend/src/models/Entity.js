@@ -13,7 +13,8 @@ const entitySchema = new mongoose.Schema({
     enum: ['accepted', 'review', 'approved', 'edited', 'deleted'],
     default: 'review',
   },
-  source: { type: String, enum: ['model', 'llm', 'human'], default: 'model' },
+  source: { type: String, enum: ['model', 'llm', 'human', 'manual'], default: 'model' },
+  sources: [String],
 
   /*
    * Validation workflow only, and deliberately a separate axis from `status`
@@ -34,9 +35,23 @@ const entitySchema = new mongoose.Schema({
     enum: ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'],
   },
   originalLabel: String,
+  originalText: String,
+  originalStart: Number,
+  originalEnd: Number,
+  originalSources: [String],
   runnerUp: String,
   originalRunnerUp: String,
   isManual: { type: Boolean, default: false },
+  rejectedAnnotation: {
+    text: String,
+    label: String,
+    type: String,
+    start: Number,
+    end: Number,
+    sources: [String],
+    source: String,
+    confidence: Number,
+  },
 });
 
 module.exports = entitySchema;

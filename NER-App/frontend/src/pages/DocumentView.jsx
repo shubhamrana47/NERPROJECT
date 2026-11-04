@@ -249,7 +249,44 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           (passage?.sourceRecord?.entities || []).find(
             (o) => Number(o.start) === start && Number(o.end) === end
           )
-        : null;
+        : (passage?.originalEntities || []).find(
+            (o) => Number(o.start) === start && Number(o.end) === end
+          );
+
+      const buildRejectedFrom = (orig, raw) => {
+        const origText = orig?.originalText || raw?.text || orig?.text;
+        const origLabel = orig?.originalLabel || raw?.type || orig?.label || orig?.type;
+        const origStart =
+          orig?.originalStart !== undefined
+            ? Number(orig.originalStart)
+            : raw?.start !== undefined
+            ? Number(raw.start)
+            : Number(orig?.start);
+        const origEnd =
+          orig?.originalEnd !== undefined
+            ? Number(orig.originalEnd)
+            : raw?.end !== undefined
+            ? Number(raw.end)
+            : Number(orig?.end);
+        const rawSources =
+          (Array.isArray(orig?.originalSources) && orig.originalSources.length > 0 && orig.originalSources) ||
+          (Array.isArray(raw?.sources) && raw.sources.length > 0 && raw.sources) ||
+          (Array.isArray(orig?.sources) && orig.sources.length > 0 && orig.sources) ||
+          (orig?.source && orig.source !== 'human' && orig.source !== 'manual' ? [orig.source] : ['llm']);
+        const sources = rawSources.map(String);
+        return {
+          text: String(origText || ''),
+          label: String(origLabel || ''),
+          type: String(origLabel || ''),
+          start: origStart,
+          end: origEnd,
+          sources,
+          source: sources[0] || 'llm',
+          confidence: Number.isFinite(Number(raw?.score ?? orig?.confidence))
+            ? Number(raw?.score ?? orig?.confidence)
+            : 1.0,
+        };
+      };
 
       setWorking((prev) => {
         const existingIdx = prev.findIndex(
@@ -258,17 +295,29 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
         if (existingIdx >= 0) {
           const old = prev[existingIdx];
-          const origLabel = old.originalLabel || baseline?.label || old.label;
+          const origLabel = old.originalLabel || baseline?.label || baseline?.type || old.label;
           const origRunnerUp = old.originalRunnerUp || baseline?.runnerUp || old.runnerUp;
           const isRelabel = isValidation && origLabel && origLabel !== newEnt.label;
+          const rawEnt = (passage?.sourceRecord?.entities || []).find(
+            (o) =>
+              Number(o.start) === Number(old.originalStart !== undefined ? old.originalStart : old.start) &&
+              Number(o.end) === Number(old.originalEnd !== undefined ? old.originalEnd : old.end)
+          );
+          const rejRec = old.rejectedAnnotation || buildRejectedFrom(old, rawEnt);
 
           const updated = {
             ...old,
             ...newEnt,
             status: 'edited',
             source: 'human',
+            sources: ['manual'],
             isManual: true,
             originalLabel: origLabel,
+            originalText: old.originalText || baseline?.text || old.text,
+            originalStart: old.originalStart !== undefined ? old.originalStart : old.start,
+            originalEnd: old.originalEnd !== undefined ? old.originalEnd : old.end,
+            originalSources: old.originalSources || rejRec?.sources,
+            rejectedAnnotation: rejRec,
             originalRunnerUp: origRunnerUp,
             runnerUp: origLabel,
             validationStatus: isValidation
@@ -284,20 +333,123 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         }
 
         if (baseline) {
-          const isRelabel = baseline.label !== newEnt.label;
+          const bLabel = baseline.label || baseline.type;
+          const isRelabel = bLabel !== newEnt.label;
+          const rawEnt = (passage?.sourceRecord?.entities || []).find(
+            (o) => Number(o.start) === start && Number(o.end) === end
+          );
+          const rejRec = buildRejectedFrom(baseline, rawEnt);
           return [
             ...prev,
             {
               ...newEnt,
-              _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              _id: baseline._id || `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
               confidence: 1.0,
               source: 'human',
+              sources: ['manual'],
               status: isRelabel ? 'edited' : 'approved',
               isManual: true,
-              originalLabel: baseline.label,
+              originalLabel: bLabel,
+              originalText: baseline.text,
+              originalStart: start,
+              originalEnd: end,
+              originalSources: rejRec.sources,
+              rejectedAnnotation: isRelabel ? rejRec : undefined,
               originalRunnerUp: baseline.runnerUp,
-              runnerUp: baseline.label,
-              validationStatus: isRelabel ? 'relabelled' : 'confirmed',
+              runnerUp: bLabel,
+              validationStatus: isValidation ? (isRelabel ? 'relabelled' : 'confirmed') : undefined,
+            },
+          ];
+        }
+
+        // Check if there is an overlapping pipeline/model span that was removed/rejected
+        const overlappingRemovedIdx = prev.findIndex((e) => {
+          const isRej = e.status === 'deleted' || e.validationStatus === 'rejected';
+          if (!isRej) return false;
+          const eStart = Number(e.originalStart !== undefined ? e.originalStart : e.start);
+          const eEnd = Number(e.originalEnd !== undefined ? e.originalEnd : e.end);
+          return start < eEnd && end > eStart;
+        });
+
+        if (overlappingRemovedIdx >= 0) {
+          const removedEnt = prev[overlappingRemovedIdx];
+          const bStart = Number(removedEnt.originalStart !== undefined ? removedEnt.originalStart : removedEnt.start);
+          const bEnd = Number(removedEnt.originalEnd !== undefined ? removedEnt.originalEnd : removedEnt.end);
+          const rawEnt = (passage?.sourceRecord?.entities || []).find(
+            (o) => Number(o.start) === bStart && Number(o.end) === bEnd
+          );
+          const rejRec = removedEnt.rejectedAnnotation || buildRejectedFrom(removedEnt, rawEnt);
+          const origLabel = removedEnt.originalLabel || removedEnt.label || rejRec.label;
+
+          const overwritten = {
+            ...removedEnt,
+            ...newEnt,
+            start,
+            end,
+            confidence: 1.0,
+            source: 'human',
+            sources: ['manual'],
+            status: 'edited',
+            isManual: true,
+            originalText: rejRec.text,
+            originalLabel: origLabel,
+            originalStart: bStart,
+            originalEnd: bEnd,
+            originalSources: rejRec.sources,
+            rejectedAnnotation: rejRec,
+            runnerUp: newEnt.label !== origLabel ? origLabel : (removedEnt.originalRunnerUp || removedEnt.runnerUp),
+            validationStatus: isValidation ? 'relabelled' : undefined,
+          };
+
+          const next = [...prev];
+          next[overlappingRemovedIdx] = overwritten;
+          return next;
+        }
+
+        // Also check passage.originalEntities in case the removed entity was filtered out of prev
+        const overlappingOrig = (passage?.originalEntities || []).find((o) => {
+          const oStart = Number(o.originalStart !== undefined ? o.originalStart : o.start);
+          const oEnd = Number(o.originalEnd !== undefined ? o.originalEnd : o.end);
+          const isStillActiveInPrev = prev.some(
+            (p) =>
+              p.status !== 'deleted' &&
+              p.validationStatus !== 'rejected' &&
+              Number(p.start) === oStart &&
+              Number(p.end) === oEnd
+          );
+          return !isStillActiveInPrev && start < oEnd && end > oStart;
+        });
+
+        if (overlappingOrig) {
+          const bStart = Number(overlappingOrig.originalStart !== undefined ? overlappingOrig.originalStart : overlappingOrig.start);
+          const bEnd = Number(overlappingOrig.originalEnd !== undefined ? overlappingOrig.originalEnd : overlappingOrig.end);
+          const rawEnt = (passage?.sourceRecord?.entities || []).find(
+            (o) => Number(o.start) === bStart && Number(o.end) === bEnd
+          );
+          const rejRec = buildRejectedFrom(overlappingOrig, rawEnt);
+          const origLabel = overlappingOrig.originalLabel || overlappingOrig.label || rejRec.label;
+
+          return [
+            ...prev,
+            {
+              ...overlappingOrig,
+              ...newEnt,
+              _id: overlappingOrig._id || `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              start,
+              end,
+              confidence: 1.0,
+              source: 'human',
+              sources: ['manual'],
+              status: 'edited',
+              isManual: true,
+              originalText: rejRec.text,
+              originalLabel: origLabel,
+              originalStart: bStart,
+              originalEnd: bEnd,
+              originalSources: rejRec.sources,
+              rejectedAnnotation: rejRec,
+              runnerUp: newEnt.label !== origLabel ? origLabel : (overlappingOrig.originalRunnerUp || overlappingOrig.runnerUp),
+              validationStatus: isValidation ? 'relabelled' : undefined,
             },
           ];
         }
@@ -309,6 +461,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             _id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             confidence: 1.0,
             source: 'human',
+            sources: ['manual'],
             status: 'approved',
             isManual: true,
             ...(isValidation ? { validationStatus: 'added' } : {}),
@@ -320,7 +473,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       isDirtyRef.current = true;
       setMessage('');
     },
-    [isValidation, passage?.originalEntities]
+    [isValidation, passage?.originalEntities, passage?.sourceRecord?.entities]
   );
 
   const updateEntity = useCallback((target, changes) => {
@@ -387,9 +540,18 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         }
 
         if (decision === 'unreviewed') {
+          const restoredStart = e.originalStart !== undefined ? e.originalStart : e.start;
+          const restoredEnd = e.originalEnd !== undefined ? e.originalEnd : e.end;
+          const restoredText = e.originalText || e.text;
+          const restoredLabel = e.originalLabel || e.label;
           return {
             ...e,
-            label: e.originalLabel || e.label,
+            text: restoredText,
+            label: restoredLabel,
+            start: restoredStart,
+            end: restoredEnd,
+            sources: e.originalSources || e.sources,
+            rejectedAnnotation: undefined,
             runnerUp: e.originalRunnerUp !== undefined ? e.originalRunnerUp : e.runnerUp,
             isManual: false,
             validationStatus: 'unreviewed',
@@ -404,7 +566,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           return { ...e, validationStatus: 'rejected', status: 'accepted', source: 'llm' };
         }
         const baseline = (passage?.originalEntities || []).find(
-          (o) => Number(o.start) === Number(e.start) && Number(o.end) === Number(e.end)
+          (o) => Number(o.start) === Number(e.originalStart !== undefined ? e.originalStart : e.start) &&
+                 Number(o.end) === Number(e.originalEnd !== undefined ? e.originalEnd : e.end)
         );
         const prevFirstPlace = e.originalLabel || baseline?.label || e.label;
         const initialRunnerUp = e.originalRunnerUp !== undefined ? e.originalRunnerUp : (e.runnerUp || baseline?.runnerUp);
@@ -418,6 +581,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           validationStatus: 'relabelled',
           status: 'edited',
           source: 'human',
+          sources: ['manual'],
         };
       })
     );
@@ -447,12 +611,14 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
   }, [passage?.originalEntities]);
 
   const deleteEntity = useCallback((target) => {
+    const tOrigStart = target.originalStart !== undefined ? Number(target.originalStart) : Number(target.start);
+    const tOrigEnd = target.originalEnd !== undefined ? Number(target.originalEnd) : Number(target.end);
     const isPipeline = isValidation && (
       (passage?.originalEntities || []).some(
-        (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
+        (o) => Number(o.start) === tOrigStart && Number(o.end) === tOrigEnd
       ) ||
       (passage?.sourceRecord?.entities || []).some(
-        (o) => Number(o.start) === Number(target.start) && Number(o.end) === Number(target.end)
+        (o) => Number(o.start) === tOrigStart && Number(o.end) === tOrigEnd
       )
     );
 
@@ -463,8 +629,35 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             (target._id && String(e._id) === String(target._id)) ||
             (Number(e.start) === Number(target.start) && Number(e.end) === Number(target.end));
           if (!match) return e;
+          const rawEnt = (passage?.sourceRecord?.entities || []).find(
+            (o) => Number(o.start) === tOrigStart && Number(o.end) === tOrigEnd
+          );
+          const origSources =
+            e.originalSources ||
+            (Array.isArray(rawEnt?.sources) ? rawEnt.sources : e.sources && e.sources[0] !== 'manual' ? e.sources : ['llm']);
+          const origText = e.originalText || rawEnt?.text || e.text;
+          const origLabel = e.originalLabel || rawEnt?.type || e.label;
           return {
             ...e,
+            text: origText,
+            label: origLabel,
+            start: tOrigStart,
+            end: tOrigEnd,
+            originalText: origText,
+            originalLabel: origLabel,
+            originalStart: tOrigStart,
+            originalEnd: tOrigEnd,
+            originalSources: origSources,
+            rejectedAnnotation: {
+              text: String(origText || ''),
+              label: String(origLabel || ''),
+              type: String(origLabel || ''),
+              start: tOrigStart,
+              end: tOrigEnd,
+              sources: origSources.map(String),
+              source: String(origSources[0] || 'llm'),
+              confidence: Number(rawEnt?.score ?? e.confidence ?? 1),
+            },
             status: 'deleted',
             validationStatus: 'rejected',
             isManual: true,
@@ -997,6 +1190,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     if (provided.length === 0) return workingSpans;
     const byOffset = new Map(provided.map((e) => [`${e.start}:${e.end}`, e]));
     return workingSpans.map((span) => {
+      if (Array.isArray(span.sources) && span.sources.length > 0) {
+        return span;
+      }
       const origin = byOffset.get(`${span.start}:${span.end}`);
       return origin && Array.isArray(origin.sources)
         ? { ...span, sources: origin.sources }

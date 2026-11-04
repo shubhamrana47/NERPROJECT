@@ -8,6 +8,9 @@ const { JSDOM } = require('jsdom');
 const FRONTEND = path.join(__dirname, '..', 'frontend');
 const SRC = path.join(__dirname, '..', 'backend', 'src');
 const { buildValidatedRecords, buildAnnotatedRecords } = require(path.join(SRC, 'services/datasetBuilder'));
+const Document = require(path.join(SRC, 'models/Document'));
+const entityController = require(path.join(SRC, 'controllers/entityController'));
+const { fakeDoc, invoke } = require('./helpers');
 
 let bundlePath;
 function buildHarness() {
@@ -29,7 +32,7 @@ function buildHarness() {
   return out;
 }
 
-test('trace per acre removal and acre addition in validation mode', async () => {
+test('removing "per acre" and manually annotating "acre" as Field_Area overwrites the entry in-place as manual and saves the rejected pipeline annotation with its sources', async () => {
   const TEXT = 'releases of Trichogramma chilonis @ 20,000 per acre are to be made at 10 days interval.';
   // 'per acre':
   const perAcreStart = TEXT.indexOf('per acre');
@@ -38,9 +41,7 @@ test('trace per acre removal and acre addition in validation mode', async () => 
   const acreStart = TEXT.indexOf('acre');
   const acreEnd = acreStart + 'acre'.length;
 
-  console.log(`per acre: ${perAcreStart}..${perAcreEnd}, acre: ${acreStart}..${acreEnd}`);
-
-  const validateDoc = {
+  const validateDoc = fakeDoc({
     _id: 'v_peracre',
     filename: 'test_pun50.jsonl',
     kind: 'validate',
@@ -63,8 +64,13 @@ test('trace per acre removal and acre addition in validation mode', async () => 
             confidence: 1,
             status: 'accepted',
             source: 'llm',
+            sources: ['llm', 'rx_rate'],
             validationStatus: 'unreviewed',
             originalLabel: 'Field_Area',
+            originalText: 'per acre',
+            originalStart: perAcreStart,
+            originalEnd: perAcreEnd,
+            originalSources: ['llm', 'rx_rate'],
           },
         ],
         originalEntities: [
@@ -76,6 +82,7 @@ test('trace per acre removal and acre addition in validation mode', async () => 
             end: perAcreEnd,
             confidence: 1,
             source: 'llm',
+            sources: ['llm', 'rx_rate'],
           },
         ],
         sourceRecord: {
@@ -94,7 +101,7 @@ test('trace per acre removal and acre addition in validation mode', async () => 
         },
       },
     ],
-  };
+  });
 
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
   Object.assign(global, {
@@ -109,20 +116,22 @@ test('trace per acre removal and acre addition in validation mode', async () => 
     IS_REACT_ACT_ENVIRONMENT: true,
   });
 
+  Document.findById = async () => validateDoc;
   let savedPayload = null;
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
     if (opts.method === 'PUT') {
-      savedPayload = JSON.parse(opts.body).entities;
-      console.log('PUT entities payload:', JSON.stringify(savedPayload, null, 2));
+      const body = JSON.parse(opts.body);
+      savedPayload = body.entities;
+      const res = await invoke(entityController.saveSegmentEntities, {
+        params: { id: 'v_peracre', segmentIndex: '0' },
+        query: { lean: '1' },
+        body,
+      });
       return {
         ok: true,
         status: 200,
-        json: async () => ({
-          ok: true,
-          savedEntities: savedPayload.map((e, idx) => ({ ...e, _id: e._id || `db_id_${idx}` })),
-          stats: {},
-        }),
+        json: async () => res.body,
       };
     }
     return { ok: true, status: 200, json: async () => ({}) };
@@ -142,8 +151,6 @@ test('trace per acre removal and acre addition in validation mode', async () => 
   await act(async () => {
     crossBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
-
-  console.log('After deleting per acre, spans on screen:', [...host.querySelectorAll('[data-caption]')].map(c => c.textContent.trim()));
 
   // 2. Select only "acre"
   const sentences = [...host.querySelectorAll('div')].filter((d) => d.className?.includes('font-serif'));
@@ -180,8 +187,6 @@ test('trace per acre removal and acre addition in validation mode', async () => 
     fieldAreaBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
-  console.log('After selecting acre as Field Area, captions on screen:', [...host.querySelectorAll('[data-caption]')].map(c => c.textContent.trim()));
-
   // 3. Click "Approve & Save All"
   const saveBtn = [...host.querySelectorAll('button')].find(
     (b) => b.textContent.includes('Approve & Save All') || b.textContent.includes('Save')
@@ -190,27 +195,56 @@ test('trace per acre removal and acre addition in validation mode', async () => 
     saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   });
 
-  // 4. Test exported records:
+  // 4. Verify database state (validateDoc.segments[0]):
+  const dbSeg = validateDoc.segments[0];
+  assert.equal(dbSeg.entities.length, 1, 'database entry was overwritten in-place (not duplicated)');
+  const dbEnt = dbSeg.entities[0];
+  assert.equal(dbEnt.text, 'acre', 'entity text in database became "acre"');
+  assert.equal(dbEnt.label, 'Field_Area', 'entity label is Field_Area');
+  assert.equal(dbEnt.start, acreStart);
+  assert.equal(dbEnt.end, acreEnd);
+  assert.equal(dbEnt.isManual, true, 'tagged as manual');
+  assert.deepEqual(dbEnt.sources, ['manual'], 'sources updated to ["manual"]');
+  assert.equal(dbEnt.source, 'human');
+
+  // Verify rejected annotation is saved on the entity and on the segment in DB:
+  assert.ok(dbEnt.rejectedAnnotation, 'rejectedAnnotation saved on the entity');
+  assert.equal(dbEnt.rejectedAnnotation.text, 'per acre', 'rejected text is "per acre"');
+  assert.equal(dbEnt.rejectedAnnotation.label, 'Field_Area');
+  assert.equal(dbEnt.rejectedAnnotation.start, perAcreStart);
+  assert.equal(dbEnt.rejectedAnnotation.end, perAcreEnd);
+  assert.deepEqual(dbEnt.rejectedAnnotation.sources, ['llm', 'rx_rate'], 'pipeline sources preserved');
+
+  assert.equal(dbSeg.rejectedAnnotations.length, 1, 'segment-level rejectedAnnotations log has 1 entry');
+  assert.equal(dbSeg.rejectedAnnotations[0].text, 'per acre');
+  assert.deepEqual(dbSeg.rejectedAnnotations[0].sources, ['llm', 'rx_rate']);
+
+  // 5. Test exported validated records:
   const finalDoc = mounted.getDoc();
-  console.log('Final doc segments entities:', JSON.stringify(finalDoc.segments[0].entities, null, 2));
-
   const { records } = buildValidatedRecords([finalDoc]);
-  console.log('Exported validated records entities:', JSON.stringify(records[0].entities, null, 2));
-
   const exportedEntities = records[0].entities;
-  const exportedPerAcre = exportedEntities.find((e) => e.text === 'per acre');
-  assert.ok(exportedPerAcre, 'per acre must be present in exported entities');
-  assert.equal(exportedPerAcre.validation?.status, 'rejected', 'per acre must be marked rejected');
+  assert.equal(exportedEntities.length, 1, 'exported entities list has 1 overwritten entry in-place');
 
-  const exportedAcre = exportedEntities.find((e) => e.text === 'acre');
-  assert.ok(exportedAcre, 'acre must be present in exported entities');
-  assert.equal(exportedAcre.validation?.status, 'added', 'acre must be marked added');
+  const exportedAcre = exportedEntities[0];
+  assert.equal(exportedAcre.text, 'acre', 'exported entity text is "acre"');
+  assert.equal(exportedAcre.type, 'Field_Area');
+  assert.equal(exportedAcre.start, acreStart);
+  assert.equal(exportedAcre.end, acreEnd);
+  assert.deepEqual(exportedAcre.sources, ['manual'], 'exported sources is ["manual"]');
+  assert.equal(exportedAcre.source, 'manual');
+  assert.ok(exportedAcre.rejected_annotation, 'exported entity includes rejected_annotation');
+  assert.equal(exportedAcre.rejected_annotation.text, 'per acre');
+  assert.deepEqual(exportedAcre.rejected_annotation.sources, ['llm', 'rx_rate']);
+  assert.equal(exportedAcre.validation?.status, 'relabelled');
+  assert.equal(exportedAcre.validation?.original_text, 'per acre');
+  assert.deepEqual(exportedAcre.validation?.original_sources, ['llm', 'rx_rate']);
 
-  // Verify annotated records export excludes the rejected span and keeps the added span
+  // 6. Verify annotated records export excludes the rejected span and keeps the overwritten "acre" span:
   const { records: annotatedRecords } = buildAnnotatedRecords([finalDoc]);
   const annotatedSpans = annotatedRecords[0].entities;
-  assert.ok(!annotatedSpans.some((e) => e.text === 'per acre'), 'per acre must not be in annotated export');
-  assert.ok(annotatedSpans.some((e) => e.text === 'acre'), 'acre must be in annotated export');
+  assert.equal(annotatedSpans.length, 1);
+  assert.equal(annotatedSpans[0].text, 'acre');
+  assert.equal(annotatedSpans[0].verified, true);
 
   mounted.unmount();
   dom.window.close();
