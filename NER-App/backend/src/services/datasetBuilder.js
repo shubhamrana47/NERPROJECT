@@ -484,11 +484,20 @@ function buildValidatedRecords(documents) {
                 candidate.validationStatus === 'added' ||
                 candidate.validationStatus === 'relabelled'
             );
-            if (overlappedOriginals.length === 1 && (isDecidedInactive || candidateIsManual)) {
+            if (overlappedOriginals.length >= 1 && (isDecidedInactive || candidateIsManual)) {
               decided = candidate;
               isSpanReplaced = true;
               consumedReplacementSpans.add(`${Number(candidate.start)}:${Number(candidate.end)}`);
             } else if (isDecidedInactive) {
+              decided = { validationStatus: 'rejected', status: 'deleted' };
+            }
+          } else {
+            // Check if this pipeline span was already subsumed by an earlier consumed replacement span
+            const subsumedByConsumed = [...consumedReplacementSpans].some((ck) => {
+              const [cs, ce] = ck.split(':').map(Number);
+              return cs < Number(orig.end) && ce > Number(orig.start) && (cs !== Number(orig.start) || ce !== Number(orig.end));
+            });
+            if (subsumedByConsumed) {
               decided = { validationStatus: 'rejected', status: 'deleted' };
             }
           }

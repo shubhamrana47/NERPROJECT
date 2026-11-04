@@ -327,7 +327,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
             if (claimedBaselineKeys.has(bKey)) return false;
             return ent.start < bEnd && ent.end > bStart && bKey !== exactKey;
           });
-          if (overlappingActiveBaselines.length === 1) {
+          if (overlappingActiveBaselines.length >= 1) {
             baseline = overlappingActiveBaselines[0];
             isSpanModifiedReplacement = true;
           }
