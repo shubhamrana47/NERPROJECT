@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const entitySchema = require('./Entity');
+const { rejectedAnnotationSchema } = entitySchema;
 
 /*
  * minimize is off here as well as on the parent: Mongoose strips empty objects
@@ -45,18 +46,7 @@ const segmentSchema = new mongoose.Schema({
   text: String,
   entities: [entitySchema],
   originalEntities: [entitySchema],
-  rejectedAnnotations: [
-    {
-      text: String,
-      label: String,
-      type: String,
-      start: Number,
-      end: Number,
-      sources: [String],
-      source: String,
-      confidence: Number,
-    },
-  ],
+  rejectedAnnotations: [rejectedAnnotationSchema],
 }, { minimize: false });
 
 module.exports = segmentSchema;

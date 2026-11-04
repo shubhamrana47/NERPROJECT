@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 
+const rejectedAnnotationSchema = new mongoose.Schema(
+  {
+    text: String,
+    label: String,
+    type: { type: String },
+    start: Number,
+    end: Number,
+    sources: [String],
+    source: String,
+    confidence: Number,
+  },
+  { _id: false }
+);
+
 const entitySchema = new mongoose.Schema({
   text: String,
   label: String,
@@ -42,16 +56,8 @@ const entitySchema = new mongoose.Schema({
   runnerUp: String,
   originalRunnerUp: String,
   isManual: { type: Boolean, default: false },
-  rejectedAnnotation: {
-    text: String,
-    label: String,
-    type: String,
-    start: Number,
-    end: Number,
-    sources: [String],
-    source: String,
-    confidence: Number,
-  },
+  rejectedAnnotation: { type: rejectedAnnotationSchema, default: undefined },
 });
 
 module.exports = entitySchema;
+module.exports.rejectedAnnotationSchema = rejectedAnnotationSchema;

@@ -56,7 +56,7 @@ test('removing "per acre" and manually annotating "acre" as Field_Area overwrite
         nerStatus: 'provided',
         entities: [
           {
-            _id: 'e_per_acre',
+            _id: '65f000000000000000000001',
             text: 'per acre',
             label: 'Field_Area',
             start: perAcreStart,
@@ -75,7 +75,7 @@ test('removing "per acre" and manually annotating "acre" as Field_Area overwrite
         ],
         originalEntities: [
           {
-            _id: 'e_per_acre',
+            _id: '65f000000000000000000001',
             text: 'per acre',
             label: 'Field_Area',
             start: perAcreStart,
@@ -246,6 +246,18 @@ test('removing "per acre" and manually annotating "acre" as Field_Area overwrite
   assert.equal(annotatedSpans[0].text, 'acre');
   assert.equal(annotatedSpans[0].verified, true);
 
-  mounted.unmount();
-  dom.window.close();
+  try {
+    // 7. Verify real Mongoose schema validation passes with rejectedAnnotation (object) and rejectedAnnotations (array of objects):
+    const mongooseDoc = new Document({
+      filename: validateDoc.filename || 'test.jsonl',
+      originalName: validateDoc.originalName || 'test.jsonl',
+      kind: validateDoc.kind,
+      segments: validateDoc.segments,
+    });
+    const validationErr = mongooseDoc.validateSync();
+    assert.equal(validationErr, undefined, `Mongoose schema validation must succeed without CastError, got: ${validationErr?.message}`);
+  } finally {
+    mounted.unmount();
+    dom.window.close();
+  }
 });
