@@ -45,6 +45,18 @@ const segmentSchema = new mongoose.Schema({
   text: String,
   entities: [entitySchema],
   originalEntities: [entitySchema],
+  rejectedAnnotations: [
+    {
+      text: String,
+      label: String,
+      type: String,
+      start: Number,
+      end: Number,
+      sources: [String],
+      source: String,
+      confidence: Number,
+    },
+  ],
 }, { minimize: false });
 
 module.exports = segmentSchema;
