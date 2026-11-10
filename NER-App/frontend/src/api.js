@@ -1,15 +1,11 @@
 import { summariseAnnotatedJsonl } from './utils/annotatedFile.js';
 
 function getApiBase() {
-  // 1. Explicit build-time or env setting
+  // 1. Explicit build-time setting (set VITE_API_URL on Vercel to the Render URL)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
-  // 2. Production fallback on Railway
-  if (typeof window !== 'undefined' && window.location.hostname.includes('railway.app')) {
-    return 'https://nerproject-production.up.railway.app';
-  }
-  // 3. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
+  // 2. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
   return '';
 }
 
@@ -25,7 +21,7 @@ async function req(url, opts) {
   } catch (err) {
     if (err.name === 'TypeError' || err.message.toLowerCase().includes('fetch')) {
       throw new Error(
-        `Unable to connect to backend (${url}). If the service is deploying or waking up on Railway, please wait a minute and retry.`
+        `Unable to reach the server (${url}). It may be waking up after being idle — wait about a minute and try again.`
       );
     }
     throw err;

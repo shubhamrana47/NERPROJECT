@@ -1,0 +1,25 @@
+# Render Blueprint: one web service = Node.js API + AgNER-BERTa model (Docker).
+# Render dashboard -> New -> Blueprint -> pick this repo.
+#
+# Plan & memory:
+#   - The model needs ~1.2 GB RAM, so ENABLE_AI=true requires plan "standard" (2 GB).
+#   - To run for free (manual annotation only), set plan: free and ENABLE_AI: "false".
+#     Flip ENABLE_AI back to "true" (and upgrade the plan) whenever you want the model.
+services:
+  - type: web
+    name: ner-backend
+    runtime: docker
+    plan: standard
+    rootDir: NER-App
+    dockerfilePath: ./NER-App/Dockerfile
+    dockerContext: ./NER-App
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URI
+        sync: false # paste in the dashboard; never committed
+      - key: ENABLE_AI
+        value: "true"
+      - key: CONFIDENCE_THRESHOLD
+        value: "0.75"
+      - key: TORCH_THREADS
+        value: "1"

@@ -6,7 +6,7 @@
 const Document = require('../models/Document');
 const { CANONICAL_TYPES, normalizeLabel } = require('../utils/exportUtils');
 const { parseDocument } = require('../services/jsonParser');
-const { computeStats } = require('../services/nerService');
+const { computeStats, isAiEnabled } = require('../services/nerService');
 
 const VALIDATION_STATUSES = ['unreviewed', 'confirmed', 'rejected', 'relabelled', 'added'];
 
@@ -242,7 +242,8 @@ exports.upload = async (req, res, next) => {
     const parsed = parseDocument(json);
     if (!parsed.length) return res.status(400).json({ error: 'No text found in JSON or JSONL file' });
 
-    const skipNer = req.query.skipNer === 'true' || req.body.skipNer === 'true';
+    const skipNer =
+      !isAiEnabled() || req.query.skipNer === 'true' || req.body.skipNer === 'true';
 
     /*
      * Which workflow this file belongs to is decided here, from the file's own
