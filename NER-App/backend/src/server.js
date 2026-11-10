@@ -12,9 +12,29 @@ const app = express();
 // Trust reverse proxies (Railway, Cloudflare, etc.)
 app.set('trust proxy', 1);
 
+// Explicit allowed origins whitelist including Vercel production and local environments
+const ALLOWED_ORIGINS = [
+  'https://nerproject.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5000',
+];
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true; // Allow curl, mobile apps, server-to-server or same-origin
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Allow all Vercel preview deployments (e.g. https://nerproject-git-main-xxx.vercel.app)
+  if (origin.endsWith('.vercel.app')) return true;
+  return true; // Fallback to allow any origin
+};
+
 // Permissive and explicit CORS configuration
 const corsOptions = {
-  origin: true, // Echoes the request origin (supports https://nerproject-production-e534.up.railway.app, localhost, etc.)
+  origin: (origin, callback) => {
+    callback(null, isOriginAllowed(origin) ? origin : false);
+  },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
@@ -36,8 +56,12 @@ app.options('*', cors(corsOptions));
 
 // Explicit header fallback middleware for every response (guarantees headers even on errors)
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '*';
-  res.header('Access-Control-Allow-Origin', origin);
+  const origin = req.headers.origin;
+  if (origin && isOriginAllowed(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
   res.header('Access-Control-Allow-Credentials', 'true');
