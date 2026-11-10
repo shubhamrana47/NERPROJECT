@@ -8,7 +8,7 @@
  */
 
 const Document = require('../models/Document');
-const { runNER, routeEntity, computeStats } = require('../services/nerService');
+const { runNER, routeEntity, computeStats, isAiEnabled } = require('../services/nerService');
 
 // A window is a handful of passages; this only bounds a careless caller.
 const MAX_PER_REQUEST = 25;
@@ -88,6 +88,21 @@ exports.predictSegments = async (req, res, next) => {
         ok: true,
         predicted: [],
         adopted,
+        stats: doc.stats,
+        pending: countPending(doc),
+      });
+    }
+
+    // Manual-only deployment: no model to ask, so open these passages for
+    // annotation from scratch instead of reporting an outage on every move.
+    if (!isAiEnabled()) {
+      targets.forEach((seg) => {
+        seg.nerStatus = 'skipped';
+      });
+      await doc.save();
+      return res.json({
+        ok: true,
+        predicted: targets.map((seg) => ({ index: seg.index, nerStatus: 'skipped', entities: [] })),
         stats: doc.stats,
         pending: countPending(doc),
       });

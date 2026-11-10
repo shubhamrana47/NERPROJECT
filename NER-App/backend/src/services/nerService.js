@@ -52,4 +52,13 @@ function computeStats(segments) {
   };
 }
 
-module.exports = { runNER, routeEntity, computeStats };
+/**
+ * The model is optional. With no AI_SERVICE_URL set (e.g. a manual-annotation
+ * deployment on Render), passages are opened for annotation from scratch and
+ * the model is never called.
+ */
+function isAiEnabled() {
+  return Boolean((process.env.AI_SERVICE_URL || '').trim());
+}
+
+module.exports = { runNER, routeEntity, computeStats, isAiEnabled };

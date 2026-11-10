@@ -1,0 +1,20 @@
+# Build context for the combined Render image (NER-App/Dockerfile).
+# Keep secrets, local installs and large unused files out of the image.
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/__pycache__
+**/*.pyc
+.git
+.gitignore
+
+# Not needed in the backend image
+frontend/
+test/
+python-ai-service/scratch/
+*.md
+paper_text.txt
+search_paper.py
+sample.json
+docker-compose.yml
