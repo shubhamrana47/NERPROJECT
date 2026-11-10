@@ -1,11 +1,15 @@
 import { summariseAnnotatedJsonl } from './utils/annotatedFile.js';
 
 function getApiBase() {
-  // 1. Explicit build-time setting (set VITE_API_URL on Vercel to the Render URL)
+  // 1. Explicit build-time or environment setting
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
-  // 2. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
+  // 2. Production fallback on Vercel: default directly to Render backend
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://ner-backend-hfgn.onrender.com';
+  }
+  // 3. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
   return '';
 }
 

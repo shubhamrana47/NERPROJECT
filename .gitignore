@@ -26,6 +26,8 @@ dist/
 .env
 .env.*
 !.env.example
+!frontend/.env.production
+!NER-App/frontend/.env.production
 
 # Scratch and Temp
 python-ai-service/scratch/
