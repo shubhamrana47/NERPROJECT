@@ -1,7 +1,9 @@
+require('dotenv').config();
 const dns = require('dns');
 
-dns.setServers(['8.8.8.8', '8.8.4.4']);
-require('dotenv').config();
+if (process.env.DNS_SERVERS) {
+  dns.setServers(process.env.DNS_SERVERS.split(',').map((s) => s.trim()));
+}
 
 const express = require('express');
 const cors = require('cors');
@@ -117,11 +119,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 
   // Connect to MongoDB after the HTTP server starts
-  connectDB()
-    .then(() => console.log('MongoDB connected'))
-    .catch((err) => {
-      console.error('MongoDB connection failed:', err.message);
-    });
+  connectDB().catch((err) => {
+    console.error('MongoDB connection failed:', err.message);
+  });
 });
 
 // Log unexpected server errors
