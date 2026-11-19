@@ -1248,7 +1248,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
         {viewMode === 'focus' ? (
           totalPassages > 0 && passage ? (
-            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_22rem] lg:grid-cols-[20rem_1fr_26rem] xl:grid-cols-[20rem_1fr_28rem] lg:gap-7">
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_24rem] lg:grid-cols-[19rem_1fr_30rem] xl:grid-cols-[19rem_1fr_34rem] lg:gap-7">
               {/* The span list sits to the left of the text it describes. */}
               <aside className="order-2 flex flex-col gap-4 md:order-none lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-6rem)]">
                 <div className="min-h-0 flex-1">

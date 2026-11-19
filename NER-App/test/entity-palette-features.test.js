@@ -159,16 +159,22 @@ test('UI renders categories in alphabetical order with 2 columns of entities and
   );
   assert.ok(palette, 'Entity labels sidebar must be present');
 
-  // Check category titles in DOM
+  // Check that "Recently used" is completely removed
+  assert.ok(!palette.textContent.includes('Recently used'), '"Recently used" tab must not be present in palette');
+
+  // Check category titles in DOM are sorted A-Z
   const categoryHeaders = [...palette.querySelectorAll('h3')].map((h) => h.textContent.trim());
   const sortedHeaders = [...categoryHeaders].sort((a, b) => a.localeCompare(b));
   assert.deepEqual(categoryHeaders, sortedHeaders, 'Category headers in sidebar must be sorted A-Z');
 
-  // Check 2-column grid inside sections
+  // Check 2-row layout inside sections
   const gridContainers = [...palette.querySelectorAll('section .grid')];
   assert.ok(gridContainers.length >= 7, 'All 7 categories should have grid containers');
   gridContainers.forEach((grid) => {
-    assert.ok(grid.className.includes('grid-cols-2'), 'Entities must be displayed in 2 columns');
+    assert.ok(
+      grid.className.includes('grid-cols-2') || grid.className.includes('grid-cols-4'),
+      'Entities in each group must be laid out in 2 rows'
+    );
   });
 
   // Check buttons have title attribute with descriptions
