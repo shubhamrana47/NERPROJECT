@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Trash2, X, Sparkles, HelpCircle, Info } from 'lucide-react';
+import { Search, Trash2, X } from 'lucide-react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import {
   ENTITY_TYPES,
@@ -12,10 +12,14 @@ import {
 } from '../utils/textUtils.jsx';
 
 /**
- * Compact entity button with swatch, label name, shortcut key, and count.
- * Displays description on hover.
+ * Entity card component matching Image 2:
+ * - Colored horizontal bar at top-left
+ * - Shortcut key badge at top-right (if available)
+ * - Formatted label name
+ * - Usage count
+ * - Dark floating tooltip on hover with `→ <description>`
  */
-function LabelButton({ type, count, shortcut, armed, onPick, onHover }) {
+function EntityCard({ type, count, shortcut, armed, onPick, onHover }) {
   const { border } = getEntityColorStyle(type);
   const formatted = formatEntityLabel(type);
   const desc = ENTITY_DESCRIPTIONS[type] || '';
@@ -33,32 +37,32 @@ function LabelButton({ type, count, shortcut, armed, onPick, onHover }) {
         })
       }
       onMouseLeave={() => onHover?.(null)}
-      className={`group relative flex items-center justify-between gap-1 rounded border px-1.5 py-1 text-left transition-all ${
+      className={`group relative flex flex-col justify-between rounded-lg border p-2 text-left transition-all ${
         armed
-          ? 'border-rule hover:border-ink hover:bg-paper hover:shadow-xs'
-          : 'border-rule/80 bg-sheet hover:border-rule-strong hover:bg-paper'
+          ? 'border-slate-300 bg-white hover:border-slate-900 hover:shadow-xs'
+          : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
       }`}
       title={`${formatted}: ${desc}`}
     >
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="flex items-center justify-between gap-1 w-full">
         <span
-          className="h-2 w-2 shrink-0 rounded-full"
+          className="h-[3px] w-3.5 shrink-0 rounded-full"
           style={{ backgroundColor: border }}
           aria-hidden="true"
         />
-        <span className="truncate text-[11px] font-medium text-ink group-hover:text-ink">
-          {formatted}
-        </span>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-0.5">
         {shortcut && (
-          <span className="rounded border border-rule bg-paper px-1 py-px font-mono text-[9px] font-semibold text-ink-soft">
+          <span className="rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[10px] font-medium text-slate-600">
             {shortcut}
           </span>
         )}
+      </div>
+
+      <div className="mt-1 flex items-baseline justify-between gap-1 w-full">
+        <span className="truncate text-[12px] font-medium text-slate-800 group-hover:text-black">
+          {formatted}
+        </span>
         {count > 0 && (
-          <span className="font-mono text-[9.5px] tabular-nums text-ink-faint">
+          <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-slate-500">
             {count.toLocaleString()}
           </span>
         )}
@@ -152,6 +156,10 @@ export default function EntityPaletteSidebar({
       }));
   }, []);
 
+  // Split categories into 2 main columns (Left: 4 categories, Right: 3 categories)
+  const leftColumnCategories = useMemo(() => sortedCategories.slice(0, 4), [sortedCategories]);
+  const rightColumnCategories = useMemo(() => sortedCategories.slice(4), [sortedCategories]);
+
   const armed = Boolean(selectedSpan);
 
   const handlePick = (type) => {
@@ -191,271 +199,131 @@ export default function EntityPaletteSidebar({
       : '—';
 
   return (
-    <div className="relative flex max-h-[42rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet md:h-full md:max-h-none">
-      {/* Floating Hover Description Tooltip Card */}
+    <div className="relative flex max-h-[46rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet md:h-full md:max-h-none">
+      {/* Dark Hover Tooltip Card matching Image 2 */}
       {hoveredEntity && (
         <div
           role="tooltip"
-          className="pointer-events-none fixed z-50 max-w-[300px] rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-white shadow-2xl backdrop-blur-md transition-opacity duration-150"
+          className="pointer-events-none fixed z-50 max-w-[280px] rounded-md border border-neutral-800 bg-[#222222] px-3 py-2 text-white shadow-2xl backdrop-blur-md transition-opacity duration-150"
           style={{
-            left: Math.max(12, Math.min(window.innerWidth - 320, (hoveredEntity.rect?.left ?? 20) - 10)),
+            left: Math.max(12, Math.min(window.innerWidth - 300, (hoveredEntity.rect?.left ?? 20))),
             top:
-              hoveredEntity.rect && hoveredEntity.rect.top > 150
-                ? hoveredEntity.rect.top - 8
-                : (hoveredEntity.rect?.bottom ?? 100) + 8,
-            transform: hoveredEntity.rect && hoveredEntity.rect.top > 150 ? 'translateY(-100%)' : 'translateY(0)',
+              hoveredEntity.rect && hoveredEntity.rect.top > 120
+                ? hoveredEntity.rect.top - 6
+                : (hoveredEntity.rect?.bottom ?? 100) + 6,
+            transform: hoveredEntity.rect && hoveredEntity.rect.top > 120 ? 'translateY(-100%)' : 'translateY(0)',
           }}
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: getEntityColorStyle(hoveredEntity.type).border }}
-            />
-            <span className="font-semibold text-[13px] text-white">
-              {hoveredEntity.label}
-            </span>
-            {shortcutMap[hoveredEntity.type] && (
-              <span className="ml-auto rounded border border-slate-700 bg-slate-800 px-1.5 py-px font-mono text-[10px] font-semibold text-amber-400">
-                Key {shortcutMap[hoveredEntity.type]}
-              </span>
-            )}
+          <div className="flex items-start gap-2 text-[12px] leading-snug">
+            <span className="text-white font-bold opacity-80 select-none">→</span>
+            <span>{hoveredEntity.desc}</span>
           </div>
-          <p className="mt-1.5 text-[11.5px] leading-relaxed text-slate-200">
-            {hoveredEntity.desc}
-          </p>
         </div>
       )}
 
-      {/* Fixed Header: Title & Search (No Recently Used tab!) */}
-      <div className="shrink-0 border-b border-rule px-3 pb-2 pt-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <h2 className="text-[13.5px] font-semibold text-ink">Entity labels</h2>
-            <span className="rounded bg-paper px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-ink-faint">
-              {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : `${ENTITY_TYPES.length} total`}
-            </span>
-          </div>
-
-          {/* Compact Search input */}
-          <div className="relative w-44">
-            <Search className="pointer-events-none absolute left-2 top-[7px] h-3 w-3 text-ink-faint" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search labels [/]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && selectedSpan && matches?.length) {
-                  handlePick(matches[0]);
-                }
-              }}
-              className="w-full rounded border border-rule bg-paper py-1 pl-6 pr-6 text-[11.5px] text-ink placeholder:text-ink-faint focus:border-ink focus:bg-sheet focus:outline-none"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-1.5 top-1.5 text-ink-faint transition hover:text-ink"
-                title="Clear search"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+      {/* Header: Title, Instructions & Search */}
+      <div className="shrink-0 border-b border-rule px-4 pb-3 pt-3.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-bold text-ink">Entity labels</h2>
+          <span className="font-mono text-[12px] text-ink-faint">
+            {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : ENTITY_TYPES.length}
+          </span>
         </div>
 
-        {/* Live Selection State & Top 5 Earlier Predictions */}
-        {selectedSpan ? (
-          <div className="mt-2 rounded border-l-2 border-hand bg-paper p-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-hand">
-                  Selected text to annotate
-                </span>
-                <p className="truncate font-serif text-[14.5px] font-medium leading-tight text-ink">
-                  “{selectedSpan.text}”
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="shrink-0 rounded border border-rule bg-sheet px-2 py-0.5 text-[11px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
-              >
-                Clear
-              </button>
-            </div>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
+          Click an entity in the passage to put it in focus, then pick a label here to correct it. To add one the pipeline missed, select the words first.
+        </p>
 
-            {/* Top at most 5 predictions based on earlier annotations of this text */}
-            <div className="mt-1.5 border-t border-rule/70 pt-1.5">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-ink">
-                  <Sparkles className="h-3 w-3 text-hand" />
-                  {topPredictions.length > 0
-                    ? `Earlier annotations (top ${topPredictions.length}):`
-                    : 'Earlier annotations:'}
-                </span>
-                {topPredictions.length > 0 && (
-                  <span className="text-[9.5px] text-ink-faint">
-                    Click to apply
-                  </span>
-                )}
-              </div>
-
-              {topPredictions.length > 0 ? (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {topPredictions.map((pred) => {
-                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
-                    const shortcut = shortcutMap[pred.label];
-                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
-                    return (
-                      <button
-                        key={pred.label}
-                        type="button"
-                        onClick={() => handlePick(pred.label)}
-                        onMouseEnter={(e) =>
-                          setHoveredEntity({
-                            type: pred.label,
-                            label: formatEntityLabel(pred.label),
-                            desc,
-                            rect: e.currentTarget.getBoundingClientRect(),
-                          })
-                        }
-                        onMouseLeave={() => setHoveredEntity(null)}
-                        className="group flex items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] font-medium transition hover:scale-[1.02] hover:shadow-xs"
-                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
-                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x earlier · ${pred.percentage}%)`}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ backgroundColor: border }}
-                        />
-                        <span className="font-semibold">{formatEntityLabel(pred.label)}</span>
-                        <span className="rounded bg-black/10 px-1 py-px font-mono text-[9px] tabular-nums opacity-90">
-                          {pred.count}× ({pred.percentage}%)
-                        </span>
-                        {shortcut && (
-                          <span className="font-mono text-[9px] opacity-75">
-                            [{shortcut}]
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-0.5 text-[10.5px] text-ink-faint">
-                  First appearance. Pick any label from the 2-row categories below.
-                </p>
-              )}
-            </div>
-          </div>
-        ) : isValidation && (focusedSpan || activeEditingEntity) ? (
-          <div className="mt-2 rounded border-l-2 border-hand bg-paper p-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-hand">
-                  Focused entity
-                </span>
-                <p className="font-serif text-[14px] font-medium text-ink">
-                  “{(focusedSpan || activeEditingEntity).text}”
-                </p>
-                <p className="text-[11px] text-ink-soft">
-                  Tagged{' '}
-                  <span className="font-semibold text-ink">
-                    {formatEntityLabel((focusedSpan || activeEditingEntity).label)}
-                  </span>
-                  . Pick a different label below to correct it.
-                </p>
-              </div>
-            </div>
-
-            {/* Earlier predictions for focused entity */}
-            {topPredictions.length > 0 && (
-              <div className="mt-1.5 border-t border-rule/70 pt-1">
-                <div className="flex items-center gap-1 text-[10.5px] font-medium text-ink">
-                  <Sparkles className="h-2.5 w-2.5 text-hand" />
-                  <span>Earlier annotations:</span>
-                </div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {topPredictions.map((pred) => {
-                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
-                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
-                    return (
-                      <button
-                        key={pred.label}
-                        type="button"
-                        onClick={() => handlePick(pred.label)}
-                        onMouseEnter={(e) =>
-                          setHoveredEntity({
-                            type: pred.label,
-                            label: formatEntityLabel(pred.label),
-                            desc,
-                            rect: e.currentTarget.getBoundingClientRect(),
-                          })
-                        }
-                        onMouseLeave={() => setHoveredEntity(null)}
-                        className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] font-medium transition hover:shadow-xs"
-                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
-                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x)`}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ backgroundColor: border }}
-                        />
-                        <span>{formatEntityLabel(pred.label)}</span>
-                        <span className="font-mono text-[8.5px] opacity-75">{pred.count}×</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : activeEditingEntity ? (
-          <div className="mt-2 rounded border-l-2 border-ink bg-paper px-2.5 py-2">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 flex-1 truncate font-serif text-[14px] font-medium text-ink">
-                “{activeEditingEntity.text}”
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveEditingEntity(null)}
-                className="text-[11px] text-ink-faint transition hover:text-ink"
-              >
-                Done
-              </button>
-            </div>
-            <label className="mt-1.5 block text-[11px] text-ink-soft">
-              Change label
-              <select
-                value={activeEditingEntity.label}
-                onChange={(e) => {
-                  updateEntity(activeEditingEntity, { label: e.target.value });
-                  setActiveEditingEntity((prev) => ({ ...prev, label: e.target.value }));
-                }}
-                className="mt-1 w-full rounded border border-rule bg-sheet px-2 py-1 text-[12px] text-ink focus:border-ink focus:outline-none"
-              >
-                {ENTITY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {formatEntityLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </label>
+        {/* Search input with / shortcut */}
+        <div className="relative mt-2.5">
+          <Search className="pointer-events-none absolute left-3 top-[10px] h-3.5 w-3.5 text-ink-faint" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder={`Search all ${ENTITY_TYPES.length} labels`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && selectedSpan && matches?.length) {
+                handlePick(matches[0]);
+              }
+            }}
+            className="w-full rounded-md border border-rule bg-paper py-1.5 pl-8 pr-7 text-[13px] text-ink placeholder:text-ink-faint focus:border-ink focus:bg-sheet focus:outline-none"
+          />
+          {search ? (
             <button
               type="button"
-              onClick={() => {
-                deleteEntity(activeEditingEntity);
-                setActiveEditingEntity(null);
-              }}
-              className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-rule bg-sheet px-2 py-1 text-[11.5px] text-hand transition hover:border-hand/50"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-2 text-ink-faint transition hover:text-ink"
+              title="Clear search"
             >
-              <Trash2 className="h-3 w-3" />
-              Remove span
+              <X className="h-3.5 w-3.5" />
             </button>
+          ) : (
+            <span className="pointer-events-none absolute right-2.5 top-1.5 rounded border border-rule bg-sheet px-1.5 font-mono text-[10.5px] text-ink-faint">
+              /
+            </span>
+          )}
+        </div>
+
+        {/* "Suggested for selected text" card matching Image 2 */}
+        {(selectedSpan || (isValidation && focusedSpan)) && (
+          <div className="mt-2.5 rounded-lg border border-blue-200 bg-[#e8f1fd] p-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-medium text-slate-800">
+                Suggested for selected text
+              </span>
+              {selectedSpan && (
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-[11px] text-slate-500 transition hover:text-slate-800"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {topPredictions.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {topPredictions.map((pred) => {
+                  const { border } = getEntityColorStyle(pred.label);
+                  const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
+                  return (
+                    <button
+                      key={pred.label}
+                      type="button"
+                      onClick={() => handlePick(pred.label)}
+                      onMouseEnter={(e) =>
+                        setHoveredEntity({
+                          type: pred.label,
+                          label: formatEntityLabel(pred.label),
+                          desc,
+                          rect: e.currentTarget.getBoundingClientRect(),
+                        })
+                      }
+                      onMouseLeave={() => setHoveredEntity(null)}
+                      className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-800 shadow-2xs transition hover:border-slate-500 hover:bg-slate-50"
+                      title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.percentage}%)`}
+                    >
+                      <span
+                        className="h-[2.5px] w-3 rounded-full"
+                        style={{ backgroundColor: border }}
+                      />
+                      <span>
+                        {formatEntityLabel(pred.label)} ({pred.percentage}%)
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-600">
+                Pick a label from the categories below to annotate “{selectedSpan?.text || focusedSpan?.text}”.
+              </p>
+            )}
           </div>
-        ) : null}
+        )}
 
         {justTagged && (
           <p className="mark-in mt-1.5 truncate text-[11.5px] font-medium text-hand" title={justTagged}>
@@ -467,22 +335,17 @@ export default function EntityPaletteSidebar({
         )}
       </div>
 
-      {/* Entity Groups and their entities in 2 rows, in alphabetical order, all visible at a time:
-          - Categories sorted in A-Z order
-          - Each category renders its entities in exactly 2 rows (2 cols for <=4 items, 4 cols for >4 items)
-          - Within each category, entities are in A-Z alphabetical order
-          - Hovering on any entity displays its description
-      */}
-      <div className="scroll-slim flex-1 overflow-y-auto px-2 py-1.5">
+      {/* The 2-Column Categories and Cards Layout matching Image 2 */}
+      <div className="scroll-slim flex-1 overflow-y-auto p-3">
         {matches ? (
           matches.length > 0 ? (
-            <div className="py-1">
-              <div className="mb-1 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-faint">
+            <div>
+              <div className="mb-2 text-[12px] font-semibold text-slate-700">
                 Search Results ({matches.length})
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+              <div className="grid grid-cols-2 gap-2">
                 {matches.map((type) => (
-                  <LabelButton
+                  <EntityCard
                     key={type}
                     type={type}
                     count={entityCounts[type] || 0}
@@ -495,82 +358,83 @@ export default function EntityPaletteSidebar({
               </div>
             </div>
           ) : (
-            <p className="px-2.5 py-4 text-[12px] text-ink-faint">
-              No label matches “{search}”. Clear search to view all {ENTITY_TYPES.length}.
+            <p className="py-6 text-center text-[12.5px] text-ink-faint">
+              No label matches “{search}”.
             </p>
           )
         ) : (
-          sortedCategories.map((group) => {
-            const isLargeGroup = group.types.length > 4;
-            return (
-              <section key={group.name} className="mb-1.5 last:mb-0">
-                {/* Category Header */}
-                <div className="flex items-center justify-between border-b border-rule/60 bg-sheet/95 px-1.5 py-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[11px] opacity-80" aria-hidden="true">
-                      {group.icon}
-                    </span>
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink">
-                      {group.name}
-                    </h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* Left Column Categories */}
+            <div className="space-y-4">
+              {leftColumnCategories.map((group) => (
+                <section key={group.name}>
+                  <h3 className="mb-1.5 text-[12.5px] font-medium text-slate-800">
+                    {group.name}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.types.map((type) => (
+                      <EntityCard
+                        key={type}
+                        type={type}
+                        count={entityCounts[type] || 0}
+                        shortcut={shortcutMap[type]}
+                        armed={armed}
+                        onPick={handlePick}
+                        onHover={setHoveredEntity}
+                      />
+                    ))}
                   </div>
-                  <span className="font-mono text-[9.5px] text-ink-faint">
-                    {group.types.length}
-                  </span>
-                </div>
+                </section>
+              ))}
+            </div>
 
-                {/* Entities arranged in 2 rows:
-                    - Groups with <=4 entities use 2 columns = 2 rows
-                    - Groups with >4 entities use 4 columns = 2 rows
-                */}
-                <div
-                  className={`grid gap-1 px-0.5 pt-1 ${
-                    isLargeGroup ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'
-                  }`}
-                >
-                  {group.types.map((type) => (
-                    <LabelButton
-                      key={type}
-                      type={type}
-                      count={entityCounts[type] || 0}
-                      shortcut={shortcutMap[type]}
-                      armed={armed}
-                      onPick={handlePick}
-                      onHover={setHoveredEntity}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })
-        )}
-      </div>
-
-      {/* Description Status Bar on Hover + Model vs Human Counts */}
-      <div className="shrink-0 border-t border-rule bg-paper/80 px-3 py-1.5 text-[11px]">
-        {/* Dynamic description bar on hover */}
-        {hoveredEntity ? (
-          <div className="flex items-center gap-1.5 text-ink transition-opacity">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: getEntityColorStyle(hoveredEntity.type).border }}
-            />
-            <span className="font-semibold text-ink">{hoveredEntity.label}:</span>
-            <span className="truncate text-ink-soft">{hoveredEntity.desc}</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between text-ink-faint">
-            <span className="flex items-center gap-1 text-[10.5px]">
-              <Info className="h-3 w-3" />
-              Hover on any entity name to read its description
-            </span>
-            <div className="flex items-center gap-3 font-mono text-[10.5px] tabular-nums">
-              <span>Model: <strong className="font-medium text-machine">{modelSpans}</strong></span>
-              <span>Added: <strong className="font-medium text-hand">{manualSpans}</strong></span>
-              <span>Conf: <strong className="font-medium text-ink">{confidenceLabel}</strong></span>
+            {/* Right Column Categories */}
+            <div className="space-y-4">
+              {rightColumnCategories.map((group) => (
+                <section key={group.name}>
+                  <h3 className="mb-1.5 text-[12.5px] font-medium text-slate-800">
+                    {group.name}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.types.map((type) => (
+                      <EntityCard
+                        key={type}
+                        type={type}
+                        count={entityCounts[type] || 0}
+                        shortcut={shortcutMap[type]}
+                        armed={armed}
+                        onPick={handlePick}
+                        onHover={setHoveredEntity}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         )}
+      </div>
+
+      {/* Fixed Footer matching Image 2 */}
+      <div className="shrink-0 border-t border-rule bg-sheet px-4 py-3 text-[12.5px]">
+        <div className="flex items-baseline justify-between gap-3 py-0.5">
+          <span className="flex items-center gap-2 text-ink-soft">
+            <span className="inline-block h-0 w-4 border-b-2 border-solid border-blue-600" />
+            Model found
+          </span>
+          <span className="font-mono text-[13px] tabular-nums text-blue-600 font-medium">
+            {modelSpans}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between gap-3 py-0.5">
+          <span className="flex items-center gap-2 text-ink-soft">
+            <span className="inline-block h-0 w-4 border-b-2 border-dashed border-red-500" />
+            You added
+          </span>
+          <span className="font-mono text-[13px] tabular-nums text-red-500 font-medium">
+            {manualSpans}
+          </span>
+        </div>
       </div>
     </div>
   );
