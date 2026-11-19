@@ -7,7 +7,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { ENTITY_TYPES, ENTITY_SHORTCUTS } from '../utils/textUtils.jsx';
+import { ENTITY_TYPES, ENTITY_SHORTCUTS, recordAnnotationHistory } from '../utils/textUtils.jsx';
 import {
   addRecentLabel,
   mergeQuickLabels,
@@ -66,6 +66,7 @@ export function AnnotationProvider({ children }) {
        * with nothing selected does a label mean "correct the entity in focus".
        */
       if (selectedSpan && annotatorRef.current?.onAddEntity) {
+        recordAnnotationHistory(selectedSpan.text, label);
         annotatorRef.current.onAddEntity({
           text: selectedSpan.text,
           label,

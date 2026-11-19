@@ -1,72 +1,87 @@
-# Dual-Environment (Local & Railway Production) Guide for AgNER Full-Stack Project
+# Railway Deployment Guide (2-Service Architecture)
 
-This guide covers testing the full stack **locally on your machine** and deploying to **Railway.app** using the 2-service architecture within the free tier.
+This project is configured for **Railway.app** using two services in the same Railway project:
+1. **`ner-backend`** — Unified container running the **Node.js Express Backend API** (`$PORT`) + **Python FastAPI AgNER-BERTa NER Model** (`127.0.0.1:8000` internal).
+2. **`ner-frontend`** — **React + Vite UI** served by Nginx (`$PORT`), communicating with `ner-backend`.
+
+```text
+Browser ──> ner-frontend (Nginx + React UI, Root: NER-App/frontend)
+               │  VITE_API_URL
+               ▼
+            ner-backend (Docker, Root: NER-App)
+               ├─ Node.js Express API   :$PORT (public)
+               └─ AgNER-BERTa FastAPI   127.0.0.1:8000 (internal)
+               │
+               ▼
+            MongoDB Atlas
+```
 
 ---
 
 ## Production URLs on Railway
-- **Backend Service (API + AI Service)**: `https://nerproject-production.up.railway.app/`
-- **Frontend Service (React UI)**: `https://nerproject-production-e534.up.railway.app/`
+- **Backend Service (`ner-backend` — API + AI Model)**: `https://ner-backend-production-f72a300d.up.railway.app`
+- **Frontend Service (`ner-frontend` — React UI)**: `https://nerproject-production-aa1bd093.up.railway.app`
 
 ---
 
-## Part 1: How to Test Locally on Your Machine
+## Step 1: Deploy Service 1 — `ner-backend` (Backend + NER Model)
 
-You can run and test the complete stack locally using Node.js and Python.
+1. In your Railway Project, click **+ New** → **GitHub Repo** → select `shubhamrana47/NERPROJECT`.
+2. Click on the new service → **Settings**:
+   - **Service Name**: `ner-backend`
+   - **Root Directory**: `./NER-App`
+   - **Builder**: `Dockerfile` (`Dockerfile` inside `./NER-App`)
+   - **Watch Paths** *(so only Backend + NER Model changes trigger `ner-backend`, NOT `frontend`)*:
+     - `/NER-App/backend/**`
+     - `/NER-App/python-ai-service/**`
+     - `/NER-App/Dockerfile`
+     - `/NER-App/start.sh`
+   - **Healthcheck Path**: `/health` (timeout `300s`)
+3. Go to the **Variables** tab of `ner-backend` and add:
+   ```env
+   PORT=5000
+   MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/ner_annotation?retryWrites=true&w=majority
+   ENABLE_AI=true
+   CONFIDENCE_THRESHOLD=0.75
+   TORCH_THREADS=1
+   ```
+   *(Note: Ensure `0.0.0.0/0` is allowed under **Network Access** in MongoDB Atlas so Railway can connect.)*
+4. Go to **Settings** → **Networking**:
+   - **Public Domain**: `https://ner-backend-production-f72a300d.up.railway.app` (Target Port: `5000`)
+5. Once deployed, open `https://ner-backend-production-f72a300d.up.railway.app/health` and verify it returns:
+   ```json
+   {"status":"ok","service":"ner-backend","aiEnabled":true}
+   ```
 
-### Option A: Run all services with one command
-In a terminal at `C:\Users\Shubham Rana\Desktop\NERPROJECT\NER-App`:
+---
+
+## Step 2: Deploy Service 2 — `ner-frontend` (React UI)
+
+1. In the **same** Railway Project, click **+ New** → **GitHub Repo** → select `shubhamrana47/NERPROJECT` again.
+2. Click on this second service → **Settings**:
+   - **Service Name**: `ner-frontend`
+   - **Root Directory**: `./NER-App/frontend`
+   - **Builder**: `Dockerfile` (`Dockerfile` inside `./NER-App/frontend`)
+   - **Watch Paths** *(so only Frontend changes trigger `ner-frontend`)*:
+     - `/NER-App/frontend/**`
+3. Go to the **Variables** tab of `ner-frontend` and add:
+   ```env
+   PORT=80
+   VITE_API_URL=https://ner-backend-production-f72a300d.up.railway.app
+   ```
+   *(Or `VITE_API_URL=https://${{ner-backend.RAILWAY_PUBLIC_DOMAIN}}`)*
+4. Go to **Settings** → **Networking** → click **Generate Domain** (Target Port: `80`).
+
+---
+
+## Local Development
+
+You can still run all three components locally from `NER-App`:
+
 ```bash
+cd NER-App
 npm run dev:all
 ```
-This simultaneously starts:
-1. **Python AI Service**: `http://127.0.0.1:8000` (FastAPI + PyTorch)
-2. **Backend API**: `http://localhost:5000` (Express + MongoDB)
-3. **Frontend UI**: `http://localhost:5173` (Vite dev server)
-
-Open `http://localhost:5173` in your browser to interact with the app locally!
-
-### Option B: Run each service in separate terminal tabs
-- **Terminal 1 (Python AI Service)**:
-  ```bash
-  cd NER-App/python-ai-service
-  python -m uvicorn app:app --port 8000
-  ```
-- **Terminal 2 (Backend)**:
-  ```bash
-  cd NER-App/backend
-  npm run dev
-  ```
-- **Terminal 3 (Frontend)**:
-  ```bash
-  cd NER-App/frontend
-  npm run dev
-  ```
-
----
-
-## Part 2: Production Deployment on Railway
-
-The codebase is engineered with dual-compatibility:
-- In local development (`npm run dev`), the frontend automatically calls `/api/...`, which Vite proxies to `http://127.0.0.1:5000`.
-- In production (`https://nerproject-production-e534.up.railway.app/`), the frontend automatically directs API calls to `https://nerproject-production.up.railway.app`.
-
-### Service 1: `ner-backend` Settings on Railway
-1. **Root Directory**: `NER-App`
-2. **Builder**: `Dockerfile`
-3. **Variables**:
-   - `PORT`: `5000` (or `8080`)
-   - `MONGO_URI`: `mongodb+srv://<username>:<password>@cluster0.v5qxg7.mongodb.net/ner_annotation?appName=Cluster0`
-   - `CONFIDENCE_THRESHOLD`: `0.75`
-4. **Networking**:
-   - Domain: `https://nerproject-production.up.railway.app`
-   - Target port: `8080` (or `5000` — backend listens on both ports simultaneously)
-
-### Service 2: `ner-frontend` Settings on Railway
-1. **Root Directory**: `NER-App/frontend`
-2. **Builder**: `Dockerfile`
-3. **Variables**:
-   - `VITE_API_URL`: `https://nerproject-production.up.railway.app`
-4. **Networking**:
-   - Domain: `https://nerproject-production-e534.up.railway.app`
-   - Target port: `80` (or `8080`)
+- **Python AI Service**: `http://127.0.0.1:8000`
+- **Backend API**: `http://localhost:5000`
+- **Frontend UI**: `http://localhost:5173` (proxies `/api` to `http://127.0.0.1:5000`)

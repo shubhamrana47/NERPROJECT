@@ -4,6 +4,7 @@ POST /predict  {"segments": [{"id": 0, "text": "..."}]}
 -> per-segment entities with character offsets and confidence (softmax prob,
    averaged over the tokens that make up the entity).
 """
+import gc
 import json
 import os
 import re
@@ -42,6 +43,7 @@ CHUNK_WORDS = int(os.environ.get("CHUNK_WORDS", 200))  # words per model call (<
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, add_prefix_space=True)
 model = AutoModelForTokenClassification.from_pretrained(MODEL_DIR, low_cpu_mem_usage=True).eval()
+gc.collect()
 
 # The checkpoint only has LABEL_0..LABEL_72 = "O" + 36 types x (B, I).
 # Layout inferred from predictions: id 2k-1 = B- of type k, id 2k = I- of type k.

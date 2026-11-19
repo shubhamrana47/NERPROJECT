@@ -4,6 +4,15 @@ set -e
 PORT="${PORT:-80}"
 echo "Configuring Nginx with primary port ${PORT}..."
 
+# Inject runtime environment variables into env-config.js so Railway variable changes
+# take effect immediately on container restart without requiring a Docker rebuild.
+cat <<EOF > /usr/share/nginx/html/env-config.js
+window.__ENV__ = {
+  VITE_API_URL: "${VITE_API_URL:-}"
+};
+EOF
+echo "Injected runtime env-config.js (VITE_API_URL=${VITE_API_URL:-<build-default>})"
+
 cat <<EOF > /etc/nginx/conf.d/default.conf
 server {
     listen ${PORT};
