@@ -18,6 +18,7 @@ FROM nginx:alpine
 
 WORKDIR /usr/share/nginx/html
 
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist .
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN tr -d '\r' < /docker-entrypoint.sh > /docker-entrypoint-unix.sh && mv /docker-entrypoint-unix.sh /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
