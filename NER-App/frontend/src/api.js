@@ -1,15 +1,23 @@
 import { summariseAnnotatedJsonl } from './utils/annotatedFile.js';
 
 function getApiBase() {
-  // 1. Explicit build-time or environment setting
+  // 1. Runtime setting injected by docker-entrypoint.sh on Railway (ner-frontend)
+  if (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.VITE_API_URL) {
+    return window.__ENV__.VITE_API_URL.replace(/\/$/, '');
+  }
+  // 2. Explicit build-time or environment setting
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
-  // 2. Production fallback on Vercel: default directly to Render backend
+  // 3. Production fallback on Railway
+  if (typeof window !== 'undefined' && window.location.hostname.includes('railway.app')) {
+    return 'https://ner-backend-production-f72a300d.up.railway.app';
+  }
+  // 4. Production fallback on Vercel
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
     return 'https://ner-backend-hfgn.onrender.com';
   }
-  // 3. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
+  // 5. Local dev fallback (Vite proxy forwards /api to http://127.0.0.1:5000)
   return '';
 }
 

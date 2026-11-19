@@ -1,7 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Check, ChevronLeft, ChevronRight, Loader2, RotateCw, Sparkles } from 'lucide-react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
-import { ENTITY_SHORTCUTS, getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
+import {
+  ENTITY_SHORTCUTS,
+  ENTITY_DESCRIPTIONS,
+  getEntityColorStyle,
+  formatEntityLabel,
+  getTopEarlierAnnotations,
+} from '../utils/textUtils.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 const VIEWS = [
@@ -70,6 +76,7 @@ function PassageSheet({ label, meta, sentences, renderSentence, footer, tone = '
 }
 
 export default function PassageAnnotationCard({
+  doc = null,
   passage,
   nerStatus,
   isValidation = false,
@@ -123,6 +130,11 @@ export default function PassageAnnotationCard({
 
   const quickLabels = annotation?.quickLabels || ENTITY_SHORTCUTS.map((s) => s.label);
   const selectedSpan = annotation?.selectedSpan;
+
+  const topEarlierPredictions = useMemo(() => {
+    if (!selectedSpan?.text) return [];
+    return getTopEarlierAnnotations(selectedSpan.text, doc, entities);
+  }, [selectedSpan?.text, doc, entities]);
 
   const renderInteractive = (sentence) => (
     <LabelStudioAnnotator
@@ -421,6 +433,45 @@ export default function PassageAnnotationCard({
                 Clear selection
               </button>
             </div>
+
+            {/* Top at most 5 predictions of earlier annotations */}
+            {topEarlierPredictions.length > 0 && (
+              <div className="mt-2.5 rounded-md border border-hand/30 bg-paper p-2">
+                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink">
+                  <Sparkles className="h-3.5 w-3.5 text-hand" />
+                  <span>
+                    Top earlier annotations for “{selectedSpan.text}” ({topEarlierPredictions.length}):
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {topEarlierPredictions.map((pred) => {
+                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
+                    const key = ENTITY_SHORTCUTS.find((sc) => sc.label === pred.label)?.key;
+                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
+                    return (
+                      <button
+                        key={pred.label}
+                        type="button"
+                        onClick={() => annotation?.applyLabel(pred.label)}
+                        className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-medium shadow-xs transition hover:scale-[1.02] hover:shadow-sm"
+                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
+                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x earlier, ${pred.percentage}%)`}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: border }}
+                        />
+                        <span>{formatEntityLabel(pred.label)}</span>
+                        <span className="rounded bg-black/10 px-1 py-px font-mono text-[9.5px] tabular-nums opacity-90">
+                          {pred.count}× · {pred.percentage}%
+                        </span>
+                        {key && <span className="font-mono text-[10px] opacity-75">[{key}]</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {quickLabels.map((label) => {
                 const { border } = getEntityColorStyle(label);

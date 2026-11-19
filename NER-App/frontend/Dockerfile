@@ -8,7 +8,7 @@ RUN npm install
 
 COPY . .
 
-ARG VITE_API_URL="https://nerproject-production.up.railway.app"
+ARG VITE_API_URL="https://ner-backend-production-f72a300d.up.railway.app"
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build

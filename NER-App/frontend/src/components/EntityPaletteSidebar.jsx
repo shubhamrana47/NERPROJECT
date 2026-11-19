@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Trash2, X } from 'lucide-react';
+import { Search, Trash2, X, Sparkles, HelpCircle } from 'lucide-react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import {
   ENTITY_TYPES,
   ENTITY_GROUPS,
   ENTITY_SHORTCUTS,
+  ENTITY_DESCRIPTIONS,
   getEntityColorStyle,
   formatEntityLabel,
+  getTopEarlierAnnotations,
 } from '../utils/textUtils.jsx';
 
 /** A span's underline, shrunk to a swatch, so the list and the text speak the same language. */
@@ -21,78 +23,59 @@ function Swatch({ label, className = 'h-[3px] w-3.5' }) {
   );
 }
 
-function LabelRow({ type, count, shortcut, armed, onPick }) {
+/**
+ * Compact 2-column entity button with swatch, label name, shortcut key, and count.
+ * Displays description on hover.
+ */
+function LabelButton({ type, count, shortcut, armed, onPick, onHover }) {
+  const { border } = getEntityColorStyle(type);
+  const formatted = formatEntityLabel(type);
+  const desc = ENTITY_DESCRIPTIONS[type] || '';
+
   return (
     <button
       type="button"
       onClick={() => onPick(type)}
-      className={`flex w-full items-center gap-3 rounded px-2.5 py-2.5 text-left transition ${
-        armed ? 'hover:bg-paper hover:ring-1 hover:ring-rule-strong' : 'hover:bg-paper'
-      }`}
-      title={
-        armed ? `Label the selection as ${formatEntityLabel(type)}` : formatEntityLabel(type)
+      onMouseEnter={(e) =>
+        onHover?.({
+          type,
+          label: formatted,
+          desc,
+          rect: e.currentTarget.getBoundingClientRect(),
+        })
       }
+      onMouseLeave={() => onHover?.(null)}
+      className={`group relative flex items-center justify-between gap-1 rounded border px-2 py-1.5 text-left transition-all ${
+        armed
+          ? 'border-rule hover:border-ink hover:bg-paper hover:shadow-xs'
+          : 'border-rule/80 bg-sheet hover:border-rule-strong hover:bg-paper'
+      }`}
+      title={`${formatted}: ${desc}`}
     >
-      <Swatch label={type} />
-      <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">
-        {formatEntityLabel(type)}
-      </span>
-      {shortcut && (
-        <span className="rounded border border-rule bg-paper px-1.5 py-px font-mono text-[11px] text-ink-soft">
-          {shortcut}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: border }}
+          aria-hidden="true"
+        />
+        <span className="truncate text-[12px] font-medium text-ink group-hover:text-ink">
+          {formatted}
         </span>
-      )}
-      <span className="w-8 text-right font-mono text-[12px] tabular-nums text-ink-faint">
-        {count > 0 ? count.toLocaleString() : ''}
-      </span>
-    </button>
-  );
-}
+      </div>
 
-/**
- * The quick block: labels you have actually used, most recent first, topped up
- * with the keyed defaults. A digit shows only where one is really bound, since
- * the key mapping never moves.
- */
-function QuickLabels({ labels, shortcutMap, armed, onPick, counts }) {
-  return (
-    <div className="grid grid-cols-3 gap-1.5">
-      {labels.map((label) => {
-        const { border } = getEntityColorStyle(label);
-        const key = shortcutMap[label];
-        return (
-          <button
-            key={label}
-            type="button"
-            onClick={() => onPick(label)}
-            className={`flex flex-col items-start gap-1 rounded border px-2 py-1.5 text-left transition ${
-              armed
-                ? 'border-rule-strong bg-sheet hover:border-ink hover:bg-paper'
-                : 'border-rule bg-sheet hover:bg-paper'
-            }`}
-            title={
-              key
-                ? `${formatEntityLabel(label)} — press ${key}`
-                : formatEntityLabel(label)
-            }
-          >
-            <span className="flex w-full items-center justify-between gap-1">
-              <span
-                className="h-[3px] w-3.5 shrink-0 rounded-full"
-                style={{ backgroundColor: border }}
-              />
-              <span className="font-mono text-[10.5px] text-ink-faint">{key || ''}</span>
-            </span>
-            <span className="w-full truncate text-[11.5px] leading-tight text-ink">
-              {formatEntityLabel(label)}
-            </span>
-            <span className="font-mono text-[10px] tabular-nums text-ink-faint">
-              {counts[label] > 0 ? counts[label].toLocaleString() : ''}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {shortcut && (
+          <span className="rounded border border-rule bg-paper px-1 py-px font-mono text-[9.5px] font-medium text-ink-soft">
+            {shortcut}
+          </span>
+        )}
+        {count > 0 && (
+          <span className="font-mono text-[10px] tabular-nums text-ink-faint">
+            {count.toLocaleString()}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -103,17 +86,18 @@ export default function EntityPaletteSidebar({
   entityCounts = {},
   isValidation = false,
   focusedSpan = null,
+  doc = null,
+  workingEntities = [],
 }) {
   const annotation = useAnnotation();
   const [search, setSearch] = useState('');
   const [justTagged, setJustTagged] = useState('');
   const [notice, setNotice] = useState('');
+  const [hoveredEntity, setHoveredEntity] = useState(null);
   const searchInputRef = useRef(null);
 
   const selectedSpan = annotation?.selectedSpan;
   const activeEditingEntity = annotation?.activeEditingEntity;
-  const recentLabels = annotation?.recentLabels || [];
-  const quickLabels = annotation?.quickLabels || [];
   const applyLabel = annotation?.applyLabel;
   const clearSelection = annotation?.clearSelection;
   const setActiveEditingEntity = annotation?.setActiveEditingEntity;
@@ -153,11 +137,33 @@ export default function EntityPaletteSidebar({
     return map;
   }, []);
 
+  // Compute at most top 5 predictions of how the currently selected text was annotated earlier
+  const topPredictions = useMemo(() => {
+    const textToPredict = selectedSpan?.text || (isValidation && focusedSpan ? focusedSpan.text : '');
+    if (!textToPredict) return [];
+    return getTopEarlierAnnotations(textToPredict, doc, workingEntities);
+  }, [selectedSpan?.text, isValidation, focusedSpan, doc, workingEntities]);
+
+  // Alphabetically sorted matches if search is active
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
-    return ENTITY_TYPES.filter((t) => formatEntityLabel(t).toLowerCase().includes(q));
+    return [...ENTITY_TYPES]
+      .filter((t) => formatEntityLabel(t).toLowerCase().includes(q))
+      .sort((a, b) => formatEntityLabel(a).localeCompare(formatEntityLabel(b)));
   }, [search]);
+
+  // Categories sorted A-Z, and within each category types sorted A-Z
+  const sortedCategories = useMemo(() => {
+    return [...ENTITY_GROUPS]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((group) => ({
+        ...group,
+        types: [...group.types].sort((a, b) =>
+          formatEntityLabel(a).localeCompare(formatEntityLabel(b))
+        ),
+      }));
+  }, []);
 
   const armed = Boolean(selectedSpan);
 
@@ -200,56 +206,203 @@ export default function EntityPaletteSidebar({
       : '—';
 
   return (
-    <div className="flex max-h-[38rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet md:h-full md:max-h-none">
+    <div className="relative flex max-h-[38rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet md:h-full md:max-h-none">
+      {/* Floating Hover Description Tooltip */}
+      {hoveredEntity && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 max-w-[280px] rounded-lg border border-rule-strong bg-white/95 p-3 shadow-xl backdrop-blur-md transition-opacity duration-150"
+          style={{
+            left: Math.max(12, Math.min(window.innerWidth - 300, (hoveredEntity.rect?.left ?? 20) - 20)),
+            top:
+              hoveredEntity.rect && hoveredEntity.rect.top > 160
+                ? hoveredEntity.rect.top - 8
+                : (hoveredEntity.rect?.bottom ?? 100) + 8,
+            transform: hoveredEntity.rect && hoveredEntity.rect.top > 160 ? 'translateY(-100%)' : 'translateY(0)',
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: getEntityColorStyle(hoveredEntity.type).border }}
+            />
+            <span className="font-semibold text-[13px] text-ink">
+              {hoveredEntity.label}
+            </span>
+            {shortcutMap[hoveredEntity.type] && (
+              <span className="ml-auto rounded border border-rule bg-paper px-1.5 py-px font-mono text-[10px] font-medium text-ink-soft">
+                Key {shortcutMap[hoveredEntity.type]}
+              </span>
+            )}
+          </div>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-ink-soft">
+            {hoveredEntity.desc}
+          </p>
+        </div>
+      )}
+
       {/* Fixed head: what you are doing right now */}
-      <div className="shrink-0 border-b border-rule px-4 pb-3.5 pt-4">
+      <div className="shrink-0 border-b border-rule px-3.5 pb-3 pt-3.5">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[14px] font-semibold text-ink">Entity labels</h2>
           <span className="font-mono text-[11.5px] tabular-nums text-ink-faint">
-            {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : ENTITY_TYPES.length}
+            {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : `${ENTITY_TYPES.length} total`}
           </span>
         </div>
 
-        {/* A live selection is what the labels will act on, so it is shown
-            first, in validation as in annotation. */}
-        {isValidation && !selectedSpan ? (
-          focusedSpan || activeEditingEntity ? (
-            <div className="rounded border-l-2 border-hand bg-paper px-3 py-2.5">
-              <p className="font-serif text-[16px] leading-snug text-ink">
-                “{(focusedSpan || activeEditingEntity).text}”
-              </p>
-              <p className="mt-1.5 text-[12px] text-ink-soft">
-                Tagged{' '}
-                <span className="text-ink">
-                  {formatEntityLabel((focusedSpan || activeEditingEntity).label)}
+        {/* Live Selection State & Top 5 Earlier Annotations */}
+        {selectedSpan ? (
+          <div className="mt-2.5 rounded border-l-2 border-hand bg-paper p-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-hand">
+                  Selected text
                 </span>
-                . Pick a different label to correct it.
-              </p>
-            </div>
-          ) : (
-            <p className="px-0.5 text-[12.5px] leading-snug text-ink-soft">
-              Click an entity in the passage to put it in focus, then pick a label here to correct
-              it. To add one the pipeline missed, select the words first.
-            </p>
-          )
-        ) : selectedSpan ? (
-          <div className="mt-2.5 rounded border-l-2 border-hand bg-paper px-3 py-2.5">
-            <p className="font-serif text-[16px] leading-snug text-ink">“{selectedSpan.text}”</p>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[12px] text-ink-soft">Pick a label, or press its number</span>
+                <p className="truncate font-serif text-[15.5px] font-medium leading-snug text-ink">
+                  “{selectedSpan.text}”
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={clearSelection}
-                className="rounded border border-rule bg-sheet px-2 py-1 text-[11.5px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
+                className="shrink-0 rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
               >
                 Clear
               </button>
             </div>
+
+            {/* Top at most 5 predictions based on earlier annotations of this text */}
+            <div className="mt-2 border-t border-rule/70 pt-2">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-[11.5px] font-semibold text-ink">
+                  <Sparkles className="h-3 w-3 text-hand" />
+                  {topPredictions.length > 0
+                    ? `Earlier annotations (top ${topPredictions.length}):`
+                    : 'Earlier annotations:'}
+                </span>
+                {topPredictions.length > 0 && (
+                  <span className="text-[10px] text-ink-faint">
+                    Click to apply
+                  </span>
+                )}
+              </div>
+
+              {topPredictions.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {topPredictions.map((pred) => {
+                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
+                    const shortcut = shortcutMap[pred.label];
+                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
+                    return (
+                      <button
+                        key={pred.label}
+                        type="button"
+                        onClick={() => handlePick(pred.label)}
+                        onMouseEnter={(e) =>
+                          setHoveredEntity({
+                            type: pred.label,
+                            label: formatEntityLabel(pred.label),
+                            desc,
+                            rect: e.currentTarget.getBoundingClientRect(),
+                          })
+                        }
+                        onMouseLeave={() => setHoveredEntity(null)}
+                        className="group flex items-center gap-1.5 rounded border px-2 py-1 text-left text-[11.5px] font-medium transition hover:scale-[1.02] hover:shadow-xs"
+                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
+                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x earlier · ${pred.percentage}%)`}
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: border }}
+                        />
+                        <span className="font-semibold">{formatEntityLabel(pred.label)}</span>
+                        <span className="rounded bg-black/10 px-1 py-px font-mono text-[9.5px] tabular-nums opacity-90">
+                          {pred.count}× ({pred.percentage}%)
+                        </span>
+                        {shortcut && (
+                          <span className="font-mono text-[9px] opacity-75">
+                            [{shortcut}]
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-1 text-[11.5px] text-ink-faint">
+                  First time this text appears. Pick an entity label from the list below.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : isValidation && (focusedSpan || activeEditingEntity) ? (
+          <div className="mt-2.5 rounded border-l-2 border-hand bg-paper p-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-hand">
+                  Focused entity
+                </span>
+                <p className="font-serif text-[15px] font-medium text-ink">
+                  “{(focusedSpan || activeEditingEntity).text}”
+                </p>
+                <p className="mt-1 text-[11.5px] text-ink-soft">
+                  Tagged{' '}
+                  <span className="font-semibold text-ink">
+                    {formatEntityLabel((focusedSpan || activeEditingEntity).label)}
+                  </span>
+                  . Pick a different label to correct it.
+                </p>
+              </div>
+            </div>
+
+            {/* Earlier predictions for the focused entity text */}
+            {topPredictions.length > 0 && (
+              <div className="mt-2 border-t border-rule/70 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-ink">
+                    <Sparkles className="h-3 w-3 text-hand" />
+                    Earlier annotations:
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {topPredictions.map((pred) => {
+                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
+                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
+                    return (
+                      <button
+                        key={pred.label}
+                        type="button"
+                        onClick={() => handlePick(pred.label)}
+                        onMouseEnter={(e) =>
+                          setHoveredEntity({
+                            type: pred.label,
+                            label: formatEntityLabel(pred.label),
+                            desc,
+                            rect: e.currentTarget.getBoundingClientRect(),
+                          })
+                        }
+                        onMouseLeave={() => setHoveredEntity(null)}
+                        className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium transition hover:shadow-xs"
+                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
+                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x)`}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: border }}
+                        />
+                        <span>{formatEntityLabel(pred.label)}</span>
+                        <span className="font-mono text-[9px] opacity-75">{pred.count}×</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         ) : activeEditingEntity ? (
           <div className="mt-2.5 rounded border-l-2 border-ink bg-paper px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 flex-1 truncate font-serif text-[16px] text-ink">
+              <p className="min-w-0 flex-1 truncate font-serif text-[15px] font-medium text-ink">
                 “{activeEditingEntity.text}”
               </p>
               <button
@@ -268,7 +421,7 @@ export default function EntityPaletteSidebar({
                   updateEntity(activeEditingEntity, { label: e.target.value });
                   setActiveEditingEntity((prev) => ({ ...prev, label: e.target.value }));
                 }}
-                className="mt-1 w-full rounded border border-rule bg-sheet px-2 py-2 text-[13px] text-ink focus:border-ink focus:outline-none"
+                className="mt-1 w-full rounded border border-rule bg-sheet px-2 py-1.5 text-[12.5px] text-ink focus:border-ink focus:outline-none"
               >
                 {ENTITY_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -283,25 +436,25 @@ export default function EntityPaletteSidebar({
                 deleteEntity(activeEditingEntity);
                 setActiveEditingEntity(null);
               }}
-              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-rule bg-sheet px-2 py-1.5 text-[12.5px] text-hand transition hover:border-hand/50"
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-rule bg-sheet px-2 py-1.5 text-[12px] text-hand transition hover:border-hand/50"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Remove this span
             </button>
           </div>
         ) : (
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
-            Drag across any words in the passage, then choose the label that fits. Click a span
-            you have already marked to change or remove it.
+          <p className="mt-1.5 text-[12px] leading-relaxed text-ink-soft">
+            Drag across words in the passage to label them. Hover on any entity below to view its description.
           </p>
         )}
 
-        <div className="relative mt-3">
-          <Search className="pointer-events-none absolute left-3 top-[11px] h-4 w-4 text-ink-faint" />
+        {/* Search Input */}
+        <div className="relative mt-2.5">
+          <Search className="pointer-events-none absolute left-3 top-[9px] h-3.5 w-3.5 text-ink-faint" />
           <input
             ref={searchInputRef}
             type="text"
-            placeholder={`Search all ${ENTITY_TYPES.length} labels`}
+            placeholder={`Search all ${ENTITY_TYPES.length} labels...`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -309,112 +462,119 @@ export default function EntityPaletteSidebar({
                 handlePick(matches[0]);
               }
             }}
-            className="w-full rounded border border-rule bg-paper py-2 pl-9 pr-8 text-[13px] text-ink placeholder:text-ink-faint focus:border-ink focus:bg-sheet focus:outline-none"
+            className="w-full rounded border border-rule bg-paper py-1.5 pl-8 pr-7 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-ink focus:bg-sheet focus:outline-none"
           />
           {search ? (
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute right-2.5 top-2.5 text-ink-faint transition hover:text-ink"
+              className="absolute right-2 top-2 text-ink-faint transition hover:text-ink"
               title="Clear search"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           ) : (
-            <span className="pointer-events-none absolute right-3 top-2 rounded border border-rule bg-sheet px-1.5 font-mono text-[10.5px] text-ink-faint">
+            <span className="pointer-events-none absolute right-2.5 top-1.5 rounded border border-rule bg-sheet px-1 font-mono text-[10px] text-ink-faint">
               /
             </span>
           )}
         </div>
 
         {justTagged && (
-          <p className="mark-in mt-2.5 truncate text-[12px] text-hand" title={justTagged}>
+          <p className="mark-in mt-2 truncate text-[12px] font-medium text-hand" title={justTagged}>
             {justTagged}
           </p>
         )}
         {notice && !justTagged && (
-          <p className="mt-2.5 text-[12px] leading-snug text-ink-soft">{notice}</p>
-        )}
-
-        {!matches && quickLabels.length > 0 && (
-          <div className="mt-3.5">
-            <p className="mb-1.5 text-[11.5px] text-ink-faint">
-              {recentLabels.length > 0 ? 'Recently used' : 'Common labels'}
-            </p>
-            <QuickLabels
-              labels={quickLabels}
-              shortcutMap={shortcutMap}
-              armed={armed}
-              onPick={handlePick}
-              counts={entityCounts}
-            />
-          </div>
+          <p className="mt-2 text-[12px] leading-snug text-ink-soft">{notice}</p>
         )}
       </div>
 
-      {/* The full list — always open, scrolls on its own */}
-      <div className="scroll-slim min-h-[12rem] flex-1 overflow-y-auto px-2 py-1.5">
+      {/* All entity names displayed in 2 columns at a time:
+          - Each category listed in alphabetical order (A-Z)
+          - Within each category, all entities listed in A-Z order
+          - Hovering on any entity displays its description
+      */}
+      <div className="scroll-slim min-h-[14rem] flex-1 overflow-y-auto px-2 py-1.5">
         {matches ? (
           matches.length > 0 ? (
-            matches.map((type) => (
-              <LabelRow
-                key={type}
-                type={type}
-                count={entityCounts[type] || 0}
-                shortcut={shortcutMap[type]}
-                armed={armed}
-                onPick={handlePick}
-              />
-            ))
+            <div className="py-1">
+              <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                Search Results ({matches.length})
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {matches.map((type) => (
+                  <LabelButton
+                    key={type}
+                    type={type}
+                    count={entityCounts[type] || 0}
+                    shortcut={shortcutMap[type]}
+                    armed={armed}
+                    onPick={handlePick}
+                    onHover={setHoveredEntity}
+                  />
+                ))}
+              </div>
+            </div>
           ) : (
-            <p className="px-2.5 py-4 text-[13px] text-ink-faint">
+            <p className="px-2.5 py-4 text-[12.5px] text-ink-faint">
               No label matches “{search}”. Clear the search to see all{' '}
               {ENTITY_TYPES.length}.
             </p>
           )
         ) : (
-          ENTITY_GROUPS.map((group) => (
-            <section key={group.name} className="mb-2 last:mb-0">
-              <h3 className="sticky top-0 z-10 border-b border-rule/70 bg-sheet px-2.5 py-1.5 text-[11.5px] font-medium text-ink-soft">
-                {group.name}
-                <span className="ml-1.5 font-mono text-[10.5px] text-ink-faint">
+          sortedCategories.map((group) => (
+            <section key={group.name} className="mb-2.5 last:mb-0">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rule/70 bg-sheet/95 px-2 py-1 backdrop-blur-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[12px] opacity-80" aria-hidden="true">
+                    {group.icon}
+                  </span>
+                  <h3 className="text-[11.5px] font-semibold text-ink">
+                    {group.name}
+                  </h3>
+                </div>
+                <span className="font-mono text-[10px] text-ink-faint">
                   {group.types.length}
                 </span>
-              </h3>
-              {group.types.map((type) => (
-                <LabelRow
-                  key={type}
-                  type={type}
-                  count={entityCounts[type] || 0}
-                  shortcut={shortcutMap[type]}
-                  armed={armed}
-                  onPick={handlePick}
-                />
-              ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1 px-0.5 py-1">
+                {group.types.map((type) => (
+                  <LabelButton
+                    key={type}
+                    type={type}
+                    count={entityCounts[type] || 0}
+                    shortcut={shortcutMap[type]}
+                    armed={armed}
+                    onPick={handlePick}
+                    onHover={setHoveredEntity}
+                  />
+                ))}
+              </div>
             </section>
           ))
         )}
       </div>
 
-      {/* Fixed foot: the line you are on, and what the marks mean */}
-      <div className="shrink-0 border-t border-rule bg-paper/60 px-4 py-3">
+      {/* Fixed foot: model findings vs manual tags */}
+      <div className="shrink-0 border-t border-rule bg-paper/60 px-3.5 py-2.5 text-[12px]">
         <div className="flex items-baseline justify-between gap-3 py-0.5">
-          <span className="flex items-center gap-2 text-[12.5px] text-ink-soft">
-            <span className="inline-block h-0 w-4 border-b-2 border-solid border-machine" />
+          <span className="flex items-center gap-2 text-ink-soft">
+            <span className="inline-block h-0 w-3.5 border-b-2 border-solid border-machine" />
             Model found
           </span>
-          <span className="font-mono text-[13px] tabular-nums text-machine">{modelSpans}</span>
+          <span className="font-mono text-[12.5px] tabular-nums text-machine">{modelSpans}</span>
         </div>
         <div className="flex items-baseline justify-between gap-3 py-0.5">
-          <span className="flex items-center gap-2 text-[12.5px] text-ink-soft">
-            <span className="inline-block h-0 w-4 border-b-2 border-dashed border-hand" />
+          <span className="flex items-center gap-2 text-ink-soft">
+            <span className="inline-block h-0 w-3.5 border-b-2 border-dashed border-hand" />
             You added
           </span>
-          <span className="font-mono text-[13px] tabular-nums text-hand">{manualSpans}</span>
+          <span className="font-mono text-[12.5px] tabular-nums text-hand">{manualSpans}</span>
         </div>
         <div className="flex items-baseline justify-between gap-3 py-0.5">
-          <span className="text-[12.5px] text-ink-soft">Mean confidence</span>
-          <span className="font-mono text-[13px] tabular-nums text-ink">{confidenceLabel}</span>
+          <span className="text-ink-soft">Mean confidence</span>
+          <span className="font-mono text-[12.5px] tabular-nums text-ink">{confidenceLabel}</span>
         </div>
       </div>
     </div>

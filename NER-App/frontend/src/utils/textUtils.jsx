@@ -142,43 +142,211 @@ export function getEntityDotColor(label) {
   return ENTITY_COLOR_MAP[label]?.dot || '#64748B';
 }
 
+/**
+ * Descriptions for all 37 canonical agricultural entity types.
+ */
+export const ENTITY_DESCRIPTIONS = {
+  Agri_Equipment: 'Agricultural equipment, tools, machinery, and implements used in farming',
+  Agri_Method: 'Any methods, techniques helping agriculture',
+  Agri_Pollution: 'Items that are causing pollution',
+  Agri_Process: 'Types of Agricultural Process',
+  Agri_Waste: 'Items of Agricultural wastes',
+  Chemical: 'Names of Chemicals, Fertilizers, Pesticides, etc.',
+  Citation: 'Names of any citations, citation formats, etc.',
+  Crop: 'Names of grains, cereals, etc.',
+  Date_and_Time: 'Any Date, time format',
+  Disease: 'Names of Disease affecting plant growth',
+  Duration: 'Number of days, months, time span',
+  Event: 'Any Events, conferences',
+  Field_Area: 'Any field are for cultivation',
+  Food_Item: 'Names of any food items, products',
+  Fruit: 'Names of any kinds of Fruits',
+  Humidity: 'Any information related to Humidity',
+  Location: 'Names of locations, places, cities',
+  ML_Model: 'Any ML, mathematical models helping in agriculture',
+  Money: 'Any currency, money amount',
+  Natural_Disaster: 'Any disaster effecting plant growth',
+  Natural_Resource: 'Any natural resources',
+  Nutrient: 'Names of vitamins, carbohydrates',
+  Organism: 'Names of Animal, Organism, Plant, etc.',
+  Organization: 'Names of Org, Institutes, Industries, etc.',
+  Other: 'Any Other potential tags',
+  Other_Quantity: 'Other Quantity, and Measurements',
+  Person: 'Names of Persons, farmers, etc.',
+  Policy: 'Names of Govt. policies, aids, etc.',
+  Quantity: 'Any crops. Fruits, etc. Quantiy',
+  Rainfall: 'rainfall measurement, rainwater, etc.',
+  Season: 'Names of Seasons',
+  Soil: 'types of soil, soil preparations, etc.',
+  Technology: 'Any Technology helping in agriculture',
+  Temp: 'Any Temperatures related information',
+  Treatment: 'Any treatment to recover from diseases',
+  Vegetable: 'Any vegetable items',
+  Weather: 'Any weather related information',
+};
+
+/**
+ * Entity categories ordered alphabetically (A to Z), and within each
+ * category, all entity types ordered alphabetically (A to Z).
+ */
 export const ENTITY_GROUPS = [
   {
-    name: 'Crops & Botanical',
-    icon: '🌾',
-    types: ['Crop', 'Fruit', 'Vegetable', 'Food_Item'],
-  },
-  {
-    name: 'Pests & Diseases',
-    icon: '🐛',
-    types: ['Disease', 'Organism', 'Agri_Pollution', 'Agri_Waste'],
+    name: 'Actors & Policy',
+    icon: '🏛️',
+    types: ['Location', 'Organization', 'Person', 'Policy'],
   },
   {
     name: 'Chemicals & Nutrients',
     icon: '🧪',
-    types: ['Chemical', 'Treatment', 'Nutrient'],
+    types: ['Chemical', 'Nutrient', 'Treatment'],
   },
   {
-    name: 'Weather & Environment',
-    icon: '⛅',
-    types: ['Weather', 'Rainfall', 'Temp', 'Humidity', 'Season', 'Natural_Disaster', 'Natural_Resource', 'Soil'],
-  },
-  {
-    name: 'Quantities & Time',
-    icon: '📏',
-    types: ['Quantity', 'Other_Quantity', 'Field_Area', 'Duration', 'Money', 'Date_and_Time', 'Event'],
-  },
-  {
-    name: 'Actors & Policy',
-    icon: '🏛️',
-    types: ['Person', 'Organization', 'Location', 'Policy'],
+    name: 'Crops & Botanical',
+    icon: '🌾',
+    types: ['Crop', 'Food_Item', 'Fruit', 'Vegetable'],
   },
   {
     name: 'Methods & Technology',
     icon: '⚙️',
-    types: ['Agri_Equipment', 'Agri_Method', 'Agri_Process', 'Technology', 'ML_Model', 'Citation', 'Other'],
+    types: ['Agri_Equipment', 'Agri_Method', 'Agri_Process', 'Citation', 'ML_Model', 'Other', 'Technology'],
+  },
+  {
+    name: 'Pests & Diseases',
+    icon: '🐛',
+    types: ['Agri_Pollution', 'Agri_Waste', 'Disease', 'Organism'],
+  },
+  {
+    name: 'Quantities & Time',
+    icon: '📏',
+    types: ['Date_and_Time', 'Duration', 'Event', 'Field_Area', 'Money', 'Other_Quantity', 'Quantity'],
+  },
+  {
+    name: 'Weather & Environment',
+    icon: '⛅',
+    types: ['Humidity', 'Natural_Disaster', 'Natural_Resource', 'Rainfall', 'Season', 'Soil', 'Temp', 'Weather'],
   },
 ];
+
+/**
+ * Storage key for persisting manual annotation history across sessions.
+ */
+export const ANNOTATION_HISTORY_KEY = 'fieldnote.annotation-history';
+
+/**
+ * Records an entity annotation into local persistent history.
+ */
+export function recordAnnotationHistory(text, label) {
+  if (!text || !label) return;
+  const cleanText = text.trim();
+  if (!cleanText) return;
+
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const raw = window.localStorage.getItem(ANNOTATION_HISTORY_KEY);
+    const history = raw ? JSON.parse(raw) : [];
+    // Keep most recent first, max 600 items
+    const next = [{ text: cleanText, label, timestamp: Date.now() }, ...history.filter(
+      (h) => !(h.text.toLowerCase() === cleanText.toLowerCase() && h.label === label)
+    )].slice(0, 600);
+    window.localStorage.setItem(ANNOTATION_HISTORY_KEY, JSON.stringify(next));
+  } catch (_) {}
+}
+
+/**
+ * Computes at most top 5 predictions of how a selected text was annotated earlier.
+ * Scans across current working entities, all document passages (entities and originalEntities),
+ * and persistent local annotation history.
+ */
+export function getTopEarlierAnnotations(text, doc, workingEntities = []) {
+  if (!text || typeof text !== 'string') return [];
+  const q = text.trim().toLowerCase();
+  if (!q) return [];
+
+  const labelStats = {};
+
+  const registerOccurrence = (entTextRaw, label, source = 'doc', confidence = 1.0) => {
+    if (!label || !entTextRaw) return;
+    const entText = entTextRaw.trim().toLowerCase();
+    if (!entText) return;
+
+    const isExact = entText === q;
+    const isPartial = !isExact && (entText.includes(q) || q.includes(entText)) && (q.length >= 3 || entText.length >= 3);
+
+    if (isExact || isPartial) {
+      if (!labelStats[label]) {
+        labelStats[label] = { label, exact: 0, partial: 0, score: 0, confSum: 0, confCount: 0 };
+      }
+      if (isExact) {
+        labelStats[label].exact += 1;
+        labelStats[label].score += (source === 'human' || source === 'manual' ? 12 : 10);
+      } else {
+        labelStats[label].partial += 1;
+        labelStats[label].score += (source === 'human' || source === 'manual' ? 3 : 2);
+      }
+      if (typeof confidence === 'number') {
+        labelStats[label].confSum += confidence;
+        labelStats[label].confCount += 1;
+      }
+    }
+  };
+
+  // 1. Current working entities
+  if (Array.isArray(workingEntities)) {
+    workingEntities.forEach((e) => {
+      if (e?.status === 'deleted' || e?.validationStatus === 'rejected') return;
+      registerOccurrence(e?.text, e?.label, e?.source || 'human', e?.confidence ?? 1.0);
+    });
+  }
+
+  // 2. All passages in current document
+  if (doc?.segments && Array.isArray(doc.segments)) {
+    doc.segments.forEach((seg) => {
+      (seg.entities || []).forEach((e) => {
+        if (e?.status === 'deleted' || e?.validationStatus === 'rejected') return;
+        registerOccurrence(e?.text, e?.label, e?.source, e?.confidence ?? 1.0);
+      });
+      (seg.originalEntities || []).forEach((e) => {
+        if (e?.status === 'deleted' || e?.validationStatus === 'rejected') return;
+        registerOccurrence(e?.text, e?.label, e?.source || 'model', e?.confidence ?? 1.0);
+      });
+    });
+  }
+
+  // 3. Persistent history in localStorage
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(ANNOTATION_HISTORY_KEY);
+      if (raw) {
+        const history = JSON.parse(raw);
+        if (Array.isArray(history)) {
+          history.forEach((h) => {
+            if (h?.text && h?.label) {
+              registerOccurrence(h.text, h.label, 'history', 1.0);
+            }
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  const list = Object.values(labelStats);
+  if (list.length === 0) return [];
+
+  const totalExact = list.reduce((acc, curr) => acc + (curr.exact > 0 ? curr.exact : curr.partial), 0);
+
+  list.forEach((item) => {
+    const primary = item.exact > 0 ? item.exact : item.partial;
+    item.count = primary;
+    item.percentage = totalExact > 0 ? Math.round((primary / totalExact) * 100) : 0;
+    item.avgConfidence = item.confCount > 0 ? item.confSum / item.confCount : null;
+  });
+
+  // Sort descending by exact occurrences, then score, then confidence
+  list.sort((a, b) => b.exact - a.exact || b.score - a.score || (b.avgConfidence || 0) - (a.avgConfidence || 0));
+
+  // Return at most top 5 predictions
+  return list.slice(0, 5);
+}
 
 // Legacy CATEGORY_COLORS kept for backward compatibility but now unused in favor of ENTITY_COLOR_MAP
 export const CATEGORY_COLORS = {};

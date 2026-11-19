@@ -14,8 +14,12 @@ const app = express();
 // Trust reverse proxies (Railway, Cloudflare, etc.)
 app.set('trust proxy', 1);
 
-// Explicit allowed origins whitelist including Vercel production and local environments
+// Explicit allowed origins whitelist including Railway, Vercel, and local environments
 const ALLOWED_ORIGINS = [
+  'https://nerproject-production-aa1bd093.up.railway.app',
+  'https://nerproject-production-e534.up.railway.app',
+  'https://ner-frontend-production.up.railway.app',
+  'https://ner-backend-production-f72a300d.up.railway.app',
   'https://nerproject.vercel.app',
   'http://localhost:5173',
   'http://localhost:5000',
@@ -27,7 +31,8 @@ const ALLOWED_ORIGINS = [
 const isOriginAllowed = (origin) => {
   if (!origin) return true; // Allow curl, mobile apps, server-to-server or same-origin
   if (ALLOWED_ORIGINS.includes(origin)) return true;
-  // Allow all Vercel preview deployments (e.g. https://nerproject-git-main-xxx.vercel.app)
+  // Allow all Railway and Vercel preview/production domains
+  if (origin.endsWith('.railway.app') || origin.endsWith('.up.railway.app')) return true;
   if (origin.endsWith('.vercel.app')) return true;
   return true; // Fallback to allow any origin
 };
@@ -80,11 +85,12 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Health check: confirms the HTTP server is responding
+// Health check: confirms the HTTP server is responding and reports AI service state
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'ner-backend',
+    aiEnabled: Boolean((process.env.AI_SERVICE_URL || '').trim()),
   });
 });
 

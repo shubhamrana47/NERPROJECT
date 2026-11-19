@@ -1,9 +1,9 @@
-# One container for Render: Node.js API (public) + AgNER-BERTa model service (internal).
+# Unified container for Railway (ner-backend): Node.js API (public) + AgNER-BERTa model service (internal).
 #
-#   Browser (Vercel) --> Node API on $PORT --> FastAPI model on 127.0.0.1:8000
+#   Browser (ner-frontend) --> Node API on $PORT --> FastAPI model on 127.0.0.1:8000
 #
-# ENABLE_AI=true  (default) loads the model. Needs ~1.2 GB RAM -> Render "Standard" plan.
-# ENABLE_AI=false skips the model; the app runs manual-annotation only and fits Render Free.
+# ENABLE_AI=true  (default) loads the AgNER-BERTa model alongside the Node.js backend.
+# ENABLE_AI=false skips the model and runs in manual-annotation mode only.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -49,12 +49,15 @@ RUN sed -i 's/\r$//' ./start.sh && chmod +x ./start.sh
 
 ENV MODEL_DIR=/app/ai-service/model \
     PYTHONUNBUFFERED=1 \
+    MALLOC_ARENA_MAX=2 \
     NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=256" \
+    AI_SERVICE_URL=http://127.0.0.1:8000 \
     ENABLE_AI=true \
     TORCH_THREADS=1 \
     AI_STARTUP_TIMEOUT=240 \
     PORT=5000
 
-EXPOSE 5000
+EXPOSE 5000 8080
 
 CMD ["/bin/bash", "./start.sh"]

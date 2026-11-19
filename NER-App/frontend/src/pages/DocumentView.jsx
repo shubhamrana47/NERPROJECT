@@ -1248,7 +1248,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
         {viewMode === 'focus' ? (
           totalPassages > 0 && passage ? (
-            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_21rem] lg:grid-cols-[21rem_1fr_23rem] lg:gap-7">
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_22rem] lg:grid-cols-[20rem_1fr_26rem] xl:grid-cols-[20rem_1fr_28rem] lg:gap-7">
               {/* The span list sits to the left of the text it describes. */}
               <aside className="order-2 flex flex-col gap-4 md:order-none lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-6rem)]">
                 <div className="min-h-0 flex-1">
@@ -1284,6 +1284,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
               <main className="order-1 min-w-0 md:order-none">
                 <PassageAnnotationCard
+                  doc={doc}
                   passage={passage}
                   isValidation={isValidation}
                   onNothingToValidate={handleNothingToValidate}
@@ -1322,6 +1323,8 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   }
                   meanConfidence={meanConfidence}
                   entityCounts={docTotals.counts}
+                  doc={doc}
+                  workingEntities={working}
                 />
               </aside>
             </div>
