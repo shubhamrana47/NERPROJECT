@@ -122,11 +122,11 @@ test('getTopEarlierAnnotations returns at most top 5 predictions for selected te
   assert.equal(predictions[0].count, 4); // 3 in doc + 1 in working
   assert.ok(predictions[0].percentage > 0);
 
-  // Predictions must be sorted descending by percentage (even when mixing exact & partial matches)
+  // Predictions must be sorted descending by exact matches first, then score
   for (let i = 0; i < predictions.length - 1; i++) {
     assert.ok(
-      predictions[i].percentage >= predictions[i + 1].percentage,
-      `Prediction ${i} (${predictions[i].percentage}%) should be >= ${i + 1} (${predictions[i + 1].percentage}%)`
+      predictions[i].exact >= predictions[i + 1].exact,
+      `Prediction ${i} (${predictions[i].exact} exact) should be >= ${i + 1} (${predictions[i + 1].exact} exact)`
     );
   }
 
@@ -144,10 +144,10 @@ test('getTopEarlierAnnotations returns at most top 5 predictions for selected te
     ],
   };
   const mixedPreds = getTopEarlierAnnotations('water', mixedDoc, []);
-  assert.equal(mixedPreds[0].label, 'Agri_Process', 'Higher percentage (80%) sorts before lower percentage (20%)');
-  assert.equal(mixedPreds[0].percentage, 80);
-  assert.equal(mixedPreds[1].label, 'Natural_Resource');
-  assert.equal(mixedPreds[1].percentage, 20);
+  assert.equal(mixedPreds[0].label, 'Natural_Resource', 'Exact match sorts before partial-only matches');
+  assert.equal(mixedPreds[0].exact, 1);
+  assert.equal(mixedPreds[1].label, 'Agri_Process');
+  assert.equal(mixedPreds[1].exact, 0);
 
   // Irrelevant text
   const noPredictions = getTopEarlierAnnotations('completely_unknown_token_xyz', mockDoc, working);
