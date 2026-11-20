@@ -177,12 +177,14 @@ test('UI renders categories in alphabetical order with 2 columns of entities and
     );
   });
 
-  // Check buttons have title attribute with descriptions
+  // Descriptions live in aria-label (no native title, so the browser's own
+  // tooltip doesn't pop up below the card alongside the custom one above it)
   const cropBtn = [...palette.querySelectorAll('button')].find((b) => b.textContent.includes('Crop'));
   assert.ok(cropBtn, 'Crop button exists in palette');
-  assert.ok(cropBtn.getAttribute('title').includes('Names of grains, cereals, etc.'), 'Crop button title has description');
+  assert.equal(cropBtn.getAttribute('title'), null, 'Crop button has no native title tooltip');
+  assert.ok(cropBtn.getAttribute('aria-label').includes('Names of grains, cereals, etc.'), 'Crop button label has description');
 
   const chemBtn = [...palette.querySelectorAll('button')].find((b) => b.textContent.includes('Chemical'));
   assert.ok(chemBtn, 'Chemical button exists in palette');
-  assert.ok(chemBtn.getAttribute('title').includes('Names of Chemicals, Fertilizers, Pesticides, etc.'));
+  assert.ok(chemBtn.getAttribute('aria-label').includes('Names of Chemicals, Fertilizers, Pesticides, etc.'));
 });
