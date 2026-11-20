@@ -8,7 +8,6 @@ import {
   ENTITY_DESCRIPTIONS,
   getEntityColorStyle,
   formatEntityLabel,
-  getTopEarlierAnnotations,
 } from '../utils/textUtils.jsx';
 
 /**
@@ -128,13 +127,6 @@ export default function EntityPaletteSidebar({
     });
     return map;
   }, []);
-
-  // Compute at most top 5 predictions of how the currently selected text was annotated earlier
-  const topPredictions = useMemo(() => {
-    const textToPredict = selectedSpan?.text || (isValidation && focusedSpan ? focusedSpan.text : '');
-    if (!textToPredict) return [];
-    return getTopEarlierAnnotations(textToPredict, doc, workingEntities);
-  }, [selectedSpan?.text, isValidation, focusedSpan, doc, workingEntities]);
 
   // Alphabetically sorted matches if search is active
   const matches = useMemo(() => {
@@ -287,65 +279,6 @@ export default function EntityPaletteSidebar({
             </span>
           )}
         </div>
-
-        {/* "Suggested for selected text" card matching Image 2 */}
-        {(selectedSpan || (isValidation && focusedSpan)) && (
-          <div className="mt-2.5 rounded-lg border border-blue-200 bg-[#e8f1fd] p-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-slate-800">
-                Suggested for selected text
-              </span>
-              {selectedSpan && (
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="text-[11px] text-slate-500 transition hover:text-slate-800"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            {topPredictions.length > 0 ? (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {topPredictions.map((pred) => {
-                  const { border } = getEntityColorStyle(pred.label);
-                  const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
-                  return (
-                    <button
-                      key={pred.label}
-                      type="button"
-                      onClick={() => handlePick(pred.label)}
-                      onMouseEnter={(e) =>
-                        setHoveredEntity({
-                          type: pred.label,
-                          label: formatEntityLabel(pred.label),
-                          desc,
-                          rect: e.currentTarget.getBoundingClientRect(),
-                        })
-                      }
-                      onMouseLeave={() => setHoveredEntity(null)}
-                      className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-800 shadow-2xs transition hover:border-slate-500 hover:bg-slate-50"
-                      aria-label={`${formatEntityLabel(pred.label)}: ${desc} (${pred.percentage}%)`}
-                    >
-                      <span
-                        className="h-[2.5px] w-3 rounded-full"
-                        style={{ backgroundColor: border }}
-                      />
-                      <span>
-                        {formatEntityLabel(pred.label)} ({pred.percentage}%)
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-1 text-[11px] text-slate-600">
-                Pick a label from the categories below to annotate “{selectedSpan?.text || focusedSpan?.text}”.
-              </p>
-            )}
-          </div>
-        )}
 
         {justTagged && (
           <p className="mark-in mt-1.5 truncate text-[11.5px] font-medium text-hand" title={justTagged}>
