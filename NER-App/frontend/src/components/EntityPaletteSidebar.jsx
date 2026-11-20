@@ -37,12 +37,12 @@ function EntityCard({ type, count, shortcut, armed, onPick, onHover }) {
         })
       }
       onMouseLeave={() => onHover?.(null)}
-      className={`group relative flex flex-col justify-between rounded-lg border p-2 text-left transition-all ${
+      className={`group relative flex flex-col justify-between rounded-md border px-1.5 py-1 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-900 ${
         armed
           ? 'border-slate-300 bg-white hover:border-slate-900 hover:shadow-xs'
           : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
       }`}
-      title={`${formatted}: ${desc}`}
+      aria-label={desc ? `${formatted}: ${desc}` : formatted}
     >
       <div className="flex items-center justify-between gap-1 w-full">
         <span
@@ -57,7 +57,7 @@ function EntityCard({ type, count, shortcut, armed, onPick, onHover }) {
         )}
       </div>
 
-      <div className="mt-1 flex items-baseline justify-between gap-1 w-full">
+      <div className="mt-0.5 flex items-baseline justify-between gap-1 w-full">
         <span className="truncate text-[12px] font-medium text-slate-800 group-hover:text-black">
           {formatted}
         </span>
@@ -207,11 +207,9 @@ export default function EntityPaletteSidebar({
           className="pointer-events-none fixed z-50 max-w-[280px] rounded-md border border-neutral-800 bg-[#222222] px-3 py-2 text-white shadow-2xl backdrop-blur-md transition-opacity duration-150"
           style={{
             left: Math.max(12, Math.min(window.innerWidth - 300, (hoveredEntity.rect?.left ?? 20))),
-            top:
-              hoveredEntity.rect && hoveredEntity.rect.top > 120
-                ? hoveredEntity.rect.top - 6
-                : (hoveredEntity.rect?.bottom ?? 100) + 6,
-            transform: hoveredEntity.rect && hoveredEntity.rect.top > 120 ? 'translateY(-100%)' : 'translateY(0)',
+            // Always sit above the hovered card.
+            top: (hoveredEntity.rect?.top ?? 100) - 6,
+            transform: 'translateY(-100%)',
           }}
         >
           <div className="flex items-start gap-2 text-[12px] leading-snug">
@@ -304,7 +302,7 @@ export default function EntityPaletteSidebar({
                       }
                       onMouseLeave={() => setHoveredEntity(null)}
                       className="flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-800 shadow-2xs transition hover:border-slate-500 hover:bg-slate-50"
-                      title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.percentage}%)`}
+                      aria-label={`${formatEntityLabel(pred.label)}: ${desc} (${pred.percentage}%)`}
                     >
                       <span
                         className="h-[2.5px] w-3 rounded-full"
@@ -336,14 +334,14 @@ export default function EntityPaletteSidebar({
       </div>
 
       {/* The 2-Column Categories and Cards Layout matching Image 2 */}
-      <div className="scroll-slim flex-1 overflow-y-auto p-3">
+      <div className="scroll-slim flex-1 overflow-y-auto p-2.5">
         {matches ? (
           matches.length > 0 ? (
             <div>
               <div className="mb-2 text-[12px] font-semibold text-slate-700">
                 Search Results ({matches.length})
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {matches.map((type) => (
                   <EntityCard
                     key={type}
@@ -371,7 +369,7 @@ export default function EntityPaletteSidebar({
                   <h3 className="mb-1.5 text-[12.5px] font-medium text-slate-800">
                     {group.name}
                   </h3>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {group.types.map((type) => (
                       <EntityCard
                         key={type}
@@ -395,7 +393,7 @@ export default function EntityPaletteSidebar({
                   <h3 className="mb-1.5 text-[12.5px] font-medium text-slate-800">
                     {group.name}
                   </h3>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {group.types.map((type) => (
                       <EntityCard
                         key={type}

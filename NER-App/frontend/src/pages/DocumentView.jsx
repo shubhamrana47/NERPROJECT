@@ -1232,7 +1232,11 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
   return (
     <div className="flex min-h-[calc(100vh-3.3rem)] flex-col">
-      <div className="mx-auto w-full max-w-[1560px] flex-1 px-5 pb-8 pt-6 lg:px-8">
+      <div
+        className={`mx-auto w-full flex-1 px-5 pb-8 pt-6 ${
+          viewMode === 'focus' ? 'lg:px-4' : 'max-w-[1560px] lg:px-8'
+        }`}
+      >
         {error && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md border-l-2 border-hand bg-sheet px-4 py-3 text-[13px] text-ink">
             <span>{error}</span>
@@ -1248,7 +1252,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
 
         {viewMode === 'focus' ? (
           totalPassages > 0 && passage ? (
-            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_24rem] lg:grid-cols-[19rem_1fr_32rem] xl:grid-cols-[19rem_1fr_38rem] lg:gap-7">
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1fr_24rem] lg:grid-cols-[15rem_1fr_24rem] lg:gap-4 xl:grid-cols-[15rem_50vw_minmax(0,1fr)]">
               {/* The span list sits to the left of the text it describes. */}
               <aside className="order-2 flex flex-col gap-4 md:order-none lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-6rem)]">
                 <div className="min-h-0 flex-1">
