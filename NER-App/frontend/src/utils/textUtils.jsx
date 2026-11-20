@@ -379,8 +379,15 @@ export function getTopEarlierAnnotations(text, doc, workingEntities = []) {
     item.avgConfidence = item.confCount > 0 ? item.confSum / item.confCount : null;
   });
 
-  // Sort descending by exact occurrences, then score, then confidence
-  list.sort((a, b) => b.exact - a.exact || b.score - a.score || (b.avgConfidence || 0) - (a.avgConfidence || 0));
+  // Sort descending by percentage, then count, exact occurrences, score, and confidence
+  list.sort(
+    (a, b) =>
+      b.percentage - a.percentage ||
+      b.count - a.count ||
+      b.exact - a.exact ||
+      b.score - a.score ||
+      (b.avgConfidence || 0) - (a.avgConfidence || 0)
+  );
 
   // Return at most top 5 predictions
   return list.slice(0, 5);
