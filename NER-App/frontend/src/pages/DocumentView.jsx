@@ -15,6 +15,7 @@ import AnnotationBottomBar from '../components/AnnotationBottomBar.jsx';
 import UnsavedChangesModal from '../components/UnsavedChangesModal.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import { computeStatsLocal, sameSpans, stripTempId } from '../utils/annotationState.js';
+import { getTopWordsByLabel } from '../utils/textUtils.jsx';
 
 /** How far ahead of the annotator the model is kept. */
 const PREDICT_AHEAD = 10;
@@ -1172,6 +1173,10 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
     return { active, manual, model: active - manual, counts, reviewedPassages, awaitingModel };
   }, [doc]);
 
+  // Top 5 words per label, from the saved passages. `doc` is replaced on every
+  // Approve & Save, so these refresh as soon as a save lands.
+  const topWordsByLabel = useMemo(() => getTopWordsByLabel(doc.segments, 5), [doc.segments]);
+
   const workingSpans = useMemo(() => {
     const pText = passage?.text || '';
     const valid = [...working].filter((e) => {
@@ -1327,6 +1332,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
                   }
                   meanConfidence={meanConfidence}
                   entityCounts={docTotals.counts}
+                  topWordsByLabel={topWordsByLabel}
                   doc={doc}
                   workingEntities={working}
                 />

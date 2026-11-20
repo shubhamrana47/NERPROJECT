@@ -253,6 +253,44 @@ export function recordAnnotationHistory(text, label) {
 }
 
 /**
+ * For every label, the (at most) `limit` words/phrases most often tagged with
+ * it across the saved passages of a file. Matching ignores case; the casing
+ * shown is the one used most. Deleted or rejected spans don't count.
+ * Returns { [label]: [{ text, count }] }, sorted by count desc then text A-Z.
+ */
+export function getTopWordsByLabel(segments = [], limit = 5) {
+  const byLabel = {};
+  (Array.isArray(segments) ? segments : []).forEach((seg) => {
+    (seg?.entities || []).forEach((e) => {
+      if (!e?.label || e.status === 'deleted' || e.validationStatus === 'rejected') return;
+      const raw = typeof e.text === 'string' ? e.text.trim().replace(/\s+/g, ' ') : '';
+      if (!raw) return;
+      const key = raw.toLowerCase();
+      const words = (byLabel[e.label] ||= new Map());
+      let entry = words.get(key);
+      if (!entry) {
+        entry = { count: 0, casings: new Map() };
+        words.set(key, entry);
+      }
+      entry.count += 1;
+      entry.casings.set(raw, (entry.casings.get(raw) || 0) + 1);
+    });
+  });
+
+  const result = {};
+  Object.entries(byLabel).forEach(([label, words]) => {
+    result[label] = [...words.values()]
+      .map(({ count, casings }) => ({
+        text: [...casings.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0],
+        count,
+      }))
+      .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
+      .slice(0, limit);
+  });
+  return result;
+}
+
+/**
  * Computes at most top 5 predictions of how a selected text was annotated earlier.
  * Scans across current working entities, all document passages (entities and originalEntities),
  * and persistent local annotation history.

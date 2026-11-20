@@ -26,8 +26,31 @@ const {
   ENTITY_GROUPS,
   ENTITY_DESCRIPTIONS,
   getTopEarlierAnnotations,
+  getTopWordsByLabel,
   formatEntityLabel,
 } = require(out);
+
+test('getTopWordsByLabel returns at most 5 most frequent words per label and follows saved changes', () => {
+  const ent = (text, label, extra = {}) => ({ text, label, ...extra });
+  const segments = [
+    { entities: [ent('wheat', 'CROP'), ent('Wheat', 'CROP'), ent('rice', 'CROP'), ent('DAP', 'CHEMICAL')] },
+    { entities: [ent('wheat', 'CROP'), ent('maize', 'CROP'), ent('gram', 'CROP'), ent('bajra', 'CROP'), ent('jowar', 'CROP')] },
+    { entities: [ent('rice', 'CROP'), ent('cotton', 'CROP', { status: 'deleted' }), ent('urea', 'CROP', { validationStatus: 'rejected' })] },
+  ];
+  const top = getTopWordsByLabel(segments, 5);
+  assert.equal(top.CROP.length, 5, 'capped at 5');
+  assert.deepEqual(top.CROP.slice(0, 2), [{ text: 'wheat', count: 3 }, { text: 'rice', count: 2 }], 'case-insensitive, most frequent first');
+  assert.ok(!top.CROP.some((w) => w.text === 'cotton' || w.text === 'urea'), 'deleted/rejected ignored');
+  assert.deepEqual(top.CHEMICAL, [{ text: 'DAP', count: 1 }]);
+
+  // Simulate an Approve & Save that relabels both "rice" spans: the ranking must move.
+  const saved = segments.map((s) => ({
+    entities: s.entities.map((e) => (e.text === 'rice' ? { ...e, label: 'FOOD_ITEM' } : e)),
+  }));
+  const after = getTopWordsByLabel(saved, 5);
+  assert.ok(!after.CROP.some((w) => w.text === 'rice'), 'rice left CROP after save');
+  assert.deepEqual(after.FOOD_ITEM, [{ text: 'rice', count: 2 }]);
+});
 
 test('categories are listed in alphabetical order', () => {
   const categoryNames = ENTITY_GROUPS.map((g) => g.name);

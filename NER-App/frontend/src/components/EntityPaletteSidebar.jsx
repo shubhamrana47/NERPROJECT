@@ -76,6 +76,7 @@ export default function EntityPaletteSidebar({
   manualSpans = 0,
   meanConfidence = null,
   entityCounts = {},
+  topWordsByLabel = {},
   isValidation = false,
   focusedSpan = null,
   doc = null,
@@ -216,6 +217,29 @@ export default function EntityPaletteSidebar({
             <span className="text-white font-bold opacity-80 select-none">→</span>
             <span>{hoveredEntity.desc}</span>
           </div>
+          {/* Looked up at render time so a save that lands mid-hover shows at once. */}
+          {(() => {
+            const top = topWordsByLabel[hoveredEntity.type] || [];
+            return (
+              <div className="mt-2 border-t border-white/15 pt-1.5">
+                <p className="text-[10.5px] text-neutral-400">Most tagged in this file</p>
+                {top.length > 0 ? (
+                  <ol className="mt-1 space-y-0.5" data-testid="top-words">
+                    {top.map((w) => (
+                      <li key={w.text} className="flex items-baseline justify-between gap-4 text-[12px]">
+                        <span className="truncate">{w.text}</span>
+                        <span className="shrink-0 font-mono text-[11px] tabular-nums text-neutral-400">
+                          ×{w.count.toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="mt-0.5 text-[11.5px] text-neutral-300">Nothing saved under this label yet.</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
