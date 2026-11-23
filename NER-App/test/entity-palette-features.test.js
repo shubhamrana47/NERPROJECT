@@ -296,13 +296,23 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
   assert.equal(palette.querySelector('[data-subtype-toggle="Policy"]'), null, 'No dropdown for Policy');
   assert.equal(palette.querySelector('[data-subtype-toggle="Citation"]'), null, 'No dropdown for Citation');
 
-  // Subsumed entities (e.g. Nutrient, Rainfall, Vegetable, Organization) must not render as independent cards
+  // Subsumed entities (e.g. Nutrient, Rainfall, Vegetable) must not render as independent cards
   const cardLabels = [...palette.querySelectorAll('section button')]
     .filter((b) => !b.hasAttribute('data-subtype-toggle'))
     .map((b) => b.textContent.trim());
   assert.ok(!cardLabels.some((t) => t.startsWith('Nutrient')), 'Nutrient must not appear as a standalone card');
   assert.ok(!cardLabels.some((t) => t.startsWith('Rainfall')), 'Rainfall must not appear as a standalone card');
   assert.ok(!cardLabels.some((t) => t.startsWith('Vegetable')), 'Vegetable must not appear as a standalone card');
+
+  // Organization, Person, and Natural_Resource are independent entities (no dropdown, not under Location/Soil)
+  assert.ok(cardLabels.some((t) => t.includes('Organization')), 'Organization appears as an independent card');
+  assert.ok(cardLabels.some((t) => t.includes('Person')), 'Person appears as an independent card');
+  assert.ok(cardLabels.some((t) => t.includes('Natural Resource')), 'Natural Resource appears as an independent card');
+  assert.equal(palette.querySelector('[data-subtype-toggle="Organization"]'), null, 'No dropdown for Organization');
+  assert.equal(palette.querySelector('[data-subtype-toggle="Person"]'), null, 'No dropdown for Person');
+  assert.equal(palette.querySelector('[data-subtype-toggle="Natural_Resource"]'), null, 'No dropdown for Natural_Resource');
+  assert.ok(!getEntitySubtypes('Location').some((s) => /Organization|Person/i.test(s.name)), 'Location does not include Organization/Person');
+  assert.ok(!getEntitySubtypes('Soil').some((s) => /Natural_Resource/i.test(s.name)), 'Soil does not include Natural_Resource');
 
   // Open Chemical dropdown and verify Nutrient is inside WITHOUT ontology mapping codes
   const chemToggle = palette.querySelector('[data-subtype-toggle="Chemical"]');

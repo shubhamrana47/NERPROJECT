@@ -266,11 +266,6 @@ const RAW_ENTITY_SUBTYPES = {
       agro: 'ENVO_09200015 (humidity of soil)',
       agrovoc: 'c_7205 (soil water); c_7208 (soil water content); c_2372 (drainage); c_8333 (waterlogging)',
     },
-    {
-      name: 'Natural_Resource (Water)',
-      agro: 'ENVO_00002006 (liquid water); AGRO_00000009 (irrigation source); ENVO_00000063 (water body)',
-      agrovoc: 'c_5091 (natural resources); c_8309 (water); c_3958 (irrigation water)',
-    },
   ],
 
   Quantity: [
@@ -345,16 +340,6 @@ const RAW_ENTITY_SUBTYPES = {
       agro: 'ENVO_01000408 (environmental zone)',
       agrovoc: 'c_28638 (agroclimatic zones)',
     },
-    {
-      name: 'Organization',
-      agro: 'OBI_0000245 (organization); OBI_0000828 (research organization)',
-      agrovoc: 'c_37968 (organizations); c_6514 (research institutions)',
-    },
-    {
-      name: 'Person / Stakeholder',
-      agro: 'AGRO_00000378 (person role within the experiment); AGRO_00000372 (farmer); AGRO_00000376 (extension agent)',
-      agrovoc: 'c_2805 (farmers); c_3683 (human population)',
-    },
   ],
 };
 
@@ -406,8 +391,6 @@ export const SUBSUMED_ENTITY_TYPES = new Set([
   'Treatment',
   // Under Agri_Equipment
   'Technology',
-  // Under Soil
-  'Natural_Resource',
   // Under Quantity
   'Field_Area',
   'Other_Quantity',
@@ -415,7 +398,4 @@ export const SUBSUMED_ENTITY_TYPES = new Set([
   // Under Date_and_Time
   'Duration',
   'Season',
-  // Under Location
-  'Organization',
-  'Person',
 ]);
