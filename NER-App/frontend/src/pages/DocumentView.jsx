@@ -523,7 +523,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
    * rejection is a state the span carries, so it stays visible, can be undone,
    * and travels into the exported file as feedback.
    */
-  const decideEntity = useCallback((target, decision, nextLabel) => {
+  const decideEntity = useCallback((target, decision, nextLabel, nextSubtype = undefined) => {
     setWorking((prev) =>
       prev.map((e) => {
         const match =
@@ -546,7 +546,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
           if (decision === 'unreviewed') {
             return { ...e, validationStatus: 'added', status: 'approved', source: 'human' };
           }
-          return decision === 'relabelled' ? { ...e, label: nextLabel || e.label, isManual: true } : e;
+          return decision === 'relabelled'
+            ? { ...e, label: nextLabel || e.label, subtype: nextSubtype || undefined, isManual: true }
+            : e;
         }
 
         if (decision === 'unreviewed') {
@@ -558,6 +560,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
             ...e,
             text: restoredText,
             label: restoredLabel,
+            subtype: undefined,
             start: restoredStart,
             end: restoredEnd,
             sources: e.originalSources || e.sources,
@@ -584,6 +587,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         return {
           ...e,
           label: nextLabel || e.label,
+          subtype: nextSubtype || undefined,
           originalLabel: prevFirstPlace,
           originalRunnerUp: initialRunnerUp,
           runnerUp: prevFirstPlace,
@@ -606,6 +610,7 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
         return {
           ...prev,
           label: nextLabel || prev.label,
+          subtype: nextSubtype || undefined,
           originalLabel: prev.originalLabel || prev.label,
           validationStatus: 'relabelled',
           status: 'edited',
@@ -707,9 +712,9 @@ export default function DocumentView({ doc, onChange, onOpenUpload, previewMode 
       onUpdateEntity: updateEntity,
       onDeleteEntity: deleteEntity,
       onRelabel: isValidation
-        ? (label) => {
+        ? (label, subtype) => {
             const target = focusedSpan || annotation?.activeEditingEntity;
-            if (target) decideEntity(target, 'relabelled', label);
+            if (target) decideEntity(target, 'relabelled', label, subtype);
           }
         : null,
     });

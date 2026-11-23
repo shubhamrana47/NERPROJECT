@@ -116,6 +116,7 @@ function buildProvidedEntities(provided, text, ingest) {
     out.push({
       text: entityText,
       label: restored === 'relabelled' && block.type ? String(block.type).trim() || label : label,
+      subtype: raw.subtype ? String(raw.subtype).trim() : undefined,
       start,
       end,
       confidence: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 1,
@@ -321,7 +322,8 @@ exports.upload = async (req, res, next) => {
         const restored = importedEntities
           .map((e) => ({
             text: String(e.text ?? '').trim(),
-            label: String(e.label ?? '').trim(),
+            label: String(e.label ?? e.type ?? '').trim(),
+            subtype: e.subtype ? String(e.subtype).trim() : undefined,
             start: Number(e.start),
             end: Number(e.end),
             confidence: e.confidence !== undefined ? Number(e.confidence) : 1,

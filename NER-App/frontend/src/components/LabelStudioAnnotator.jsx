@@ -242,6 +242,7 @@ export default function LabelStudioAnnotator({
               className={isRejected ? 'text-ink-faint line-through' : undefined}
             >
               {formatEntityLabel(ent.label)}
+              {ent.subtype ? ` / ${ent.subtype}` : ''}
             </span>
             {!readOnly && (
               <button

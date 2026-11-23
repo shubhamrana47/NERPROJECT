@@ -230,3 +230,138 @@ test('UI renders categories in alphabetical order with 2 columns of entities and
   assert.ok(chemBtn, 'Chemical button exists in palette');
   assert.ok(chemBtn.getAttribute('aria-label').includes('Names of Chemicals, Fertilizers, Pesticides, etc.'));
 });
+
+
+test('only parent entities with AgrO/AGROVOC-verified subcategories render a dropdown, and exports save type + subtype', async (t) => {
+  const subtypesOut = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ner-sub-')), 'entitySubtypes.cjs');
+  esbuild.buildSync({
+    entryPoints: [path.join(FRONTEND, 'src', 'utils', 'entitySubtypes.js')],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: subtypesOut,
+    nodePaths: [path.join(FRONTEND, 'node_modules')],
+    logLevel: 'error',
+  });
+  const { ENTITY_SUBTYPES, getEntitySubtypes } = require(subtypesOut);
+
+  // Every listed subcategory must have a verified AgrO or AGROVOC mapping
+  const parentsWithSubtypes = Object.keys(ENTITY_SUBTYPES);
+  assert.equal(parentsWithSubtypes.length, 12, '12 parent entities have verified subcategories');
+  for (const [parent, subs] of Object.entries(ENTITY_SUBTYPES)) {
+    assert.ok(subs.length > 0, `${parent} has subcategories`);
+    for (const sub of subs) {
+      assert.ok(sub.agro || sub.agrovoc, `${parent} -> ${sub.name} must map to AgrO or AGROVOC`);
+      assert.ok(sub.ontologies.length >= 1, `${parent} -> ${sub.name} must list verified ontologies`);
+    }
+  }
+  assert.deepEqual(getEntitySubtypes('Policy'), [], 'Policy has no subcategories');
+  assert.deepEqual(getEntitySubtypes('Citation'), [], 'Citation has no subcategories');
+  assert.deepEqual(getEntitySubtypes('ML_Model'), [], 'ML_Model has no subcategories');
+
+  // Verify DOM: dropdown toggles exist ONLY for the 12 parent entities
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
+    MouseEvent: dom.window.MouseEvent,
+    getComputedStyle: dom.window.getComputedStyle,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, savedEntities: [], stats: {} }),
+  });
+  dom.window.URL.createObjectURL = () => 'blob:stub';
+  dom.window.URL.revokeObjectURL = () => {};
+
+  require(getHarnessBundle());
+  const mounted = await globalThis.__mount('tagged');
+  t.after(() => mounted.unmount?.());
+
+  const palette = [...mounted.host.querySelectorAll('aside')].find((a) =>
+    a.textContent.includes('Entity labels')
+  );
+  const toggles = [...palette.querySelectorAll('[data-subtype-toggle]')].map((b) =>
+    b.getAttribute('data-subtype-toggle')
+  );
+  assert.deepEqual(
+    toggles.sort(),
+    [...parentsWithSubtypes].sort(),
+    'Dropdown toggles render exclusively for entities with verified subcategories'
+  );
+  assert.equal(palette.querySelector('[data-subtype-toggle="Policy"]'), null, 'No dropdown for Policy');
+  assert.equal(palette.querySelector('[data-subtype-toggle="Citation"]'), null, 'No dropdown for Citation');
+
+  // Verify JSON exports save type (parent entity) and subtype (subcategory)
+  const { buildAnnotatedRecords, buildValidatedRecords } = require(path.join(
+    __dirname,
+    '..',
+    'backend',
+    'src',
+    'services',
+    'datasetBuilder'
+  ));
+
+  const annDoc = {
+    _id: 'sub-ann',
+    kind: 'annotate',
+    segments: [
+      {
+        index: 0,
+        text: 'Sow PBW 752 wheat variety.',
+        nerStatus: 'done',
+        sourceRecord: { text: 'Sow PBW 752 wheat variety.' },
+        entities: [
+          {
+            text: 'PBW 752',
+            label: 'Crop',
+            subtype: 'Variety / Cultivar',
+            start: 4,
+            end: 11,
+            confidence: 1,
+            status: 'approved',
+            source: 'human',
+            isManual: true,
+          },
+        ],
+      },
+    ],
+  };
+  const annExport = buildAnnotatedRecords([annDoc], {}).records[0].entities[0];
+  assert.equal(annExport.type, 'Crop');
+  assert.equal(annExport.subtype, 'Variety / Cultivar');
+
+  const valDoc = {
+    _id: 'sub-val',
+    kind: 'validate',
+    segments: [
+      {
+        index: 0,
+        text: 'Sow PBW 752 wheat variety.',
+        nerStatus: 'provided',
+        sourceRecord: { text: 'Sow PBW 752 wheat variety.', entities: [] },
+        entities: [
+          {
+            text: 'PBW 752',
+            label: 'Crop',
+            subtype: 'Variety / Cultivar',
+            start: 4,
+            end: 11,
+            confidence: 1,
+            status: 'approved',
+            source: 'human',
+            validationStatus: 'added',
+            isManual: true,
+          },
+        ],
+      },
+    ],
+  };
+  const valExport = buildValidatedRecords([valDoc]).records[0].entities[0];
+  assert.equal(valExport.type, 'Crop');
+  assert.equal(valExport.subtype, 'Variety / Cultivar');
+});

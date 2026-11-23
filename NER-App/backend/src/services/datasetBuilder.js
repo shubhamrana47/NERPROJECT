@@ -204,6 +204,7 @@ function prepareSpans(text, textStart, entities, options, issues) {
       start,
       end,
       label: normalizeLabel(ent.label),
+      ...(ent.subtype ? { subtype: String(ent.subtype).trim() } : {}),
       text: text.slice(start, end),
       source: ent.source === 'human' ? 'human' : 'model',
       origin: ent.source === 'human' ? 'human' : 'model',
@@ -298,6 +299,8 @@ function buildAnnotatedRecords(documents, options = {}) {
           start: e.start,
           end: e.end,
           label: e.label,
+          type: e.label,
+          ...(e.subtype ? { subtype: e.subtype } : {}),
           text: e.text,
           source: e.source,
           verified: e.verified,
@@ -571,6 +574,7 @@ function buildValidatedRecords(documents) {
               ...orig,
               text: decided.text,
               type: decided.label || orig.type,
+              ...(decided.subtype ? { subtype: decided.subtype } : {}),
               start: Number(decided.start),
               end: Number(decided.end),
               sources: ['manual'],
@@ -597,12 +601,17 @@ function buildValidatedRecords(documents) {
             // already carries the correction and would otherwise report it as
             // the original.
             type: decided.label,
+            ...(decided.subtype ? { subtype: decided.subtype } : {}),
             ...runnerUpOverlay(orig, decided.runnerUp || decided.originalLabel || orig.type),
             validation: { status, original_type: decided.originalLabel || orig.type },
           };
         }
 
-        return { ...orig, validation: { status } };
+        return {
+          ...orig,
+          ...(decided?.subtype ? { subtype: decided.subtype } : {}),
+          validation: { status },
+        };
       });
 
       /*
@@ -630,6 +639,7 @@ function buildValidatedRecords(documents) {
           return {
             text: e.text,
             type: e.label,
+            ...(e.subtype ? { subtype: e.subtype } : {}),
             start: e.start,
             end: e.end,
             score: 1.0,

@@ -17,6 +17,7 @@ const rejectedAnnotationSchema = new mongoose.Schema(
 const entitySchema = new mongoose.Schema({
   text: String,
   label: String,
+  subtype: { type: String, default: undefined },
   start: Number,
   end: Number,
   confidence: Number,

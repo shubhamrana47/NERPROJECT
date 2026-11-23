@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests for entity relabelling with runner-up progression and manual tag
  */
 
@@ -220,7 +220,7 @@ test('annotated export reflects saved edits with the same entity keys', async ()
   const ent = records[0].entities[0];
   assert.equal(ent.label, 'Disease');
   assert.deepEqual(Object.keys(ent).sort(),
-    ['confidence', 'end', 'label', 'source', 'start', 'status', 'text', 'verified']);
+    ['confidence', 'end', 'label', 'source', 'start', 'status', 'text', 'type', 'verified']);
 });
 
 
@@ -252,7 +252,7 @@ test('manual selection calculates exact offsets for Markpower 75 WG without char
   totalEnt.appendChild(totalText);
   const cap = doc.createElement('span');
   cap.setAttribute(CAPTION_ATTR, 'true');
-  cap.textContent = 'Chemical ×';
+  cap.textContent = 'Chemical Ã—';
   totalEnt.appendChild(cap);
   container.appendChild(totalEnt);
 

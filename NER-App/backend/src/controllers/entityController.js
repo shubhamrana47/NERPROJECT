@@ -75,7 +75,7 @@ function buildRejectedRecord(baseline, rawSourceEnt) {
 exports.reviewEntity = async (req, res, next) => {
   try {
     const { id, segmentIndex, entityId } = req.params;
-    const { action, label, text, start, end } = req.body;
+    const { action, label, subtype, text, start, end } = req.body;
     const doc = await Document.findById(id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
     const seg = doc.segments.find((s) => s.index === Number(segmentIndex));
@@ -100,6 +100,10 @@ exports.reviewEntity = async (req, res, next) => {
         if (!ent.originalRunnerUp) ent.originalRunnerUp = ent.runnerUp;
         ent.runnerUp = prevFirstPlace;
         ent.label = label;
+        ent.isManual = true;
+      }
+      if (subtype !== undefined) {
+        ent.subtype = subtype ? String(subtype).trim() : undefined;
         ent.isManual = true;
       }
       if (text !== undefined && text !== ent.text) {
@@ -157,7 +161,7 @@ exports.reviewEntity = async (req, res, next) => {
 exports.addEntity = async (req, res, next) => {
   try {
     const { id, segmentIndex } = req.params;
-    const { text, label, start, end } = req.body;
+    const { text, label, subtype, start, end } = req.body;
     if (!text || !label || start == null || end == null) {
       return res.status(400).json({ error: 'text, label, start, and end are required' });
     }
@@ -169,6 +173,7 @@ exports.addEntity = async (req, res, next) => {
     seg.entities.push({
       text: String(text).trim(),
       label: String(label).trim(),
+      subtype: subtype ? String(subtype).trim() : undefined,
       start: Number(start),
       end: Number(end),
       confidence: 1.0,
@@ -261,6 +266,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
       const ent = {
         text: String(e.text || '').trim(),
         label: String(e.label || '').trim(),
+        subtype: e.subtype ? String(e.subtype).trim() : undefined,
         start: Number(e.start),
         end: Number(e.end),
         confidence: e.confidence !== undefined ? Number(e.confidence) : 1.0,

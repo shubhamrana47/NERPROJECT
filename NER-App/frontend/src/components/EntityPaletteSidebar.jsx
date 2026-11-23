@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 import {
   ENTITY_TYPES,
@@ -9,64 +9,166 @@ import {
   getEntityColorStyle,
   formatEntityLabel,
 } from '../utils/textUtils.jsx';
+import { getEntitySubtypes } from '../utils/entitySubtypes.js';
 
 /**
- * Entity card component matching Image 2:
- * - Colored horizontal bar at top-left
- * - Shortcut key badge at top-right (if available)
- * - Formatted label name
- * - Usage count
- * - Dark floating tooltip on hover with `→ <description>`
+ * Extract compact ontology IDs (e.g. "AGRO_00000325", "c_1474") for concise proof display.
  */
-function EntityCard({ type, count, shortcut, armed, onPick, onHover }) {
+function compactOntologyProof(sub) {
+  const parts = [];
+  if (sub.agro) {
+    const m = sub.agro.match(/[A-Za-z]+_\d+/);
+    if (m) parts.push(`AgrO: ${m[0]}`);
+  }
+  if (sub.agrovoc) {
+    const m = sub.agrovoc.match(/c_[0-9a-zA-Z]+/);
+    if (m) parts.push(`AGROVOC: ${m[0]}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * Entity card component:
+ * - Entities without verified subcategories render as a single click-to-label card.
+ * - Parent entities with verified ontology-backed subcategories render with a
+ *   split dropdown trigger on the right that opens the subcategory list.
+ */
+function EntityCard({
+  type,
+  count,
+  shortcut,
+  armed,
+  subtypes,
+  isOpen,
+  onPick,
+  onHover,
+  onToggleDropdown,
+}) {
   const { border } = getEntityColorStyle(type);
   const formatted = formatEntityLabel(type);
   const desc = ENTITY_DESCRIPTIONS[type] || '';
+  const hasSubtypes = subtypes.length > 0;
+
+  if (!hasSubtypes) {
+    return (
+      <button
+        type="button"
+        onClick={() => onPick(type)}
+        onMouseEnter={(e) =>
+          onHover?.({
+            type,
+            label: formatted,
+            desc,
+            rect: e.currentTarget.getBoundingClientRect(),
+          })
+        }
+        onMouseLeave={() => onHover?.(null)}
+        className={`group relative flex flex-col justify-between rounded-md border px-1.5 py-1 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-900 ${
+          armed
+            ? 'border-slate-300 bg-white hover:border-slate-900 hover:shadow-xs'
+            : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
+        }`}
+        aria-label={desc ? `${formatted}: ${desc}` : formatted}
+      >
+        <div className="flex items-center justify-between gap-1 w-full">
+          <span
+            className="h-[3px] w-3.5 shrink-0 rounded-full"
+            style={{ backgroundColor: border }}
+            aria-hidden="true"
+          />
+          {shortcut && (
+            <span className="rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[10px] font-medium text-slate-600">
+              {shortcut}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-0.5 flex items-baseline justify-between gap-1 w-full">
+          <span className="truncate text-[12px] font-medium text-slate-800 group-hover:text-black">
+            {formatted}
+          </span>
+          {count > 0 && (
+            <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-slate-500">
+              {count.toLocaleString()}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => onPick(type)}
-      onMouseEnter={(e) =>
-        onHover?.({
-          type,
-          label: formatted,
-          desc,
-          rect: e.currentTarget.getBoundingClientRect(),
-        })
-      }
-      onMouseLeave={() => onHover?.(null)}
-      className={`group relative flex flex-col justify-between rounded-md border px-1.5 py-1 text-left transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-900 ${
-        armed
-          ? 'border-slate-300 bg-white hover:border-slate-900 hover:shadow-xs'
-          : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
+    <div
+      className={`group relative flex items-stretch overflow-hidden rounded-md border transition-all ${
+        isOpen
+          ? 'border-slate-900 bg-white shadow-xs'
+          : armed
+            ? 'border-slate-300 bg-white hover:border-slate-900 hover:shadow-xs'
+            : 'border-slate-200 bg-white hover:border-slate-400 shadow-2xs'
       }`}
-      aria-label={desc ? `${formatted}: ${desc}` : formatted}
     >
-      <div className="flex items-center justify-between gap-1 w-full">
-        <span
-          className="h-[3px] w-3.5 shrink-0 rounded-full"
-          style={{ backgroundColor: border }}
-          aria-hidden="true"
-        />
-        {shortcut && (
-          <span className="rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[10px] font-medium text-slate-600">
-            {shortcut}
-          </span>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={() => onPick(type)}
+        onMouseEnter={(e) =>
+          onHover?.({
+            type,
+            label: formatted,
+            desc,
+            rect: e.currentTarget.getBoundingClientRect(),
+          })
+        }
+        onMouseLeave={() => onHover?.(null)}
+        className="flex min-w-0 flex-1 flex-col justify-between px-1.5 py-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-900"
+        aria-label={desc ? `${formatted}: ${desc}` : formatted}
+      >
+        <div className="flex items-center justify-between gap-1 w-full">
+          <span
+            className="h-[3px] w-3.5 shrink-0 rounded-full"
+            style={{ backgroundColor: border }}
+            aria-hidden="true"
+          />
+          {shortcut && (
+            <span className="rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[10px] font-medium text-slate-600">
+              {shortcut}
+            </span>
+          )}
+        </div>
 
-      <div className="mt-0.5 flex items-baseline justify-between gap-1 w-full">
-        <span className="truncate text-[12px] font-medium text-slate-800 group-hover:text-black">
-          {formatted}
-        </span>
-        {count > 0 && (
-          <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-slate-500">
-            {count.toLocaleString()}
+        <div className="mt-0.5 flex items-baseline justify-between gap-1 w-full">
+          <span className="truncate text-[12px] font-medium text-slate-800 group-hover:text-black">
+            {formatted}
           </span>
-        )}
-      </div>
-    </button>
+          {count > 0 && (
+            <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-slate-500">
+              {count.toLocaleString()}
+            </span>
+          )}
+        </div>
+      </button>
+
+      <button
+        type="button"
+        data-subtype-toggle={type}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={`Show verified subcategories for ${formatted} (${subtypes.length})`}
+        onClick={(e) => {
+          e.stopPropagation();
+          const cardRect = e.currentTarget.parentElement.getBoundingClientRect();
+          onToggleDropdown(type, cardRect);
+        }}
+        className={`flex shrink-0 items-center justify-center border-l px-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-slate-900 ${
+          isOpen
+            ? 'border-slate-300 bg-slate-900 text-white'
+            : 'border-slate-200 bg-slate-50/70 text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+        }`}
+      >
+        <ChevronDown
+          className={`h-3 w-3 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+    </div>
   );
 }
 
@@ -86,17 +188,34 @@ export default function EntityPaletteSidebar({
   const [justTagged, setJustTagged] = useState('');
   const [notice, setNotice] = useState('');
   const [hoveredEntity, setHoveredEntity] = useState(null);
+  const [openDropdown, setOpenDropdown] = useState(null);
   const searchInputRef = useRef(null);
+  const dropdownRef = useRef(null);
 
   const selectedSpan = annotation?.selectedSpan;
   const activeEditingEntity = annotation?.activeEditingEntity;
   const applyLabel = annotation?.applyLabel;
   const clearSelection = annotation?.clearSelection;
   const setActiveEditingEntity = annotation?.setActiveEditingEntity;
-  const updateEntity = annotation?.updateEntity;
-  const deleteEntity = annotation?.deleteEntity;
 
-  // Keyboard shortcut "/" to focus search input
+  // Close subcategory dropdown on outside click or scroll/resize
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handlePointerDown = (e) => {
+      if (dropdownRef.current?.contains(e.target)) return;
+      if (e.target.closest?.('[data-subtype-toggle]')) return;
+      setOpenDropdown(null);
+    };
+    const handleResize = () => setOpenDropdown(null);
+    document.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [openDropdown]);
+
+  // Keyboard shortcut "/" to focus search input & Escape to close dropdown/search/selection
   useEffect(() => {
     const handleKeyDown = (e) => {
       const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
@@ -106,7 +225,9 @@ export default function EntityPaletteSidebar({
         return;
       }
       if (e.key === 'Escape') {
-        if (search) {
+        if (openDropdown) {
+          setOpenDropdown(null);
+        } else if (search) {
           setSearch('');
           searchInputRef.current?.blur();
         } else if (selectedSpan) {
@@ -118,7 +239,7 @@ export default function EntityPaletteSidebar({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [search, selectedSpan, activeEditingEntity, clearSelection, setActiveEditingEntity]);
+  }, [openDropdown, search, selectedSpan, activeEditingEntity, clearSelection, setActiveEditingEntity]);
 
   const shortcutMap = useMemo(() => {
     const map = {};
@@ -155,7 +276,15 @@ export default function EntityPaletteSidebar({
 
   const armed = Boolean(selectedSpan);
 
-  const handlePick = (type) => {
+  const handleToggleDropdown = (type, rect) => {
+    setHoveredEntity(null);
+    setOpenDropdown((prev) => (prev?.type === type ? null : { type, rect }));
+  };
+
+  const handlePick = (type, subtype = undefined) => {
+    setOpenDropdown(null);
+    const displayTag = subtype ? `${formatEntityLabel(type)} / ${subtype}` : formatEntityLabel(type);
+
     if (isValidation && !selectedSpan) {
       const target = focusedSpan || activeEditingEntity;
       if (!target) {
@@ -164,10 +293,10 @@ export default function EntityPaletteSidebar({
         setTimeout(() => setNotice(''), 3000);
         return;
       }
-      applyLabel(type);
+      applyLabel(type, subtype);
       setSearch('');
       setNotice('');
-      setJustTagged(`${target.text} → ${formatEntityLabel(type)}`);
+      setJustTagged(`${target.text} → ${displayTag}`);
       setTimeout(() => setJustTagged(''), 2600);
       return;
     }
@@ -179,28 +308,57 @@ export default function EntityPaletteSidebar({
       return;
     }
     const text = selectedSpan.text;
-    applyLabel(type);
+    applyLabel(type, subtype);
     setSearch('');
     setNotice('');
-    setJustTagged(`${text} → ${formatEntityLabel(type)}`);
+    setJustTagged(`${text} → ${displayTag}`);
     setTimeout(() => setJustTagged(''), 2600);
   };
 
-  const confidenceLabel =
-    typeof meanConfidence === 'number' && !Number.isNaN(meanConfidence)
-      ? `${Number(meanConfidence).toFixed(0)}%`
-      : '—';
+  const openSubtypes = openDropdown ? getEntitySubtypes(openDropdown.type) : [];
+  const openColor = openDropdown ? getEntityColorStyle(openDropdown.type) : null;
+
+  // Compute viewport-safe position for the subcategory dropdown popover
+  const dropdownPosition = useMemo(() => {
+    if (!openDropdown?.rect) return null;
+    const width = 288;
+    const estimatedHeight = Math.min(320, 44 + openSubtypes.length * 46);
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const left = Math.max(12, Math.min(vw - width - 12, openDropdown.rect.left));
+    const spaceBelow = vh - openDropdown.rect.bottom - 12;
+    const openUpward = spaceBelow < estimatedHeight && openDropdown.rect.top > estimatedHeight;
+    return openUpward
+      ? { left, top: openDropdown.rect.top - 4, transform: 'translateY(-100%)', width }
+      : { left, top: openDropdown.rect.bottom + 4, width };
+  }, [openDropdown, openSubtypes.length]);
+
+  const renderCard = (type) => (
+    <EntityCard
+      key={type}
+      type={type}
+      count={entityCounts[type] || 0}
+      shortcut={shortcutMap[type]}
+      armed={armed}
+      subtypes={getEntitySubtypes(type)}
+      isOpen={openDropdown?.type === type}
+      onPick={handlePick}
+      onHover={(info) => {
+        if (!openDropdown) setHoveredEntity(info);
+      }}
+      onToggleDropdown={handleToggleDropdown}
+    />
+  );
 
   return (
     <div className="relative flex max-h-[46rem] flex-col overflow-hidden rounded-md border border-rule bg-sheet md:h-full md:max-h-none">
-      {/* Dark Hover Tooltip Card matching Image 2 */}
-      {hoveredEntity && (
+      {/* Dark Hover Tooltip Card */}
+      {hoveredEntity && !openDropdown && (
         <div
           role="tooltip"
           className="pointer-events-none fixed z-50 max-w-[280px] rounded-md border border-neutral-800 bg-[#222222] px-3 py-2 text-white shadow-2xl backdrop-blur-md transition-opacity duration-150"
           style={{
-            left: Math.max(12, Math.min(window.innerWidth - 300, (hoveredEntity.rect?.left ?? 20))),
-            // Always sit above the hovered card.
+            left: Math.max(12, Math.min(window.innerWidth - 300, hoveredEntity.rect?.left ?? 20)),
             top: (hoveredEntity.rect?.top ?? 100) - 6,
             transform: 'translateY(-100%)',
           }}
@@ -209,7 +367,6 @@ export default function EntityPaletteSidebar({
             <span className="text-white font-bold opacity-80 select-none">→</span>
             <span>{hoveredEntity.desc}</span>
           </div>
-          {/* Looked up at render time so a save that lands mid-hover shows at once. */}
           {(() => {
             const top = topWordsByLabel[hoveredEntity.type] || [];
             return (
@@ -235,6 +392,69 @@ export default function EntityPaletteSidebar({
         </div>
       )}
 
+      {/* Ontology-Verified Subcategories Dropdown Popover */}
+      {openDropdown && dropdownPosition && openSubtypes.length > 0 && (
+        <div
+          ref={dropdownRef}
+          role="listbox"
+          aria-label={`${formatEntityLabel(openDropdown.type)} subcategories`}
+          data-testid={`subtype-dropdown-${openDropdown.type}`}
+          className="fixed z-50 max-h-[320px] overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl"
+          style={dropdownPosition}
+        >
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: openColor?.border }}
+                aria-hidden="true"
+              />
+              <span className="truncate text-[11.5px] font-semibold text-slate-800">
+                {formatEntityLabel(openDropdown.type)} subcategories
+              </span>
+            </div>
+            <span className="shrink-0 font-mono text-[10px] text-slate-500">
+              {openSubtypes.length} verified
+            </span>
+          </div>
+
+          <div className="divide-y divide-slate-100 py-0.5">
+            {openSubtypes.map((sub) => (
+              <button
+                key={sub.name}
+                type="button"
+                role="option"
+                onClick={() => handlePick(openDropdown.type, sub.name)}
+                className="flex w-full flex-col gap-0.5 px-2.5 py-1.5 text-left transition-colors hover:bg-slate-50 focus-visible:bg-slate-100 focus-visible:outline-none"
+                title={[
+                  sub.agro ? `CGIAR AgrO: ${sub.agro}` : null,
+                  sub.agrovoc ? `FAO AGROVOC: ${sub.agrovoc}` : null,
+                ]
+                  .filter(Boolean)
+                  .join('\n')}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-800">{sub.name}</span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    {sub.ontologies.map((ont) => (
+                      <span
+                        key={ont}
+                        className="rounded border border-slate-200 bg-slate-100 px-1 py-px font-mono text-[9.5px] font-medium text-slate-600"
+                      >
+                        {ont}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                <span className="truncate font-mono text-[10px] text-slate-500">
+                  {compactOntologyProof(sub)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header: Title, Instructions & Search */}
       <div className="shrink-0 border-b border-rule px-4 pb-3 pt-3.5">
         <div className="flex items-baseline justify-between gap-2">
@@ -245,7 +465,7 @@ export default function EntityPaletteSidebar({
         </div>
 
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-          Click an entity in the passage to put it in focus, then pick a label here to correct it. To add one the pipeline missed, select the words first.
+          Click an entity in the passage to put it in focus, then pick a label here to correct it. Use the dropdown arrow on parent entities to pick a verified subcategory.
         </p>
 
         {/* Search input with / shortcut */}
@@ -290,7 +510,7 @@ export default function EntityPaletteSidebar({
         )}
       </div>
 
-      {/* The 2-Column Categories and Cards Layout matching Image 2 */}
+      {/* The 2-Column Categories and Cards Layout */}
       <div className="scroll-slim flex-1 overflow-y-auto p-2.5">
         {matches ? (
           matches.length > 0 ? (
@@ -299,17 +519,7 @@ export default function EntityPaletteSidebar({
                 Search Results ({matches.length})
               </div>
               <div className="grid grid-cols-2 gap-1.5">
-                {matches.map((type) => (
-                  <EntityCard
-                    key={type}
-                    type={type}
-                    count={entityCounts[type] || 0}
-                    shortcut={shortcutMap[type]}
-                    armed={armed}
-                    onPick={handlePick}
-                    onHover={setHoveredEntity}
-                  />
-                ))}
+                {matches.map((type) => renderCard(type))}
               </div>
             </div>
           ) : (
@@ -327,17 +537,7 @@ export default function EntityPaletteSidebar({
                     {group.name}
                   </h3>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {group.types.map((type) => (
-                      <EntityCard
-                        key={type}
-                        type={type}
-                        count={entityCounts[type] || 0}
-                        shortcut={shortcutMap[type]}
-                        armed={armed}
-                        onPick={handlePick}
-                        onHover={setHoveredEntity}
-                      />
-                    ))}
+                    {group.types.map((type) => renderCard(type))}
                   </div>
                 </section>
               ))}
@@ -351,17 +551,7 @@ export default function EntityPaletteSidebar({
                     {group.name}
                   </h3>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {group.types.map((type) => (
-                      <EntityCard
-                        key={type}
-                        type={type}
-                        count={entityCounts[type] || 0}
-                        shortcut={shortcutMap[type]}
-                        armed={armed}
-                        onPick={handlePick}
-                        onHover={setHoveredEntity}
-                      />
-                    ))}
+                    {group.types.map((type) => renderCard(type))}
                   </div>
                 </section>
               ))}
@@ -370,7 +560,7 @@ export default function EntityPaletteSidebar({
         )}
       </div>
 
-      {/* Fixed Footer matching Image 2 */}
+      {/* Fixed Footer */}
       <div className="shrink-0 border-t border-rule bg-sheet px-4 py-3 text-[12.5px]">
         <div className="flex items-baseline justify-between gap-3 py-0.5">
           <span className="flex items-center gap-2 text-ink-soft">

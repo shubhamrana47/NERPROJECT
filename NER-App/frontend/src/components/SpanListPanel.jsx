@@ -108,6 +108,9 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
               style={{ backgroundColor: color.border }}
             />
             {formatEntityLabel(span.label)}
+            {span.subtype && (
+              <span className="text-[11px] text-ink-soft">/ {span.subtype}</span>
+            )}
             <ChevronDown className="h-3 w-3 text-ink-faint" />
           </button>
         )}
@@ -215,6 +218,9 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
               style={{ backgroundColor: color.border }}
             />
             {formatEntityLabel(span.label)}
+            {span.subtype && (
+              <span className="text-[11px] text-ink-soft">/ {span.subtype}</span>
+            )}
             <ChevronDown className="h-3 w-3 text-ink-faint" />
           </button>
         )}

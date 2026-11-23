@@ -58,7 +58,7 @@ export function AnnotationProvider({ children }) {
   }, []);
 
   const applyLabel = useCallback(
-    (label) => {
+    (label, subtype = undefined) => {
       /*
        * A selection is the more explicit act, so it wins. It has to: in
        * validation an entity can be in focus while words are selected, and
@@ -70,6 +70,7 @@ export function AnnotationProvider({ children }) {
         annotatorRef.current.onAddEntity({
           text: selectedSpan.text,
           label,
+          ...(subtype ? { subtype } : {}),
           start: selectedSpan.globalStart,
           end: selectedSpan.globalEnd,
           confidence: 1.0,
@@ -84,7 +85,7 @@ export function AnnotationProvider({ children }) {
         return;
       }
       if (annotatorRef.current?.onRelabel) {
-        annotatorRef.current.onRelabel(label);
+        annotatorRef.current.onRelabel(label, subtype);
         rememberLabel(label);
       }
     },
