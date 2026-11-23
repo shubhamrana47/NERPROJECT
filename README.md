@@ -37,11 +37,15 @@ it is uploaded.
 NERPROJECT/
 ├── NER-roberta-base_512/      # Fine-tuned RoBERTa token classification checkpoint
 ├── NER-App/
-│   ├── frontend/              # React 18 + Vite + Tailwind CSS (passage annotation workbench)
-│   ├── backend/               # Node.js + Express + Mongoose (REST API & Persistence)
+│   ├── frontend/              # React 18 + Vite + Tailwind CSS (passage annotation workbench, Vercel/Nginx)
+│   ├── backend/               # Node.js + Express + Mongoose (REST API & MongoDB persistence)
 │   ├── python-ai-service/     # FastAPI + PyTorch + Hugging Face Transformers
+│   ├── test/                  # Automated integration & UI test suite
 │   ├── Dockerfile             # Unified production container (Node + FastAPI + PyTorch)
+│   ├── railway.json           # Railway deployment config
 │   └── start.sh               # Container orchestration & startup script
+├── render.yaml                # Render Blueprint (unified backend + AI container)
+├── USER_GUIDE.md              # Annotator's guide
 └── README.md
 ```
 
@@ -88,31 +92,38 @@ NERPROJECT/
   confidence; confidence is a number and is shown as one.
 * **Either workflow, decided from the file.** Plain text is annotated;
   pipeline output is validated. See [Two Workflows](#two-workflows).
-* **Three columns**: the span list on the left, the passage in the middle, the
-  37 entity labels on the right.
+* **Three columns**: the span list on the left (`15rem`), the passage in the
+  middle (`50vw` in focus view), and the 37 entity labels on the right.
 * **Keyboard first**: <kbd>1</kbd>–<kbd>9</kbd> label the selection,
-  <kbd>A</kbd> approves the passage and moves on, <kbd>←</kbd>/<kbd>→</kbd>
-  move between passages (saving anything unsaved on the way out), <kbd>/</kbd>
-  searches labels.
-* **Writes never block a click.** An edit applies locally at once and is written
-  behind the interface, one request at a time in order.
+  <kbd>A</kbd> or <kbd>Ctrl+S</kbd> approves & saves the passage,
+  <kbd>←</kbd>/<kbd>→</kbd> move between passages (prompting via an **Unsaved
+  Changes** modal if there are unsaved edits), <kbd>/</kbd> searches labels.
+* **Save-gated navigation.** Edits apply locally on the current passage until
+  you click **Approve & Save All** (or **Discard changes**). Moving to another
+  passage with unsaved edits opens an **Unsaved Changes** confirmation modal
+  (`Stay on page`, `Discard changes`, or `Approve & Save All`) that waits for
+  database confirmation before navigating, so work is never lost in transit.
 
 ### 3. The Full Entity Palette, Always Open
-* **All 37 classes visible**, grouped by domain with sticky headings in the
-  right-hand column — always open and scrollable, with no hidden dropdown and no
-  short list standing in for the taxonomy.
-* **Recently used first.** The block above the list follows the labels the
-  annotator actually reaches for, while the number keys stay fixed: the digit
-  printed beside a label is always the digit that applies it.
+* **All 37 classes visible in a 2-column alphabetized card grid**, grouped across
+  7 domains in the right-hand column (4 groups on the left, 3 on the right) —
+  always open and scrollable, with per-label counts and fixed number-key badges
+  (<kbd>1</kbd>–<kbd>9</kbd>).
+* **Rich hover tooltips above each card.** Hovering any entity label card opens
+  a dark floating tooltip above the card showing its definition **plus the top 5
+  most tagged words** for that label in the current file (live-updated after
+  **Approve & Save All**).
 * **Typeahead search** filters by name (<kbd>/</kbd> to focus, <kbd>Enter</kbd>
-  applies the first match, <kbd>Esc</kbd> clears).
+  applies the first match, <kbd>Esc</kbd> clears search or selection).
 * **Select, then label.** Dragging across any words in any sentence arms a
-  selection; a label then applies to it. A selection always wins over a span in
-  focus, so labelling what was just dragged over is never ambiguous. A selection
-  crossing two sentences, or one that cannot be placed exactly, says so instead
-  of failing silently.
+  selection; clicking any label card or pressing its shortcut key applies it. A
+  selection always wins over a span in focus, so labelling what was just dragged
+  over is never ambiguous.
 * **In-place editing.** Click a span to put it in focus and change its label,
-  see its confidence and sources, or remove it.
+  see its confidence and sources, or remove it. Modifying or replacing a
+  pre-annotated pipeline span overwrites it in place as a manual annotation
+  while preserving the rejected pipeline reading (`rejectedAnnotation`) for
+  auditability and clean deduplicated exports.
 
 ### 4. One Export, Which Is Also the Save File
 * **One button, one file.** The interface exports the uploaded file with the
@@ -154,21 +165,29 @@ Every span records where it came from and whether a person has signed it off.
   fields instead. It is kept for compatibility and is not what the interface
   produces.
 
-### 6. Persistence That Never Blocks a Click
-* **Passage-level save (`PUT .../segments/:i/entities`)**, applied optimistically
-  and written behind the interface, one request at a time and in order, so no
-  edit waits for the network and two writes can never land out of sequence.
-* **Approving, saving, moving passage and exporting all write.** The browser
-  warns before a close or reload with a write in flight or unsaved changes on
-  screen.
+### 6. Explicit Save-Gated Persistence
+* **Passage-level save (`PUT .../segments/:i/entities`)**: edits are staged
+  locally on the active passage and persisted to MongoDB when you click
+  **Approve & Save All** (<kbd>A</kbd> / <kbd>Ctrl+S</kbd>), with a **Discard
+  changes** option to revert unsaved edits.
+* **Unsaved Changes modal gate**: navigating to another passage (`Prev` / `Next`
+  or arrow keys) while edits are unsaved opens a confirmation dialog (`Stay on
+  page`, `Discard changes`, or `Approve & Save All`) and waits for the database
+  write to complete before switching pages. Both export buttons also flush
+  pending edits before building the file, and the browser warns before closing
+  or reloading with unsaved changes.
 * **Reset (`POST .../segments/:i/reset`)** restores a passage from its immutable
   `originalEntities` — the model's own reading, or the pipeline's — without
   touching any other passage.
+* **In-place span replacement & multi-span merges**: correcting or replacing
+  pre-annotated spans records the original pipeline span under
+  `rejectedAnnotation` while saving the new human span, preventing duplicate
+  entities in validated exports.
 * **Validation writes are checked server-side**: a decision must belong to a
   span the file supplied, and an added span's offsets must really describe its
   text in that passage, or it is refused and counted.
 * Line-level endpoints (`PUT .../line-entities`, `POST .../reset-line`) remain
-  for compatibility; the passage view no longer uses them.
+  for compatibility; the passage view uses segment-level saves.
 
 ---
 
@@ -454,8 +473,11 @@ export button produces the annotated file and nothing else.
 
 ## API Reference
 
+### Health Check
+* `GET /health` — Confirms the backend HTTP server is up and reports `{ status, service, aiEnabled }`.
+
 ### Document Management
-* `POST /api/documents` — Upload a `.json` or `.jsonl` document, classify the workflow from its structure, parse it into passages, and save to MongoDB. Inference is **not** run here; annotation passages start as `pending` and are predicted on demand, while a validation file's passages are `provided` and never predicted (`?skipNer=true` marks them `skipped` to annotate from scratch).
+* `POST /api/documents` — Upload a `.json` or `.jsonl` document (up to 100 MB), classify the workflow from its structure, parse it into passages, and save to MongoDB. Inference is **not** run here; annotation passages start as `pending` and are predicted on demand, while a validation file's passages are `provided` and never predicted (`?skipNer=true` marks them `skipped` to annotate from scratch).
 * `POST /api/documents/:id/skip-inference` — Annotate from scratch: marks every pending passage `skipped`. Refused for a validation document.
 * `POST /api/documents/:id/segments/:segmentIndex/nothing-to-validate` — Records that a person read a passage holding no entities. Refused if the passage has entities.
 * `GET /api/documents` — List uploaded documents with entity statistics.
@@ -471,17 +493,18 @@ export button produces the annotated file and nothing else.
   document.
 
 ### Annotation Operations
-* `PUT /api/documents/:id/segments/:segmentIndex/line-entities` — Save/update entities for a specific sentence.
-* `POST /api/documents/:id/segments/:segmentIndex/reset-line` — Revert a single sentence back to original model predictions.
+* `POST /api/documents/:id/segments/:segmentIndex/entities` — Add a single entity to a segment.
 * `PUT /api/documents/:id/segments/:segmentIndex/entities` — Batch save/update entities for an entire segment.
-* `POST /api/documents/:id/segments/:segmentIndex/reset` — Reset full segment to original model output.
+* `POST /api/documents/:id/segments/:segmentIndex/reset` — Reset full segment to original model/pipeline output.
 * `PATCH /api/documents/:id/segments/:segmentIndex/entities/:entityId` — Update individual entity status or label.
+* `PUT /api/documents/:id/segments/:segmentIndex/line-entities` — Save/update entities for a specific sentence (legacy compatibility).
+* `POST /api/documents/:id/segments/:segmentIndex/reset-line` — Revert a single sentence back to original model predictions (legacy compatibility).
 
 ### Dataset Export
 * `GET /api/documents/:id/dataset` — The uploaded file with annotations appended. See **Annotation Output** above.
 * `GET /api/documents/dataset` — The same, across every uploaded document.
 * `GET /api/documents/:id/label-studio` — Download official Label Studio tasks and annotations JSON.
-* `GET /api/documents/:id/training-data` — Earlier export format, unchanged for compatibility. Note that it omits sentences without entities and does not distinguish human-verified spans from confident model output.
+* `GET /api/documents/:id/training-data` (and `GET /api/documents/training-data` for all documents) — Earlier export format, unchanged for compatibility. Note that it omits sentences without entities and does not distinguish human-verified spans from confident model output.
   * Query parameters:
     * `format=lines`: Exports sentence-by-sentence dataset.
     * `as=jsonl`: Exports as newline-delimited JSON Lines.
@@ -493,19 +516,27 @@ export button produces the annotated file and nothing else.
 
 ### Prerequisites
 * **Node.js** v18+ and `npm`
-* **Python** 3.10+ with `pip`
+* **Python** 3.10+ with `pip` (optional if running manual-only via `npm run dev:no-ai`)
 * **MongoDB** (local community edition or MongoDB Atlas URI)
 
-### 1. Environment Configuration
+### 1. Install Dependencies
+From `NER-App/`:
+```bash
+npm run install:all
+```
+
+### 2. Environment Configuration
 Create `NER-App/backend/.env`:
 ```env
 PORT=5000
 MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/ner_annotation
 AI_SERVICE_URL=http://127.0.0.1:8000
 CONFIDENCE_THRESHOLD=0.75
+# Optional: override DNS servers if MongoDB Atlas SRV lookup times out on your network
+# DNS_SERVERS=8.8.8.8,1.1.1.1
 ```
 
-### 2. Run All Services Concurrently
+### 3. Run All Services Concurrently
 From `NER-App/`:
 ```bash
 npm run dev:all
@@ -514,6 +545,11 @@ This simultaneously starts:
 * **Python AI Service**: `http://127.0.0.1:8000`
 * **Express Backend**: `http://localhost:5000`
 * **Vite Frontend**: `http://localhost:5173`
+
+To run without the Python AI service (manual annotation / validation only):
+```bash
+npm run dev:no-ai
+```
 
 Or run separately across 3 terminals:
 * **Terminal 1 (AI Service)**:
@@ -535,19 +571,33 @@ Or run separately across 3 terminals:
   npm run dev
   ```
 
+### 4. Running Tests
+From `NER-App/`:
+```bash
+npm test
+```
+Runs the automated test suite in `NER-App/test/` covering workflow routing, selection offsets, save-gated navigation, span correction, validation/training exports, and entity palette features.
+
 ---
 
 ## Production Deployment & Stability Optimizations
 
-The system is containerized via a **unified single-container Dockerfile** (`NER-App/Dockerfile`) running both the Node.js backend and FastAPI AI service, optimized for cloud platforms like **Railway.app**:
+The application is designed for split frontend/backend cloud hosting:
 
+* **Frontend (Vercel / Nginx)**:
+  * Deployed via `NER-App/frontend/vercel.json` (e.g. `https://nerproject.vercel.app`) with `VITE_API_URL` configured for the backend API, or self-hosted via `NER-App/frontend/Dockerfile` + `nginx.conf` with HTML cache-control headers disabled so frontend updates deploy immediately.
+* **Unified Backend + AI Service (Render / Railway)**:
+  * Containerized via a single-container Dockerfile (`NER-App/Dockerfile`) running both the Node.js Express API and FastAPI AI service.
+  * Includes a **Render Blueprint** (`render.yaml`) supporting AI-enabled mode (`ENABLE_AI=true`, `TORCH_THREADS=1`, standard 2 GB RAM plan) or free manual-only mode (`ENABLE_AI=false`), as well as **Railway** configuration (`NER-App/railway.json`).
+
+Key runtime optimizations:
 1. **PyTorch CPU Optimization**:
-   * Thread pool throttled via `torch.set_num_threads(2)` and `torch.set_num_interop_threads(1)` to eliminate vCPU contention in container environments.
-   * Model inference switched to `@torch.inference_mode()` for lower memory consumption.
+   * Thread pool controlled via `TORCH_THREADS` (`torch.set_num_threads`, defaulting to `2` locally and `1` in `render.yaml`) and `torch.set_num_interop_threads(1)` to prevent vCPU contention in containers.
+   * Model loaded with `low_cpu_mem_usage=True` and inference executed under `@torch.inference_mode()`.
 2. **Micro-Batching**:
-   * Segment inference is processed in chunks of 5 segments, ensuring execution times stay well under reverse proxy 60-second timeouts to prevent `502 Bad Gateway` errors.
-3. **Hardened CORS**:
-   * Configured with dynamic origin reflection (`origin: true`), global preflight handling (`app.options('*')`), and error-middleware header persistence so cross-origin requests from frontends never drop `Access-Control-Allow-Origin`.
+   * Segment inference is batched in chunks of 5 segments (`NER-App/backend/src/services/nerService.js`), keeping requests well under reverse-proxy timeouts to prevent `502 Bad Gateway` errors.
+3. **Hardened CORS & Header Exposure**:
+   * Explicitly allows Vercel production/preview domains (`https://nerproject.vercel.app`, `*.vercel.app`), Railway domains (`*.railway.app`, `*.up.railway.app`), and localhost origins, while exposing `Content-Disposition`, `X-Dataset-*`, and `X-Validation-Totals` headers across normal and error responses.
 
 ---
 
