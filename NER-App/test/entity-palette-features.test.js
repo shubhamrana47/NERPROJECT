@@ -296,6 +296,23 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
   assert.equal(palette.querySelector('[data-subtype-toggle="Policy"]'), null, 'No dropdown for Policy');
   assert.equal(palette.querySelector('[data-subtype-toggle="Citation"]'), null, 'No dropdown for Citation');
 
+  // Subsumed entities (e.g. Nutrient, Rainfall, Vegetable, Organization) must not render as independent cards
+  const cardLabels = [...palette.querySelectorAll('section button')]
+    .filter((b) => !b.hasAttribute('data-subtype-toggle'))
+    .map((b) => b.textContent.trim());
+  assert.ok(!cardLabels.some((t) => t.startsWith('Nutrient')), 'Nutrient must not appear as a standalone card');
+  assert.ok(!cardLabels.some((t) => t.startsWith('Rainfall')), 'Rainfall must not appear as a standalone card');
+  assert.ok(!cardLabels.some((t) => t.startsWith('Vegetable')), 'Vegetable must not appear as a standalone card');
+
+  // Open Chemical dropdown and verify Nutrient is inside WITHOUT ontology mapping codes
+  const chemToggle = palette.querySelector('[data-subtype-toggle="Chemical"]');
+  chemToggle.click();
+  await new Promise((r) => setTimeout(r, 10));
+  const dropdown = palette.querySelector('[data-testid="subtype-dropdown-Chemical"]');
+  assert.ok(dropdown, 'Chemical subcategory dropdown opens');
+  assert.ok(dropdown.textContent.includes('Nutrient'), 'Nutrient appears inside Chemical dropdown');
+  assert.ok(!/CHEBI_|AGRO_|AGROVOC|AgrO|c_\d+/.test(dropdown.textContent), 'Ontology mapping codes must not be displayed in dropdown');
+
   // Verify JSON exports save type (parent entity) and subtype (subcategory)
   const { buildAnnotatedRecords, buildValidatedRecords } = require(path.join(
     __dirname,

@@ -9,23 +9,7 @@ import {
   getEntityColorStyle,
   formatEntityLabel,
 } from '../utils/textUtils.jsx';
-import { getEntitySubtypes } from '../utils/entitySubtypes.js';
-
-/**
- * Extract compact ontology IDs (e.g. "AGRO_00000325", "c_1474") for concise proof display.
- */
-function compactOntologyProof(sub) {
-  const parts = [];
-  if (sub.agro) {
-    const m = sub.agro.match(/[A-Za-z]+_\d+/);
-    if (m) parts.push(`AgrO: ${m[0]}`);
-  }
-  if (sub.agrovoc) {
-    const m = sub.agrovoc.match(/c_[0-9a-zA-Z]+/);
-    if (m) parts.push(`AGROVOC: ${m[0]}`);
-  }
-  return parts.join(' · ');
-}
+import { getEntitySubtypes, SUBSUMED_ENTITY_TYPES } from '../utils/entitySubtypes.js';
 
 /**
  * Entity card component:
@@ -249,25 +233,35 @@ export default function EntityPaletteSidebar({
     return map;
   }, []);
 
-  // Alphabetically sorted matches if search is active
+  // Visible top-level entity types (exclude entities subsumed as subcategories under a parent)
+  const visibleEntityTypes = useMemo(
+    () => ENTITY_TYPES.filter((t) => !SUBSUMED_ENTITY_TYPES.has(t)),
+    []
+  );
+
+  // Alphabetically sorted matches if search is active (matches parent name or any of its subcategories)
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
-    return [...ENTITY_TYPES]
-      .filter((t) => formatEntityLabel(t).toLowerCase().includes(q))
+    return [...visibleEntityTypes]
+      .filter((t) => {
+        if (formatEntityLabel(t).toLowerCase().includes(q)) return true;
+        return getEntitySubtypes(t).some((sub) => sub.name.toLowerCase().includes(q));
+      })
       .sort((a, b) => formatEntityLabel(a).localeCompare(formatEntityLabel(b)));
-  }, [search]);
+  }, [search, visibleEntityTypes]);
 
-  // Categories sorted A-Z, and within each category types sorted A-Z
+  // Categories sorted A-Z, and within each category only top-level visible types sorted A-Z
   const sortedCategories = useMemo(() => {
     return [...ENTITY_GROUPS]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((group) => ({
         ...group,
-        types: [...group.types].sort((a, b) =>
-          formatEntityLabel(a).localeCompare(formatEntityLabel(b))
-        ),
-      }));
+        types: [...group.types]
+          .filter((t) => !SUBSUMED_ENTITY_TYPES.has(t))
+          .sort((a, b) => formatEntityLabel(a).localeCompare(formatEntityLabel(b))),
+      }))
+      .filter((group) => group.types.length > 0);
   }, []);
 
   // Split categories into 2 main columns (Left: 4 categories, Right: 3 categories)
@@ -321,8 +315,8 @@ export default function EntityPaletteSidebar({
   // Compute viewport-safe position for the subcategory dropdown popover
   const dropdownPosition = useMemo(() => {
     if (!openDropdown?.rect) return null;
-    const width = 288;
-    const estimatedHeight = Math.min(320, 44 + openSubtypes.length * 46);
+    const width = 256;
+    const estimatedHeight = Math.min(300, 38 + openSubtypes.length * 32);
     const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
     const left = Math.max(12, Math.min(vw - width - 12, openDropdown.rect.left));
@@ -392,14 +386,14 @@ export default function EntityPaletteSidebar({
         </div>
       )}
 
-      {/* Ontology-Verified Subcategories Dropdown Popover */}
+      {/* Subcategories Dropdown Popover */}
       {openDropdown && dropdownPosition && openSubtypes.length > 0 && (
         <div
           ref={dropdownRef}
           role="listbox"
           aria-label={`${formatEntityLabel(openDropdown.type)} subcategories`}
           data-testid={`subtype-dropdown-${openDropdown.type}`}
-          className="fixed z-50 max-h-[320px] overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl"
+          className="fixed z-50 max-h-[300px] overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl"
           style={dropdownPosition}
         >
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
@@ -414,7 +408,7 @@ export default function EntityPaletteSidebar({
               </span>
             </div>
             <span className="shrink-0 font-mono text-[10px] text-slate-500">
-              {openSubtypes.length} verified
+              {openSubtypes.length}
             </span>
           </div>
 
@@ -425,30 +419,9 @@ export default function EntityPaletteSidebar({
                 type="button"
                 role="option"
                 onClick={() => handlePick(openDropdown.type, sub.name)}
-                className="flex w-full flex-col gap-0.5 px-2.5 py-1.5 text-left transition-colors hover:bg-slate-50 focus-visible:bg-slate-100 focus-visible:outline-none"
-                title={[
-                  sub.agro ? `CGIAR AgrO: ${sub.agro}` : null,
-                  sub.agrovoc ? `FAO AGROVOC: ${sub.agrovoc}` : null,
-                ]
-                  .filter(Boolean)
-                  .join('\n')}
+                className="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] font-medium text-slate-800 transition-colors hover:bg-slate-50 hover:text-black focus-visible:bg-slate-100 focus-visible:outline-none"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-800">{sub.name}</span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    {sub.ontologies.map((ont) => (
-                      <span
-                        key={ont}
-                        className="rounded border border-slate-200 bg-slate-100 px-1 py-px font-mono text-[9.5px] font-medium text-slate-600"
-                      >
-                        {ont}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-                <span className="truncate font-mono text-[10px] text-slate-500">
-                  {compactOntologyProof(sub)}
-                </span>
+                {sub.name}
               </button>
             ))}
           </div>
@@ -460,12 +433,12 @@ export default function EntityPaletteSidebar({
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[15px] font-bold text-ink">Entity labels</h2>
           <span className="font-mono text-[12px] text-ink-faint">
-            {matches ? `${matches.length} of ${ENTITY_TYPES.length}` : ENTITY_TYPES.length}
+            {matches ? `${matches.length} of ${visibleEntityTypes.length}` : visibleEntityTypes.length}
           </span>
         </div>
 
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-          Click an entity in the passage to put it in focus, then pick a label here to correct it. Use the dropdown arrow on parent entities to pick a verified subcategory.
+          Click an entity in the passage to put it in focus, then pick a label here to correct it. Use the dropdown arrow on parent entities to pick a subcategory.
         </p>
 
         {/* Search input with / shortcut */}
@@ -474,7 +447,7 @@ export default function EntityPaletteSidebar({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder={`Search all ${ENTITY_TYPES.length} labels`}
+            placeholder={`Search all ${visibleEntityTypes.length} labels`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {

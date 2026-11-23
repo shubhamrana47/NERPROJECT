@@ -383,3 +383,39 @@ export const ENTITY_SUBTYPES = Object.fromEntries(
 export function getEntitySubtypes(entityType) {
   return ENTITY_SUBTYPES[entityType] || [];
 }
+
+/**
+ * Existing flat entity types that have been nested as subcategories under one of
+ * the 12 parent entities in the taxonomy. These are hidden as standalone cards
+ * in the Entity Palette so they only appear inside their parent's dropdown.
+ */
+export const SUBSUMED_ENTITY_TYPES = new Set([
+  // Under Weather
+  'Rainfall',
+  'Humidity',
+  'Temp',
+  'Natural_Disaster',
+  // Under Crop
+  'Vegetable',
+  'Fruit',
+  'Food_Item',
+  // Under Chemical
+  'Nutrient',
+  // Under Agri_Process
+  'Agri_Method',
+  'Treatment',
+  // Under Agri_Equipment
+  'Technology',
+  // Under Soil
+  'Natural_Resource',
+  // Under Quantity
+  'Field_Area',
+  'Other_Quantity',
+  'Money',
+  // Under Date_and_Time
+  'Duration',
+  'Season',
+  // Under Location
+  'Organization',
+  'Person',
+]);
