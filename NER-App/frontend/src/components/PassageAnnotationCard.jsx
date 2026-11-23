@@ -1,13 +1,6 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Check, ChevronLeft, ChevronRight, Loader2, RotateCw, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import LabelStudioAnnotator from './LabelStudioAnnotator.jsx';
-import {
-  ENTITY_SHORTCUTS,
-  ENTITY_DESCRIPTIONS,
-  getEntityColorStyle,
-  formatEntityLabel,
-  getTopEarlierAnnotations,
-} from '../utils/textUtils.jsx';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
 
 const VIEWS = [
@@ -106,17 +99,6 @@ export default function PassageAnnotationCard({
   const handleApproveSave = onApproveAndSaveAll || onSave || onApprove;
   const [activeTab, setActiveTab] = useState('interactive');
 
-  // Why a selection did not turn into a span, when it did not.
-  const [selectionNote, setSelectionNote] = useState(null);
-  const noteTimer = useRef(null);
-  useEffect(() => () => window.clearTimeout(noteTimer.current), []);
-  const flashNote = (kind) => {
-    setSelectionNote(kind);
-    window.clearTimeout(noteTimer.current);
-    noteTimer.current = window.setTimeout(() => setSelectionNote(null), 6000);
-  };
-  const noteSelectionUnresolved = (reason) => flashNote(reason || 'unresolved');
-
   const modelSpans = (passage.originalEntities || []).length;
   const yourSpans = entities.filter(
     (e) => Boolean(e.isManual) || e.source === 'human' || e.status === 'edited' || String(e._id || '').startsWith('temp_')
@@ -125,16 +107,9 @@ export default function PassageAnnotationCard({
   const decided = entities.filter(
     (e) => e.validationStatus && e.validationStatus !== 'unreviewed'
   ).length;
-  const undecided = entities.length - decided;
   const addedSpans = entities.filter((e) => e.validationStatus === 'added').length;
 
-  const quickLabels = annotation?.quickLabels || ENTITY_SHORTCUTS.map((s) => s.label);
   const selectedSpan = annotation?.selectedSpan;
-
-  const topEarlierPredictions = useMemo(() => {
-    if (!selectedSpan?.text) return [];
-    return getTopEarlierAnnotations(selectedSpan.text, doc, entities);
-  }, [selectedSpan?.text, doc, entities]);
 
   const renderInteractive = (sentence) => (
     <LabelStudioAnnotator
@@ -146,7 +121,6 @@ export default function PassageAnnotationCard({
       onUpdateEntity={() => {}}
       onDeleteEntity={onDeleteEntity}
       onFocusEntity={onFocusEntity}
-      onSelectionUnresolved={noteSelectionUnresolved}
     />
   );
 
@@ -406,194 +380,6 @@ export default function PassageAnnotationCard({
           }
         />
       )}
-
-      {/*
-        The selection step, shared by both workflows. A validation passage is
-        judged rather than written, but the pipeline can still have missed an
-        entity, and adding one is the same act as anywhere else: select the
-        words, pick a label.
-      */}
-      <div
-        className={`rounded-md border px-4 py-3 ${
-          selectedSpan ? 'border-hand/40 bg-sheet' : 'border-rule bg-sheet'
-        }`}
-      >
-        {selectedSpan ? (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 text-[13px] text-ink-soft">
-                Labelling{' '}
-                <span className="font-serif text-[16px] text-ink">“{selectedSpan.text}”</span>
-              </p>
-              <button
-                type="button"
-                onClick={annotation?.clearSelection}
-                className="rounded border border-rule bg-sheet px-2 py-1 text-[12px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
-              >
-                Clear selection
-              </button>
-            </div>
-
-            {/* Top at most 5 predictions of earlier annotations */}
-            {topEarlierPredictions.length > 0 && (
-              <div className="mt-2.5 rounded-md border border-hand/30 bg-paper p-2">
-                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink">
-                  <Sparkles className="h-3.5 w-3.5 text-hand" />
-                  <span>
-                    Top earlier annotations for “{selectedSpan.text}” ({topEarlierPredictions.length}):
-                  </span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {topEarlierPredictions.map((pred) => {
-                    const { border, bg, text: textColor } = getEntityColorStyle(pred.label);
-                    const key = ENTITY_SHORTCUTS.find((sc) => sc.label === pred.label)?.key;
-                    const desc = ENTITY_DESCRIPTIONS[pred.label] || '';
-                    return (
-                      <button
-                        key={pred.label}
-                        type="button"
-                        onClick={() => annotation?.applyLabel(pred.label)}
-                        className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-medium shadow-xs transition hover:scale-[1.02] hover:shadow-sm"
-                        style={{ backgroundColor: bg, color: textColor, borderColor: border }}
-                        title={`${formatEntityLabel(pred.label)}: ${desc} (${pred.count}x earlier, ${pred.percentage}%)`}
-                      >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: border }}
-                        />
-                        <span>{formatEntityLabel(pred.label)}</span>
-                        <span className="rounded bg-black/10 px-1 py-px font-mono text-[9.5px] tabular-nums opacity-90">
-                          {pred.count}× · {pred.percentage}%
-                        </span>
-                        {key && <span className="font-mono text-[10px] opacity-75">[{key}]</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {quickLabels.map((label) => {
-                const { border } = getEntityColorStyle(label);
-                const key = ENTITY_SHORTCUTS.find((sc) => sc.label === label)?.key;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => annotation?.applyLabel(label)}
-                    className="flex items-center gap-1.5 rounded border border-rule-strong bg-sheet px-2.5 py-1.5 text-[12.5px] text-ink transition hover:border-ink hover:bg-paper"
-                    title={key ? `${formatEntityLabel(label)} — press ${key}` : formatEntityLabel(label)}
-                  >
-                    <span
-                      className="h-[3px] w-3.5 rounded-full"
-                      style={{ backgroundColor: border }}
-                    />
-                    {formatEntityLabel(label)}
-                    {key && <span className="font-mono text-[10.5px] text-ink-faint">{key}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : isValidation && focusedSpan ? (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 text-[13px] text-ink-soft">
-                {focusedSpan.validationStatus === 'rejected' ? 'Re-annotating rejected' : 'Re-annotating'}{' '}
-                <span className="font-serif text-[16px] text-ink">“{focusedSpan.text}”</span>
-                <span className="ml-1.5 text-ink-faint">
-                  (currently {formatEntityLabel(focusedSpan.label)})
-                </span>
-              </p>
-              <button
-                type="button"
-                onClick={() => onFocusEntity && onFocusEntity(null)}
-                className="rounded border border-rule bg-sheet px-2 py-1 text-[12px] text-ink-soft transition hover:border-rule-strong hover:text-ink"
-              >
-                Clear focus
-              </button>
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {quickLabels.map((label) => {
-                const { border } = getEntityColorStyle(label);
-                const key = ENTITY_SHORTCUTS.find((sc) => sc.label === label)?.key;
-                const isCurrent = focusedSpan.label === label && focusedSpan.validationStatus !== 'rejected';
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => annotation?.applyLabel(label)}
-                    className={`flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-[12.5px] transition ${
-                      isCurrent
-                        ? 'border-ink bg-ink text-paper font-medium'
-                        : 'border-rule-strong bg-sheet text-ink hover:border-ink hover:bg-paper'
-                    }`}
-                    title={key ? `${formatEntityLabel(label)} — press ${key}` : formatEntityLabel(label)}
-                  >
-                    <span
-                      className="h-[3px] w-3.5 rounded-full"
-                      style={{ backgroundColor: border }}
-                    />
-                    {formatEntityLabel(label)}
-                    {key && <span className={`font-mono text-[10.5px] ${isCurrent ? 'text-paper/70' : 'text-ink-faint'}`}>{key}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : isValidation && entities.length === 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
-              The pipeline tagged nothing here. If that is right, say so — an unopened passage
-              should never look like a checked one. If it missed something, select those words and
-              give them a label.
-            </p>
-            <button
-              type="button"
-              onClick={onNothingToValidate}
-              className="shrink-0 rounded-md bg-ink px-3.5 py-2 text-[13px] font-medium text-paper transition hover:bg-ink/90"
-            >
-              Nothing to validate
-            </button>
-          </div>
-        ) : isValidation ? (
-          <p className="text-[13px] leading-relaxed text-ink-soft">
-            <span className="font-medium text-ink">Checking, and adding what is missing:</span>{' '}
-            click a tagged entity to put it in focus, then mark it correct or wrong in the list on
-            the left; press a number or pick a label on the right to fix its type. If the pipeline
-            missed an entity, drag across the words and give it a label.
-          </p>
-        ) : (
-          <p className="text-[13px] leading-relaxed text-ink-soft">
-            <span className="font-medium text-ink">To add a span:</span> drag across the words in
-            any sentence above, then press a number or click a label on the right. Click an
-            existing span to change or remove it.
-          </p>
-        )}
-
-        {/* Why a selection did not become a span, rather than silence. */}
-        {!selectedSpan && selectionNote === 'crosses-sentences' && (
-          <div className="mt-2 rounded border-l-2 border-hand bg-paper px-3 py-2">
-            <p className="text-[13px] leading-relaxed text-ink">
-              That selection ran across two sentences, so nothing was tagged.
-            </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-              A span belongs to one sentence. Select the words inside a single numbered line and
-              try again.
-            </p>
-          </div>
-        )}
-        {!selectedSpan && selectionNote === 'unresolved' && (
-          <div className="mt-2 rounded border-l-2 border-hand bg-paper px-3 py-2">
-            <p className="text-[13px] leading-relaxed text-ink">
-              That selection could not be placed exactly, so nothing was tagged.
-            </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-              Select the words again, starting and finishing inside the sentence text.
-            </p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
