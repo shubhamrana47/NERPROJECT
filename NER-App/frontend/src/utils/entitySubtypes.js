@@ -6,14 +6,15 @@
  *   - CGIAR Agronomy Ontology (AgrO — local agro.owl, 2022-11-02)
  *   - FAO AGROVOC Ontology (live Skosmos REST API, agrovoc.fao.org)
  *
- * v3 counts: 59 subcategories across 12 parent entities:
+ * v3 counts (strict ontology filter on NEW subcategories): 58 subcategories across 12 parent entities:
  *   - 52 in CGIAR AgrO + FAO AGROVOC
  *   - 4 in CGIAR AgrO only
  *   - 2 in FAO AGROVOC only
- *   - 1 app-defined (Disease -> Visual Symptom / Damage Sign; no plant-specific ontology match)
+ *   - Excluded: Disease -> Visual Symptom / Damage Sign (NEW, no match in AgrO or AGROVOC)
  *
- * Only parent entities that have subcategories are listed here.
- * Entities not present in this map have no subcategories and render without a dropdown.
+ * Only parent entities that have ontology-verified subcategories are listed here.
+ * Existing independent entities (Policy, Citation, ML_Model, Agri_Pollution, Event, Other,
+ * Organization, Person, Natural_Resource) remain unchanged as standalone cards with no dropdown.
  */
 
 const RAW_ENTITY_SUBTYPES = {
@@ -164,12 +165,6 @@ const RAW_ENTITY_SUBTYPES = {
       name: 'Abiotic / Physiological Disorder',
       agro: 'OGMS_0000031 (disease)',
       agrovoc: null,
-    },
-    {
-      name: 'Visual Symptom / Damage Sign',
-      agro: null,
-      agrovoc: null,
-      appDefined: true,
     },
   ],
 
@@ -370,8 +365,8 @@ export const INDEPENDENT_ENTITY_ONTOLOGY = {
 };
 
 /**
- * Keep subcategories verified in CGIAR AgrO / FAO AGROVOC or explicitly marked app-defined
- * (v3: 52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only, 1 app-defined = 59 total),
+ * Filter strictly to subcategories verified in CGIAR AgrO and/or FAO AGROVOC
+ * (v3: 52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only = 58 total),
  * and attach normalized `ontologies` metadata.
  */
 export const ENTITY_SUBTYPES = Object.fromEntries(
@@ -379,10 +374,9 @@ export const ENTITY_SUBTYPES = Object.fromEntries(
     .map(([parent, list]) => [
       parent,
       list
-        .filter((item) => Boolean(item.agro || item.agrovoc || item.appDefined))
+        .filter((item) => Boolean(item.agro || item.agrovoc))
         .map((item) => ({
           ...item,
-          appDefined: Boolean(item.appDefined),
           ontologies: [
             ...(item.agro ? ['AgrO'] : []),
             ...(item.agrovoc ? ['AGROVOC'] : []),
