@@ -246,7 +246,7 @@ const RAW_ENTITY_SUBTYPES = {
     },
     {
       name: 'Chemical / Bio Application (Spraying)',
-      description: 'Applying chemicals, biological control organisms, or fertilizers to crops or soil to manage pests and promote plant growth.',
+      description: 'A pest control or planned fertilization process in which chemicals, organisms, or fertilizers are applied to manage unwanted organisms or promote plant growth.',
       agro: 'AGRO_00000024 (chemical pest control process); AGRO_00000022 (biological pest control process); AGRO_01000000 (agronomic fertilization process)',
       agrovoc: 'c_7334 (spraying)',
     },
