@@ -301,6 +301,44 @@ export function getTopWordsByLabel(segments = [], limit = 5) {
 }
 
 /**
+ * For every (parent label, subtype) pair, returns at most `limit` words/phrases
+ * most often tagged with that subcategory across the saved passages of a file.
+ * Keyed as `${label}::${subtype}` -> [{ text, count }].
+ */
+export function getTopWordsBySubtype(segments = [], limit = 5) {
+  const byKey = {};
+  (Array.isArray(segments) ? segments : []).forEach((seg) => {
+    (seg?.entities || []).forEach((e) => {
+      if (!e?.label || !e?.subtype || e.status === 'deleted' || e.validationStatus === 'rejected') return;
+      const raw = typeof e.text === 'string' ? e.text.trim().replace(/\s+/g, ' ') : '';
+      if (!raw) return;
+      const bucketKey = `${e.label}::${e.subtype}`;
+      const wordKey = raw.toLowerCase();
+      const words = (byKey[bucketKey] ||= new Map());
+      let entry = words.get(wordKey);
+      if (!entry) {
+        entry = { count: 0, casings: new Map() };
+        words.set(wordKey, entry);
+      }
+      entry.count += 1;
+      entry.casings.set(raw, (entry.casings.get(raw) || 0) + 1);
+    });
+  });
+
+  const result = {};
+  Object.entries(byKey).forEach(([bucketKey, words]) => {
+    result[bucketKey] = [...words.values()]
+      .map(({ count, casings }) => ({
+        text: [...casings.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0],
+        count,
+      }))
+      .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
+      .slice(0, limit);
+  });
+  return result;
+}
+
+/**
  * Computes at most top 5 predictions of how a selected text was annotated earlier.
  * Scans across current working entities, all document passages (entities and originalEntities),
  * and persistent local annotation history.

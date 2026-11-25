@@ -27,6 +27,7 @@ const {
   ENTITY_DESCRIPTIONS,
   getTopEarlierAnnotations,
   getTopWordsByLabel,
+  getTopWordsBySubtype,
   formatEntityLabel,
 } = require(out);
 
@@ -262,6 +263,14 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
         `${parent} -> ${sub.name} must exist in at least one ontology (AgrO or AGROVOC)`
       );
       assert.ok(sub.ontologies.length >= 1, `${parent} -> ${sub.name} must list verified ontologies`);
+      assert.ok(
+        typeof sub.description === 'string' && sub.description.trim().length > 15,
+        `${parent} -> ${sub.name} must have a concise description`
+      );
+      assert.ok(
+        !/CHEBI_|AGRO_|ENVO_|PATO_|UO_|PO_|OGMS_|c_\d+/.test(sub.description),
+        `${parent} -> ${sub.name} description must not expose raw ontology IDs`
+      );
       if (sub.agro && sub.agrovoc) bothCount += 1;
       else if (sub.agro) agroOnlyCount += 1;
       else if (sub.agrovoc) agrovocOnlyCount += 1;
@@ -417,4 +426,29 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
   const valExport = buildValidatedRecords([valDoc]).records[0].entities[0];
   assert.equal(valExport.type, 'Crop');
   assert.equal(valExport.subtype, 'Variety / Cultivar');
+});
+
+test('getTopWordsBySubtype returns at most top 5 most tagged words per (parent, subtype) and ignores deleted/rejected', () => {
+  const ent = (text, label, subtype, extra = {}) => ({ text, label, subtype, ...extra });
+  const segments = [
+    {
+      entities: [
+        ent('PBW 752', 'Crop', 'Variety / Cultivar'),
+        ent('pbw 752', 'Crop', 'Variety / Cultivar'),
+        ent('HD 3086', 'Crop', 'Variety / Cultivar'),
+        ent('DBW 187', 'Crop', 'Variety / Cultivar'),
+        ent('WH 1105', 'Crop', 'Variety / Cultivar'),
+        ent('PBW 725', 'Crop', 'Variety / Cultivar'),
+        ent('HD 2967', 'Crop', 'Variety / Cultivar'),
+        ent('ignored', 'Crop', 'Variety / Cultivar', { status: 'deleted' }),
+        ent('rejected', 'Crop', 'Variety / Cultivar', { validationStatus: 'rejected' }),
+        ent('wheat', 'Crop', undefined),
+      ],
+    },
+  ];
+  const top = getTopWordsBySubtype(segments, 5);
+  const key = 'Crop::Variety / Cultivar';
+  assert.equal(top[key].length, 5, 'capped at top 5');
+  assert.equal(top[key][0].count, 2, 'most frequent word first');
+  assert.ok(!top[key].some((w) => w.text === 'ignored' || w.text === 'rejected' || w.text === 'wheat'));
 });

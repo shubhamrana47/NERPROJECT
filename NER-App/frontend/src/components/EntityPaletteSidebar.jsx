@@ -9,6 +9,7 @@ import {
   getEntityColorStyle,
   formatEntityLabel,
   formatSubtypeLabel,
+  getTopWordsBySubtype,
 } from '../utils/textUtils.jsx';
 import { getEntitySubtypes, SUBSUMED_ENTITY_TYPES } from '../utils/entitySubtypes.js';
 
@@ -173,9 +174,15 @@ export default function EntityPaletteSidebar({
   const [justTagged, setJustTagged] = useState('');
   const [notice, setNotice] = useState('');
   const [hoveredEntity, setHoveredEntity] = useState(null);
+  const [hoveredSubtype, setHoveredSubtype] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
   const searchInputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  const topWordsBySubtype = useMemo(
+    () => getTopWordsBySubtype(doc?.segments, 5),
+    [doc?.segments]
+  );
 
   const selectedSpan = annotation?.selectedSpan;
   const activeEditingEntity = annotation?.activeEditingEntity;
@@ -273,11 +280,13 @@ export default function EntityPaletteSidebar({
 
   const handleToggleDropdown = (type, rect) => {
     setHoveredEntity(null);
+    setHoveredSubtype(null);
     setOpenDropdown((prev) => (prev?.type === type ? null : { type, rect }));
   };
 
   const handlePick = (type, subtype = undefined) => {
     setOpenDropdown(null);
+    setHoveredSubtype(null);
     const displayTag = subtype
       ? `${formatEntityLabel(type)} (${formatSubtypeLabel(subtype)})`
       : formatEntityLabel(type);
@@ -422,12 +431,85 @@ export default function EntityPaletteSidebar({
                 type="button"
                 role="option"
                 onClick={() => handlePick(openDropdown.type, sub.name)}
+                onMouseEnter={(e) =>
+                  setHoveredSubtype({
+                    parent: openDropdown.type,
+                    name: sub.name,
+                    desc: sub.description || '',
+                    legacyLabel: sub.legacyLabel,
+                    rect: e.currentTarget.getBoundingClientRect(),
+                  })
+                }
+                onMouseLeave={() => setHoveredSubtype(null)}
+                aria-label={
+                  sub.description
+                    ? `${formatSubtypeLabel(sub.name)}: ${sub.description}`
+                    : formatSubtypeLabel(sub.name)
+                }
                 className="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] font-medium text-slate-800 transition-colors hover:bg-slate-50 hover:text-black focus-visible:bg-slate-100 focus-visible:outline-none"
               >
                 {formatSubtypeLabel(sub.name)}
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Dark Hover Tooltip for Subcategory Options */}
+      {openDropdown && hoveredSubtype && (
+        <div
+          role="tooltip"
+          data-testid="subtype-tooltip"
+          className="pointer-events-none fixed z-[60] max-w-[290px] rounded-md border border-neutral-800 bg-[#222222] px-3 py-2 text-white shadow-2xl backdrop-blur-md transition-opacity duration-150"
+          style={(() => {
+            const tooltipWidth = 290;
+            const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+            const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+            const anchorLeft = dropdownPosition?.left ?? hoveredSubtype.rect?.left ?? 320;
+            const openLeft = anchorLeft - tooltipWidth - 10 >= 12;
+            const left = openLeft
+              ? anchorLeft - tooltipWidth - 10
+              : Math.min(vw - tooltipWidth - 12, (hoveredSubtype.rect?.right ?? anchorLeft + 256) + 10);
+            const top = Math.max(12, Math.min(vh - 180, hoveredSubtype.rect?.top ?? 100));
+            return { left, top };
+          })()}
+        >
+          {hoveredSubtype.desc && (
+            <div className="flex items-start gap-2 text-[12px] leading-snug">
+              <span className="text-white font-bold opacity-80 select-none">→</span>
+              <span>{hoveredSubtype.desc}</span>
+            </div>
+          )}
+          {(() => {
+            const subKey = `${hoveredSubtype.parent}::${hoveredSubtype.name}`;
+            const subTop = topWordsBySubtype[subKey] || [];
+            const fallbackTop =
+              subTop.length === 0 && hoveredSubtype.legacyLabel
+                ? topWordsByLabel[hoveredSubtype.legacyLabel] || []
+                : [];
+            const top = subTop.length > 0 ? subTop : fallbackTop;
+            return (
+              <div className={hoveredSubtype.desc ? 'mt-2 border-t border-white/15 pt-1.5' : ''}>
+                <p className="text-[10.5px] text-neutral-400">Most tagged in this file</p>
+                {top.length > 0 ? (
+                  <ol className="mt-1 space-y-0.5" data-testid="subtype-top-words">
+                    {top.map((w) => (
+                      <li key={w.text} className="flex items-baseline justify-between gap-4 text-[12px]">
+                        <span className="truncate">{w.text}</span>
+                        <span className="shrink-0 font-mono text-[11px] tabular-nums text-neutral-400">
+                          ×{w.count.toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="mt-0.5 text-[11.5px] text-neutral-300">
+                    Nothing saved under this subcategory yet.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
