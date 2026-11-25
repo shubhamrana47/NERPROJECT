@@ -5,6 +5,10 @@
 
 const Document = require('../models/Document');
 const {
+  getExportCleanupDelayMs,
+  scheduleExportCleanup,
+} = require('../services/exportCleanup');
+const {
   splitSentencesWithOffsets,
   normalizeAndDeduplicateEntities,
 } = require('../utils/exportUtils');
@@ -18,6 +22,29 @@ const {
   toCoNLL,
   toSpacy,
 } = require('../services/datasetBuilder');
+
+/**
+ * Arm delayed Atlas cleanup for exported document(s) when a real file download
+ * is requested (skipped for `download=false` previews). Sets informative
+ * response headers and persists `expireAt` + starts the cleanup timer once the
+ * download response finishes cleanly.
+ */
+async function armExportCleanup(req, res, docs) {
+  if (req.query.download === 'false') return;
+  const delayMs = getExportCleanupDelayMs();
+  if (!delayMs || delayMs <= 0) return;
+
+  const docIds = (Array.isArray(docs) ? docs : [docs])
+    .map((d) => d && d._id)
+    .filter(Boolean);
+  if (docIds.length === 0) return;
+
+  const { scheduled, expireAt } = await scheduleExportCleanup(docIds, { delayMs });
+  if (scheduled && expireAt) {
+    res.setHeader('X-Auto-Delete-At', expireAt.toISOString());
+    res.setHeader('X-Auto-Delete-Minutes', String(Math.round((delayMs / 60000) * 100) / 100));
+  }
+}
 
 // GET /api/documents/:id/label-studio
 // Export in standard Label Studio tasks + annotations JSON format
@@ -86,6 +113,7 @@ exports.labelStudioExport = async (req, res, next) => {
       'Content-Disposition',
       `attachment; filename="${doc.filename.replace(/\.(json|jsonl)$/i, '')}_label_studio.json"`
     );
+    await armExportCleanup(req, res, [doc]);
     res.json(tasks);
   } catch (err) {
     next(err);
@@ -181,6 +209,7 @@ exports.trainingData = async (req, res, next) => {
           'Content-Disposition',
           `attachment; filename="${filenameBase}_training_data.jsonl"`
         );
+        await armExportCleanup(req, res, docs);
       }
       const jsonlText = rows.map((r) => JSON.stringify(r)).join('\n');
       return res.send(jsonlText);
@@ -192,6 +221,7 @@ exports.trainingData = async (req, res, next) => {
         'Content-Disposition',
         `attachment; filename="${filenameBase}_training_data.json"`
       );
+      await armExportCleanup(req, res, docs);
     }
     return res.json(rows);
   } catch (err) {
@@ -266,6 +296,7 @@ exports.datasetExport = async (req, res, next) => {
       res.setHeader('X-Dataset-Entities', String(totals.entities));
       res.setHeader('X-Dataset-Verified-Entities', String(totals.confirmed + totals.relabelled));
       res.setHeader('X-Validation-Totals', JSON.stringify(totals));
+      await armExportCleanup(req, res, docs);
       return res.send(all.map((r) => JSON.stringify(r)).join('\n'));
     }
 
@@ -290,6 +321,7 @@ exports.datasetExport = async (req, res, next) => {
       res.setHeader('X-Dataset-Entities', String(spans));
       res.setHeader('X-Dataset-Verified-Entities', String(verified));
       res.setHeader('X-Dataset-Quality', JSON.stringify(issues));
+      await armExportCleanup(req, res, docs);
       return res.send(records.map((r) => JSON.stringify(r)).join('\n'));
     }
 
@@ -310,13 +342,14 @@ exports.datasetExport = async (req, res, next) => {
     const kind = built.options.verifiedOnly ? 'gold' : 'train';
     const isDownload = req.query.download !== 'false';
 
-    const send = (body, contentType, extension) => {
+    const send = async (body, contentType, extension) => {
       res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
       if (isDownload) {
         res.setHeader(
           'Content-Disposition',
           `attachment; filename="${base}_${kind}.${extension}"`
         );
+        await armExportCleanup(req, res, docs);
       }
       // The manifest travels in a header too, so a downloaded file can always
       // be traced back to the selection that produced it.

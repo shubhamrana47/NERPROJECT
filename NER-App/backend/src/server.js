@@ -53,6 +53,8 @@ const corsOptions = {
     'X-Dataset-Verified-Entities',
     'X-Dataset-Quality',
     'X-Validation-Totals',
+    'X-Auto-Delete-At',
+    'X-Auto-Delete-Minutes',
   ],
   preflightContinue: false,
   optionsSuccessStatus: 204,
@@ -74,7 +76,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header(
     'Access-Control-Expose-Headers',
-    'Content-Disposition, X-Dataset-Rows, X-Dataset-Entities, X-Dataset-Verified-Entities, X-Dataset-Quality, X-Validation-Totals'
+    'Content-Disposition, X-Dataset-Rows, X-Dataset-Entities, X-Dataset-Verified-Entities, X-Dataset-Quality, X-Validation-Totals, X-Auto-Delete-At, X-Auto-Delete-Minutes'
   );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);

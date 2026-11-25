@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const { computeStats } = require('../services/nerService');
+const { cancelExportCleanup } = require('../services/exportCleanup');
+
+/** If a user keeps editing a previously exported document, cancel its scheduled Atlas deletion. */
+function clearExportSchedule(doc) {
+  if (!doc) return;
+  if (doc.expireAt || doc.exportedAt) {
+    doc.expireAt = null;
+    doc.exportedAt = null;
+  }
+  cancelExportCleanup(doc._id);
+}
 
 /** With ?lean=1 the reply carries counts instead of the whole document. */
 const isLean = (req) => req.query.lean === '1' || req.query.lean === 'true';
@@ -147,6 +158,7 @@ exports.reviewEntity = async (req, res, next) => {
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
+    clearExportSchedule(doc);
     await doc.save();
     if (isLean(req)) {
       return res.json({ ok: true, stats: doc.stats, savedEntities: seg.entities });
@@ -185,6 +197,7 @@ exports.addEntity = async (req, res, next) => {
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
+    clearExportSchedule(doc);
     await doc.save();
     res.status(201).json(doc);
   } catch (err) {
@@ -576,6 +589,7 @@ exports.saveSegmentEntities = async (req, res, next) => {
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
+    clearExportSchedule(doc);
     await doc.save();
     if (isLean(req)) {
       return res.json({
@@ -618,6 +632,7 @@ exports.resetSegment = async (req, res, next) => {
     doc.stats = computeStats(
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
+    clearExportSchedule(doc);
     await doc.save();
     res.json(doc);
   } catch (err) {

@@ -6,6 +6,16 @@
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const { computeStats } = require('../services/nerService');
+const { cancelExportCleanup } = require('../services/exportCleanup');
+
+function clearExportSchedule(doc) {
+  if (!doc) return;
+  if (doc.expireAt || doc.exportedAt) {
+    doc.expireAt = null;
+    doc.exportedAt = null;
+  }
+  cancelExportCleanup(doc._id);
+}
 
 /**
  * Echoing the saved document back costs megabytes on a large file (a 5,000
@@ -79,6 +89,7 @@ exports.saveLineEntities = async (req, res, next) => {
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
 
+    clearExportSchedule(doc);
     await doc.save();
 
     res.json({
@@ -154,6 +165,7 @@ exports.resetLine = async (req, res, next) => {
       doc.segments.map((s) => ({ entities: s.entities.filter((e) => e.status !== 'deleted') }))
     );
 
+    clearExportSchedule(doc);
     await doc.save();
 
     res.json({
@@ -193,6 +205,7 @@ exports.acknowledgeEmptyPassage = async (req, res, next) => {
     }
 
     seg.nothingToValidate = acknowledged;
+    clearExportSchedule(doc);
     await doc.save();
 
     res.json({ ok: true, segIndex: seg.index, nothingToValidate: seg.nothingToValidate });

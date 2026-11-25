@@ -20,6 +20,12 @@ const documentSchema = new mongoose.Schema(
       needsReview: Number,
       avgConfidence: Number,
     },
+
+    // Set once a document is exported so MongoDB Atlas's TTL index automatically
+    // deletes it after a short grace period to keep Atlas storage size low.
+    // Documents with `expireAt: null` are ignored by MongoDB's TTL monitor.
+    exportedAt: { type: Date, default: null },
+    expireAt: { type: Date, default: null, index: { expireAfterSeconds: 0 } },
   },
   {
     timestamps: true,
