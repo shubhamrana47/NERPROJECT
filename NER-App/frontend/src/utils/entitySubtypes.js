@@ -1,12 +1,18 @@
 /**
  * Verified Hierarchical Entity Taxonomy for IMD Agromet Advisories.
- * Source: IMD_Hierarchical_Entity_Taxonomy_Verified.pdf
+ * Source: NER_App_Subcategory_Ontology_Guide_v3.pdf
  *
- * Every subcategory included here has been verified against at least one of:
- *   - CGIAR Agronomy Ontology (AgrO — local agro.txt, 2022-11-02)
+ * Every subcategory included here is checked against:
+ *   - CGIAR Agronomy Ontology (AgrO — local agro.owl, 2022-11-02)
  *   - FAO AGROVOC Ontology (live Skosmos REST API, agrovoc.fao.org)
  *
- * Only parent entities that have verified subcategories are listed here.
+ * v3 counts: 59 subcategories across 12 parent entities:
+ *   - 52 in CGIAR AgrO + FAO AGROVOC
+ *   - 4 in CGIAR AgrO only
+ *   - 2 in FAO AGROVOC only
+ *   - 1 app-defined (Disease -> Visual Symptom / Damage Sign; no plant-specific ontology match)
+ *
+ * Only parent entities that have subcategories are listed here.
  * Entities not present in this map have no subcategories and render without a dropdown.
  */
 
@@ -35,7 +41,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Sky / Atmospheric Condition',
       agro: 'ENVO_02500003 (atmospheric process); ENVO_01000793 (atmospheric wind)',
-      agrovoc: 'c_15292 (weather)',
+      agrovoc: 'c_15292 (weather); c_1681 (clouds)',
     },
   ],
 
@@ -57,12 +63,12 @@ const RAW_ENTITY_SUBTYPES = {
     },
     {
       name: 'Food_Item / Fodder Crop',
-      agro: 'FOODON_00002403 (food material); FOODON_00001002 (food product)',
+      agro: 'FOODON_00002403 (food material); FOODON_00001002 (foodon product type)',
       agrovoc: 'c_2843 (feeds); c_2829 (feed crops); c_3032 (foods)',
     },
     {
       name: 'Variety / Cultivar',
-      agro: null,
+      agro: 'AGRO_00000616 (seed variety type); AGRO_00000617 (local seed variety); AGRO_00000618 (improved seed variety); AGRO_00000619 (hybrid seed variety)',
       agrovoc: 'c_8157 (varieties)',
     },
     {
@@ -73,7 +79,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Plant Part',
       agro: 'PO_0025131 (plant anatomical entity); AGRO_00000032 (planting material)',
-      agrovoc: 'c_330912 (plant parts); c_5954 (plant anatomy)',
+      agrovoc: 'c_330912 (plant parts)',
     },
   ],
 
@@ -81,7 +87,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Nutrient',
       agro: 'CHEBI_33284 (nutrient); CHEBI_167164 (mineral nutrient); CHEBI_33937 (macronutrient); CHEBI_27027 (micronutrient)',
-      agrovoc: 'c_5274 (nutrients); c_5dbd59ad (macronutrients); c_7834 (trace elements)',
+      agrovoc: 'c_5274 (nutrients); c_7834 (trace elements)',
     },
     {
       name: 'Fertilizer & Soil Amendment',
@@ -106,7 +112,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Fungicide / Bactericide',
       agro: 'CHEBI_24127 (fungicide)',
-      agrovoc: 'c_3146 (fungicides); c_9048 (bactericides)',
+      agrovoc: 'c_3146 (fungicides)',
     },
     {
       name: 'Plant Growth Regulator (PGR)',
@@ -138,31 +144,32 @@ const RAW_ENTITY_SUBTYPES = {
     },
     {
       name: 'Plant Pathogen',
-      agro: 'CHEBI_52209 (aetiopathogenetic role)',
-      agrovoc: 'c_49904 (organisms); c_5962 (plant diseases)',
+      agro: 'NCBITaxon_4751 (Fungi); NCBITaxon_2 (Bacteria); AGRO_00000035 (pest role)',
+      agrovoc: 'c_5741 (pests)',
     },
   ],
 
   Disease: [
     {
       name: 'Biotic Disease (Fungal / Bacterial)',
-      agro: 'OGMS_0000031 (disease); AGRO_00000660 (disease incidence); AGRO_00000661 (disease severity)',
-      agrovoc: 'c_5962 (plant diseases); c_11042 (fungal diseases); c_770 (bacterial diseases)',
+      agro: 'OGMS_0000031 (disease)',
+      agrovoc: 'c_5962 (plant diseases); c_11042 (fungal diseases)',
     },
     {
       name: 'Nutrient Deficiency Disorder',
       agro: 'OGMS_0000031 (disease)',
-      agrovoc: 'c_2154 (deficiency diseases)',
+      agrovoc: null,
     },
     {
       name: 'Abiotic / Physiological Disorder',
       agro: 'OGMS_0000031 (disease)',
-      agrovoc: 'c_3144 (functional disorders)',
+      agrovoc: null,
     },
     {
       name: 'Visual Symptom / Damage Sign',
       agro: null,
-      agrovoc: 'c_7566 (symptoms)',
+      agrovoc: null,
+      appDefined: true,
     },
   ],
 
@@ -174,8 +181,8 @@ const RAW_ENTITY_SUBTYPES = {
     },
     {
       name: 'Treatment (Seed / Bio-Treatment)',
-      agro: 'AGRO_00000322 (treatment); AGRO_00020001 (biofertilizer)',
-      agrovoc: 'c_6940 (seed treatment); c_24975 (biofertilizers)',
+      agro: 'AGRO_00000322 (treatment)',
+      agrovoc: 'c_6940 (seed treatment)',
     },
     {
       name: 'Land Preparation & Tillage',
@@ -212,17 +219,17 @@ const RAW_ENTITY_SUBTYPES = {
   Agri_Equipment: [
     {
       name: 'Technology / Diagnostic Tool',
-      agro: 'IAO_0000591 (software method); AGRO_00000357 (weather station)',
+      agro: 'AGRO_00000357 (weather station)',
       agrovoc: 'c_7644 (technology); c_36660 (information technology)',
     },
     {
       name: 'Seeding & Residue Machinery',
       agro: 'AGRO_00000230 (planting implement); AGRO_00000232 (sowing implement); AGRO_00000225 (residue management implement)',
-      agrovoc: 'c_25759 (planters); c_25753 (farm equipment)',
+      agrovoc: 'c_25759 (planters); c_5991 (planting equipment); c_25753 (farm equipment)',
     },
     {
       name: 'Tillage & Trenching Implements',
-      agro: 'AGRO_00000223 (tillage implement); AGRO_00000124 (tractor)',
+      agro: 'AGRO_00000223 (tillage implement)',
       agrovoc: 'c_25768 (tillage equipment); c_6022 (ploughs)',
     },
     {
@@ -287,7 +294,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Concentration / Percentage / Ratio',
       agro: 'PATO_0000033 (concentration of); UO_0000051 (concentration unit); UO_0000187 (percent)',
-      agrovoc: 'c_36906 (dosage); c_50324 (units)',
+      agrovoc: null,
     },
     {
       name: 'Field_Area',
@@ -333,7 +340,7 @@ const RAW_ENTITY_SUBTYPES = {
     {
       name: 'Administrative Region (Location)',
       agro: 'ENVO_00000004 (administrative region); ENVO_00000000 (geographic feature)',
-      agrovoc: 'c_331000 (site)',
+      agrovoc: null,
     },
     {
       name: 'Agro-Climatic / Topographic Zone',
@@ -344,7 +351,27 @@ const RAW_ENTITY_SUBTYPES = {
 };
 
 /**
- * Filter strictly to subcategories with a verified mapping in CGIAR AgrO or FAO AGROVOC,
+ * Ontology verification metadata for independent top-level entities (v3 Section 2).
+ * These render as standalone single-click cards with no dropdown.
+ */
+export const INDEPENDENT_ENTITY_ONTOLOGY = {
+  Organization: {
+    agro: 'OBI_0000245 (organization)',
+    agrovoc: 'c_37968 (organizations)',
+  },
+  Person: {
+    agro: 'NCBITaxon_9606 (Homo sapiens); AGRO_00000372 (farmer)',
+    agrovoc: 'c_2805 (farmers)',
+  },
+  Natural_Resource: {
+    agro: null,
+    agrovoc: 'c_5091 (natural resources)',
+  },
+};
+
+/**
+ * Keep subcategories verified in CGIAR AgrO / FAO AGROVOC or explicitly marked app-defined
+ * (v3: 52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only, 1 app-defined = 59 total),
  * and attach normalized `ontologies` metadata.
  */
 export const ENTITY_SUBTYPES = Object.fromEntries(
@@ -352,9 +379,10 @@ export const ENTITY_SUBTYPES = Object.fromEntries(
     .map(([parent, list]) => [
       parent,
       list
-        .filter((item) => Boolean(item.agro || item.agrovoc))
+        .filter((item) => Boolean(item.agro || item.agrovoc || item.appDefined))
         .map((item) => ({
           ...item,
+          appDefined: Boolean(item.appDefined),
           ontologies: [
             ...(item.agro ? ['AgrO'] : []),
             ...(item.agrovoc ? ['AGROVOC'] : []),
@@ -364,7 +392,7 @@ export const ENTITY_SUBTYPES = Object.fromEntries(
     .filter(([, list]) => list.length > 0)
 );
 
-/** Returns the verified ontology-backed subcategories for a parent entity, or []. */
+/** Returns the subcategories for a parent entity, or []. */
 export function getEntitySubtypes(entityType) {
   return ENTITY_SUBTYPES[entityType] || [];
 }

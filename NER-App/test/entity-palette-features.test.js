@@ -245,16 +245,46 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
   });
   const { ENTITY_SUBTYPES, getEntitySubtypes } = require(subtypesOut);
 
-  // Every listed subcategory must have a verified AgrO or AGROVOC mapping
+  // Verify v3 taxonomy counts: 12 parents, 59 subcategories
+  // (52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only, 1 app-defined)
   const parentsWithSubtypes = Object.keys(ENTITY_SUBTYPES);
-  assert.equal(parentsWithSubtypes.length, 12, '12 parent entities have verified subcategories');
+  assert.equal(parentsWithSubtypes.length, 12, '12 parent entities have subcategories');
+  let totalSubs = 0;
+  let bothCount = 0;
+  let agroOnlyCount = 0;
+  let agrovocOnlyCount = 0;
+  let appDefinedCount = 0;
   for (const [parent, subs] of Object.entries(ENTITY_SUBTYPES)) {
     assert.ok(subs.length > 0, `${parent} has subcategories`);
     for (const sub of subs) {
-      assert.ok(sub.agro || sub.agrovoc, `${parent} -> ${sub.name} must map to AgrO or AGROVOC`);
-      assert.ok(sub.ontologies.length >= 1, `${parent} -> ${sub.name} must list verified ontologies`);
+      totalSubs += 1;
+      assert.ok(
+        sub.agro || sub.agrovoc || sub.appDefined,
+        `${parent} -> ${sub.name} must map to AgrO/AGROVOC or be explicitly app-defined`
+      );
+      if (sub.agro && sub.agrovoc) bothCount += 1;
+      else if (sub.agro) agroOnlyCount += 1;
+      else if (sub.agrovoc) agrovocOnlyCount += 1;
+      else if (sub.appDefined) appDefinedCount += 1;
     }
   }
+  assert.equal(totalSubs, 59, '59 total subcategories across 12 parents');
+  assert.equal(bothCount, 52, '52 subcategories mapped in both AgrO and AGROVOC');
+  assert.equal(agroOnlyCount, 4, '4 subcategories mapped in AgrO only');
+  assert.equal(agrovocOnlyCount, 2, '2 subcategories mapped in AGROVOC only');
+  assert.equal(appDefinedCount, 1, '1 app-defined subcategory (Visual Symptom / Damage Sign)');
+
+  // Spot-check key v3 mapping corrections
+  const varietySub = getEntitySubtypes('Crop').find((s) => s.name === 'Variety / Cultivar');
+  assert.ok(varietySub.agro?.includes('AGRO_00000616'), 'Crop / Variety / Cultivar mapped to AGRO_00000616 in v3');
+  assert.equal(varietySub.agrovoc, 'c_8157 (varieties)');
+  const visualSymptom = getEntitySubtypes('Disease').find((s) => s.name === 'Visual Symptom / Damage Sign');
+  assert.equal(visualSymptom.appDefined, true, 'Visual Symptom / Damage Sign marked app-defined in v3');
+  assert.equal(visualSymptom.agro, null);
+  assert.equal(visualSymptom.agrovoc, null);
+  const concSub = getEntitySubtypes('Quantity').find((s) => s.name === 'Concentration / Percentage / Ratio');
+  assert.equal(concSub.agrovoc, null, 'Wrong-sense AGROVOC IDs removed from Concentration in v3');
+
   assert.deepEqual(getEntitySubtypes('Policy'), [], 'Policy has no subcategories');
   assert.deepEqual(getEntitySubtypes('Citation'), [], 'Citation has no subcategories');
   assert.deepEqual(getEntitySubtypes('ML_Model'), [], 'ML_Model has no subcategories');
