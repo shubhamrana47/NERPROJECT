@@ -112,13 +112,13 @@ export function formatEntityLabel(label) {
 }
 
 /**
- * Formats a subcategory name for display so inner `/` synonym separators
- * (e.g. "Sowing / Planting / Transplanting") read as a single grouped option
- * ("Sowing, Planting, Transplanting") rather than a multi-level tree path.
+ * Formats a subcategory name for display, keeping `/` as the clear OR separator
+ * (e.g. "Sowing / Planting / Transplanting") since parent and subtype are already
+ * visually separated onto two stacked lines.
  */
 export function formatSubtypeLabel(subtype) {
   if (!subtype) return '';
-  return String(subtype).replace(/\s*\/\s*/g, ', ');
+  return String(subtype).replace(/\s*\/\s*/g, ' / ');
 }
 
 /**
