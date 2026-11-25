@@ -112,6 +112,16 @@ export function formatEntityLabel(label) {
 }
 
 /**
+ * Formats a subcategory name for display so inner `/` synonym separators
+ * (e.g. "Sowing / Planting / Transplanting") read as a single grouped option
+ * ("Sowing, Planting, Transplanting") rather than a multi-level tree path.
+ */
+export function formatSubtypeLabel(subtype) {
+  if (!subtype) return '';
+  return String(subtype).replace(/\s*\/\s*/g, ', ');
+}
+
+/**
  * Returns styling object for an entity based strictly on its label (NOT confidence score).
  */
 export function getEntityColorStyle(label) {

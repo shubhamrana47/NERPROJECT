@@ -8,6 +8,7 @@ import {
   ENTITY_DESCRIPTIONS,
   getEntityColorStyle,
   formatEntityLabel,
+  formatSubtypeLabel,
 } from '../utils/textUtils.jsx';
 import { getEntitySubtypes, SUBSUMED_ENTITY_TYPES } from '../utils/entitySubtypes.js';
 
@@ -277,7 +278,9 @@ export default function EntityPaletteSidebar({
 
   const handlePick = (type, subtype = undefined) => {
     setOpenDropdown(null);
-    const displayTag = subtype ? `${formatEntityLabel(type)} / ${subtype}` : formatEntityLabel(type);
+    const displayTag = subtype
+      ? `${formatEntityLabel(type)} (${formatSubtypeLabel(subtype)})`
+      : formatEntityLabel(type);
 
     if (isValidation && !selectedSpan) {
       const target = focusedSpan || activeEditingEntity;
@@ -421,7 +424,7 @@ export default function EntityPaletteSidebar({
                 onClick={() => handlePick(openDropdown.type, sub.name)}
                 className="flex w-full items-center px-2.5 py-1.5 text-left text-[12px] font-medium text-slate-800 transition-colors hover:bg-slate-50 hover:text-black focus-visible:bg-slate-100 focus-visible:outline-none"
               >
-                {sub.name}
+                {formatSubtypeLabel(sub.name)}
               </button>
             ))}
           </div>

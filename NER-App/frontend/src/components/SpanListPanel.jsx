@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { ENTITY_TYPES, getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
+import { ENTITY_TYPES, getEntityColorStyle, formatEntityLabel, formatSubtypeLabel } from '../utils/textUtils.jsx';
 
 /**
  * Every span in the passage on screen, as a working list. It sits beside the
@@ -100,18 +100,22 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 text-[12px] text-ink transition hover:text-ink-soft"
+            className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
             title="Change this label"
           >
-            <span
-              className="h-[3px] w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: color.border }}
-            />
-            {formatEntityLabel(span.label)}
+            <span className="flex items-center gap-1.5 font-medium leading-tight">
+              <span
+                className="h-[3px] w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: color.border }}
+              />
+              {formatEntityLabel(span.label)}
+              <ChevronDown className="h-3 w-3 text-ink-faint" />
+            </span>
             {span.subtype && (
-              <span className="text-[11px] text-ink-soft">/ {span.subtype}</span>
+              <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
+                {formatSubtypeLabel(span.subtype)}
+              </span>
             )}
-            <ChevronDown className="h-3 w-3 text-ink-faint" />
           </button>
         )}
 
@@ -210,18 +214,22 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 text-[12px] text-ink transition hover:text-ink-soft"
+            className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
             title="Change this label"
           >
-            <span
-              className="h-[3px] w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: color.border }}
-            />
-            {formatEntityLabel(span.label)}
+            <span className="flex items-center gap-1.5 font-medium leading-tight">
+              <span
+                className="h-[3px] w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: color.border }}
+              />
+              {formatEntityLabel(span.label)}
+              <ChevronDown className="h-3 w-3 text-ink-faint" />
+            </span>
             {span.subtype && (
-              <span className="text-[11px] text-ink-soft">/ {span.subtype}</span>
+              <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
+                {formatSubtypeLabel(span.subtype)}
+              </span>
             )}
-            <ChevronDown className="h-3 w-3 text-ink-faint" />
           </button>
         )}
 

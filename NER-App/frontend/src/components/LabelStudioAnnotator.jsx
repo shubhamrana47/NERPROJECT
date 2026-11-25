@@ -1,6 +1,6 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useAnnotation } from '../context/AnnotationContext.jsx';
-import { getEntityColorStyle, formatEntityLabel } from '../utils/textUtils.jsx';
+import { getEntityColorStyle, formatEntityLabel, formatSubtypeLabel } from '../utils/textUtils.jsx';
 import { CAPTION_ATTR, offsetsFromRange } from '../utils/selectionOffsets.js';
 
 /**
@@ -230,35 +230,45 @@ export default function LabelStudioAnnotator({
 
           <span
             {...{ [CAPTION_ATTR]: 'true' }}
-            className={`flex select-none items-center gap-1 pt-[3px] text-[10px] leading-none ${
+            className={`flex select-none flex-col items-start pt-[3px] leading-tight ${
               isFresh ? 'mark-in' : ''
             }`}
           >
-            {isManual && (
-              <span className="h-[3px] w-[3px] rounded-full bg-hand" aria-hidden="true" />
-            )}
-            <span
-              style={{ color: isRejected ? undefined : colorStyle.border }}
-              className={isRejected ? 'text-ink-faint line-through' : undefined}
-            >
-              {formatEntityLabel(ent.label)}
-              {ent.subtype ? ` / ${ent.subtype}` : ''}
-            </span>
-            {!readOnly && (
-              <button
-                type="button"
-                className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-hand"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteEntity(ent);
-                  if (activeEditingEntity && activeEditingEntity._id === ent._id) {
-                    if (setActiveEditingEntity) setActiveEditingEntity(null);
-                  }
-                }}
-                title="Remove this span"
+            <span className="flex items-center gap-1 text-[10px] leading-none">
+              {isManual && (
+                <span className="h-[3px] w-[3px] shrink-0 rounded-full bg-hand" aria-hidden="true" />
+              )}
+              <span
+                style={{ color: isRejected ? undefined : colorStyle.border }}
+                className={isRejected ? 'font-medium text-ink-faint line-through' : 'font-medium'}
               >
-                ×
-              </button>
+                {formatEntityLabel(ent.label)}
+              </span>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-hand"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteEntity(ent);
+                    if (activeEditingEntity && activeEditingEntity._id === ent._id) {
+                      if (setActiveEditingEntity) setActiveEditingEntity(null);
+                    }
+                  }}
+                  title="Remove this span"
+                >
+                  ×
+                </button>
+              )}
+            </span>
+            {ent.subtype && (
+              <span
+                className={`mt-[2px] text-[9px] leading-tight ${
+                  isManual ? 'pl-[7px]' : ''
+                } ${isRejected ? 'text-ink-faint line-through' : 'text-ink-soft'}`}
+              >
+                {formatSubtypeLabel(ent.subtype)}
+              </span>
             )}
           </span>
         </span>
