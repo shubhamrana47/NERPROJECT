@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Check, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import { ENTITY_TYPES, getEntityColorStyle, formatEntityLabel, formatSubtypeLabel } from '../utils/textUtils.jsx';
+import { getEntitySubtypes, SUBSUMED_ENTITY_TYPES } from '../utils/entitySubtypes.js';
 
 /**
  * Every span in the passage on screen, as a working list. It sits beside the
@@ -20,34 +21,279 @@ const DECISION_LABEL = {
   added: 'you added this',
 };
 
-function LabelPicker({ span, onPick, onCancel }) {
+const VISIBLE_TOP_LEVEL_TYPES = ENTITY_TYPES
+  .filter((t) => !SUBSUMED_ENTITY_TYPES.has(t))
+  .sort((a, b) => formatEntityLabel(a).localeCompare(formatEntityLabel(b)));
+
+/**
+ * Find the parent entity for a legacy subsumed label (e.g. 'Agri_Method' -> 'Agri_Process'),
+ * or return the label itself if it is already a top-level parent entity.
+ */
+function resolveInitialExpandedParent(label) {
+  if (!label) return null;
+  if (getEntitySubtypes(label).length > 0) return label;
+  for (const parent of VISIBLE_TOP_LEVEL_TYPES) {
+    if (getEntitySubtypes(parent).some((s) => s.legacyLabel === label)) {
+      return parent;
+    }
+  }
+  return null;
+}
+
+/**
+ * Hierarchical entity & subcategory picker for the left-side span list.
+ * Renders as a viewport-safe fixed popover so it never clips inside the narrow
+ * scrollable sidebar, with instant search and the current entity's subcategories
+ * expanded by default.
+ */
+function LabelPicker({ span, anchorRect, onPick, onCancel }) {
+  const [query, setQuery] = useState('');
+  const [expandedParent, setExpandedParent] = useState(() =>
+    resolveInitialExpandedParent(span.label)
+  );
+  const popoverRef = useRef(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onPointerDown = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        onCancel();
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [onCancel]);
+
+  const trimmed = query.trim().toLowerCase();
+
+  const entries = useMemo(() => {
+    return VISIBLE_TOP_LEVEL_TYPES.map((type) => {
+      const formatted = formatEntityLabel(type);
+      const allSubtypes = getEntitySubtypes(type);
+      if (!trimmed) {
+        return { type, formatted, subtypes: allSubtypes, forceExpand: false };
+      }
+      const parentMatches =
+        formatted.toLowerCase().includes(trimmed) || type.toLowerCase().includes(trimmed);
+      const matchingSubtypes = allSubtypes.filter(
+        (s) =>
+          s.name.toLowerCase().includes(trimmed) ||
+          (s.legacyLabel && s.legacyLabel.toLowerCase().includes(trimmed)) ||
+          (s.description && s.description.toLowerCase().includes(trimmed))
+      );
+      if (!parentMatches && matchingSubtypes.length === 0) return null;
+      return {
+        type,
+        formatted,
+        subtypes: parentMatches ? allSubtypes : matchingSubtypes,
+        forceExpand: matchingSubtypes.length > 0,
+      };
+    }).filter(Boolean);
+  }, [trimmed]);
+
+  // Compute viewport-safe fixed coordinates anchored to the trigger button
+  const positionStyle = useMemo(() => {
+    const width = 276;
+    const maxHeight = 340;
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const pad = 10;
+
+    if (!anchorRect) {
+      return { position: 'relative', width: '100%' };
+    }
+
+    let left = anchorRect.left;
+    if (left + width > vw - pad) left = Math.max(pad, vw - width - pad);
+    if (left < pad) left = pad;
+
+    const spaceBelow = vh - anchorRect.bottom - pad;
+    const spaceAbove = anchorRect.top - pad;
+    let top;
+    if (spaceBelow >= 220 || spaceBelow >= spaceAbove) {
+      top = Math.min(anchorRect.bottom + 4, Math.max(pad, vh - maxHeight - pad));
+    } else {
+      top = Math.max(pad, anchorRect.top - Math.min(maxHeight, spaceAbove) - 4);
+    }
+
+    return {
+      position: 'fixed',
+      top,
+      left,
+      width,
+      zIndex: 60,
+    };
+  }, [anchorRect]);
+
   return (
-    <select
-      autoFocus
-      value={span.label}
-      onChange={(e) => onPick(e.target.value)}
-      onBlur={onCancel}
-      className="rounded border border-ink bg-sheet px-1.5 py-1 text-[12px] text-ink focus:outline-none"
+    <div
+      ref={popoverRef}
+      role="dialog"
+      aria-label="Choose entity label or subcategory"
+      data-testid="span-label-picker"
+      style={positionStyle}
+      className="flex flex-col overflow-hidden rounded-md border border-ink/30 bg-sheet shadow-lg"
     >
-      {!ENTITY_TYPES.includes(span.label) && (
-        <option value={span.label}>{formatEntityLabel(span.label)}</option>
-      )}
-      {ENTITY_TYPES.map((t) => (
-        <option key={t} value={t}>
-          {formatEntityLabel(t)}
-        </option>
-      ))}
-    </select>
+      <div className="flex items-center gap-1.5 border-b border-rule bg-paper/70 px-2 py-1.5">
+        <Search className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+        <input
+          ref={searchRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search entity or subcategory…"
+          aria-label="Search entity or subcategory"
+          className="min-w-0 flex-1 bg-transparent text-[12px] text-ink placeholder:text-ink-faint focus:outline-none"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="rounded p-0.5 text-ink-faint hover:text-ink"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close label picker"
+            className="rounded p-0.5 text-ink-faint hover:text-ink"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      <div className="scroll-slim max-h-[290px] overflow-y-auto py-1" role="listbox">
+        {entries.length === 0 ? (
+          <p className="px-3 py-3 text-[11.5px] text-ink-faint">
+            No matching entity or subcategory.
+          </p>
+        ) : (
+          entries.map(({ type, formatted, subtypes, forceExpand }) => {
+            const color = getEntityColorStyle(type);
+            const hasSubtypes = subtypes.length > 0;
+            const isExpanded = forceExpand || expandedParent === type;
+            const isCurrentParent = span.label === type && !span.subtype;
+
+            return (
+              <div key={type} className="border-b border-rule/40 last:border-0">
+                <div className="flex items-stretch">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isCurrentParent}
+                    data-picker-entity={type}
+                    onClick={() => onPick(type, undefined)}
+                    className={`flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink ${
+                      isCurrentParent
+                        ? 'bg-paper font-semibold text-ink'
+                        : 'font-medium text-ink hover:bg-paper/70'
+                    }`}
+                  >
+                    <span
+                      className="h-[3px] w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: color.border }}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{formatted}</span>
+                    {isCurrentParent && (
+                      <Check className="ml-auto h-3 w-3 shrink-0 text-ink" aria-hidden="true" />
+                    )}
+                  </button>
+
+                  {hasSubtypes && (
+                    <button
+                      type="button"
+                      data-picker-expand={type}
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? 'Hide' : 'Show'} subcategories for ${formatted}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedParent((prev) => (prev === type ? null : type));
+                      }}
+                      className="flex shrink-0 items-center gap-1 border-l border-rule/50 px-2 text-[10.5px] font-mono tabular-nums text-ink-faint transition-colors hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink"
+                    >
+                      <span>{subtypes.length}</span>
+                      {isExpanded ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {hasSubtypes && isExpanded && (
+                  <div className="bg-paper/45 pb-1 pl-5 pr-1.5 pt-0.5">
+                    {subtypes.map((sub) => {
+                      const isCurrentSub =
+                        span.label === type && span.subtype === sub.name;
+                      return (
+                        <button
+                          key={sub.name}
+                          type="button"
+                          role="option"
+                          aria-selected={isCurrentSub}
+                          data-picker-subtype={`${type}::${sub.name}`}
+                          title={sub.description}
+                          onClick={() => onPick(type, sub.name)}
+                          className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11.5px] leading-snug transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink ${
+                            isCurrentSub
+                              ? 'bg-sheet font-medium text-ink shadow-2xs ring-1 ring-rule'
+                              : 'text-ink-soft hover:bg-sheet hover:text-ink'
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            {formatSubtypeLabel(sub.name)}
+                          </span>
+                          {isCurrentSub && (
+                            <Check className="h-3 w-3 shrink-0 text-ink" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 
 /** One row of the annotation workflow's span list. */
 function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocused }) {
   const [editing, setEditing] = useState(false);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const triggerRef = useRef(null);
   const color = getEntityColorStyle(span.label);
   const isManual = span.source === 'human' || span.status === 'edited' || Boolean(span.isManual);
   const approved = span.status === 'approved';
   const confidence = Number(span.confidence ?? 1);
+
+  const openPicker = () => {
+    setAnchorRect(triggerRef.current?.getBoundingClientRect() || null);
+    setEditing(true);
+  };
 
   return (
     <li
@@ -87,36 +333,37 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
       </div>
 
       <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        {editing ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={openPicker}
+          className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
+          title="Change this label or subcategory"
+        >
+          <span className="flex items-center gap-1.5 font-medium leading-tight">
+            <span
+              className="h-[3px] w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: color.border }}
+            />
+            {formatEntityLabel(span.label)}
+            <ChevronDown className="h-3 w-3 text-ink-faint" />
+          </span>
+          {span.subtype && (
+            <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
+              {formatSubtypeLabel(span.subtype)}
+            </span>
+          )}
+        </button>
+        {editing && (
           <LabelPicker
             span={span}
+            anchorRect={anchorRect}
             onCancel={() => setEditing(false)}
-            onPick={(label) => {
-              onUpdate(span, { label, status: 'edited', source: 'human' });
+            onPick={(label, subtype) => {
+              onUpdate(span, { label, subtype: subtype || undefined, status: 'edited', source: 'human' });
               setEditing(false);
             }}
           />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
-            title="Change this label"
-          >
-            <span className="flex items-center gap-1.5 font-medium leading-tight">
-              <span
-                className="h-[3px] w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: color.border }}
-              />
-              {formatEntityLabel(span.label)}
-              <ChevronDown className="h-3 w-3 text-ink-faint" />
-            </span>
-            {span.subtype && (
-              <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
-                {formatSubtypeLabel(span.subtype)}
-              </span>
-            )}
-          </button>
         )}
 
 
@@ -147,6 +394,8 @@ function AnnotationRow({ span, lineNumber, onUpdate, onDelete, onFocus, isFocuse
 /** One row of the validation workflow's span list. */
 function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocused, overlaps }) {
   const [editing, setEditing] = useState(false);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const triggerRef = useRef(null);
   const color = getEntityColorStyle(span.label);
   const decision = span.validationStatus && span.validationStatus !== 'unreviewed'
     ? span.validationStatus
@@ -158,6 +407,11 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
   const isManual = Boolean(span.isManual) || decision === 'relabelled' || isAdded || span.source === 'human' || span.status === 'edited';
   const score = Number(span.confidence ?? 1);
   const sources = Array.isArray(span.sources) ? span.sources : null;
+
+  const openPicker = () => {
+    setAnchorRect(triggerRef.current?.getBoundingClientRect() || null);
+    setEditing(true);
+  };
 
   return (
     <li
@@ -201,36 +455,37 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
       </div>
 
       <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        {editing ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={openPicker}
+          className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
+          title="Change this label or subcategory"
+        >
+          <span className="flex items-center gap-1.5 font-medium leading-tight">
+            <span
+              className="h-[3px] w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: color.border }}
+            />
+            {formatEntityLabel(span.label)}
+            <ChevronDown className="h-3 w-3 text-ink-faint" />
+          </span>
+          {span.subtype && (
+            <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
+              {formatSubtypeLabel(span.subtype)}
+            </span>
+          )}
+        </button>
+        {editing && (
           <LabelPicker
             span={span}
+            anchorRect={anchorRect}
             onCancel={() => setEditing(false)}
-            onPick={(label) => {
-              onDecide(span, 'relabelled', label);
+            onPick={(label, subtype) => {
+              onDecide(span, 'relabelled', label, subtype);
               setEditing(false);
             }}
           />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
-            title="Change this label"
-          >
-            <span className="flex items-center gap-1.5 font-medium leading-tight">
-              <span
-                className="h-[3px] w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: color.border }}
-              />
-              {formatEntityLabel(span.label)}
-              <ChevronDown className="h-3 w-3 text-ink-faint" />
-            </span>
-            {span.subtype && (
-              <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
-                {formatSubtypeLabel(span.subtype)}
-              </span>
-            )}
-          </button>
         )}
 
         {decision === 'relabelled' && span.originalLabel && span.originalLabel !== span.label && (
@@ -293,7 +548,7 @@ function ValidationRow({ span, lineNumber, onDecide, onDelete, onFocus, isFocuse
         {rejected && (
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={openPicker}
             className="rounded border border-rule bg-sheet px-2 py-0.5 text-[11.5px] text-ink transition hover:border-rule-strong"
             title="Re-annotate this rejected entity with another label"
           >
@@ -399,14 +654,15 @@ export default function SpanListPanel({
 
         {isValidation && spans.length > 0 && (
           <p className="mt-1 text-[11.5px] text-ink-faint">
-            {counts.confirmed ? `${counts.confirmed} correct` : ''}
-            {counts.confirmed && (counts.rejected || counts.relabelled) ? ', ' : ''}
-            {counts.rejected ? `${counts.rejected} wrong` : ''}
-            {counts.rejected && counts.relabelled ? ', ' : ''}
-            {counts.relabelled ? `${counts.relabelled} relabelled` : ''}
-            {counts.relabelled && counts.added ? ', ' : ''}
-            {counts.added ? `${counts.added} added` : ''}
-            {undecided > 0 ? `${counts.confirmed || counts.rejected || counts.relabelled || counts.added ? ', ' : ''}${undecided} to go` : ''}
+            {[
+              counts.confirmed ? `${counts.confirmed} correct` : null,
+              counts.rejected ? `${counts.rejected} wrong` : null,
+              counts.relabelled ? `${counts.relabelled} relabelled` : null,
+              counts.added ? `${counts.added} added` : null,
+              undecided > 0 ? `${undecided} to go` : null,
+            ]
+              .filter(Boolean)
+              .join(', ')}
           </p>
         )}
 

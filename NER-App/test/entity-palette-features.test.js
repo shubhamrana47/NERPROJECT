@@ -470,3 +470,89 @@ test('getTopWordsBySubtype returns at most top 5 most tagged words per (parent, 
   assert.equal(top[key][0].count, 2, 'most frequent word first');
   assert.ok(!top[key].some((w) => w.text === 'ignored' || w.text === 'rejected' || w.text === 'wheat'));
 });
+
+test('left-side Entities to check dropdown lists new parent entities and separated subcategories and applies subtype', async (t) => {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
+    MouseEvent: dom.window.MouseEvent,
+    getComputedStyle: dom.window.getComputedStyle,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, savedEntities: [], stats: {} }),
+  });
+  dom.window.URL.createObjectURL = () => 'blob:stub';
+  dom.window.URL.revokeObjectURL = () => {};
+
+  require(getHarnessBundle());
+  const mounted = await globalThis.__mount('validate');
+  t.after(() => mounted.unmount?.());
+
+  const header = [...mounted.host.querySelectorAll('h2')].find((h) =>
+    h.textContent.includes('Entities to check')
+  );
+  assert.ok(header, 'Entities to check panel renders');
+  const panel = header.closest('aside');
+  const rows = [...panel.querySelectorAll('li')];
+  const cropRow = rows.find((li) => li.textContent.includes('wheat') && li.textContent.includes('Crop'));
+  assert.ok(cropRow, 'A Crop row exists in Entities to check');
+
+  // Open the hierarchical label picker from the Crop row
+  const labelBtn = cropRow.querySelector('button[title="Change this label or subcategory"]');
+  assert.ok(labelBtn, 'Label trigger button exists on row');
+  labelBtn.click();
+  await new Promise((r) => setTimeout(r, 15));
+
+  const picker = mounted.host.querySelector('[data-testid="span-label-picker"]');
+  assert.ok(picker, 'Hierarchical label picker opens');
+
+  // Crop should be auto-expanded showing its subcategories
+  const varietyOpt = picker.querySelector('[data-picker-subtype="Crop::Variety / Cultivar"]');
+  assert.ok(varietyOpt, 'Crop -> Variety / Cultivar subcategory is immediately visible');
+  assert.ok(
+    picker.querySelector('[data-picker-subtype="Crop::Field Crop Species"]'),
+    'Crop -> Field Crop Species subcategory is immediately visible'
+  );
+
+  // Subsumed legacy types should not appear as standalone top-level options
+  assert.equal(picker.querySelector('[data-picker-entity="Nutrient"]'), null, 'Nutrient is nested under Chemical');
+  assert.equal(picker.querySelector('[data-picker-entity="Agri_Method"]'), null, 'Agri_Method is nested under Agri_Process');
+
+  // Expand Agri_Process and verify Agri_Method and Cropping System are separate subcategories
+  const agriExpand = picker.querySelector('[data-picker-expand="Agri_Process"]');
+  assert.ok(agriExpand, 'Agri_Process expand toggle exists in left-side picker');
+  agriExpand.click();
+  await new Promise((r) => setTimeout(r, 15));
+
+  assert.ok(
+    picker.querySelector('[data-picker-subtype="Agri_Process::Agri_Method"]'),
+    'Agri_Process -> Agri_Method exists as its own subcategory'
+  );
+  assert.ok(
+    picker.querySelector('[data-picker-subtype="Agri_Process::Cropping System"]'),
+    'Agri_Process -> Cropping System exists as its own subcategory'
+  );
+  assert.equal(
+    picker.querySelector('[data-picker-subtype="Agri_Process::Agri_Method / Cropping System"]'),
+    null,
+    'Merged Agri_Method / Cropping System must not exist'
+  );
+
+  // Pick Agri_Process -> Cropping System and verify the row updates with parent + subtype
+  picker.querySelector('[data-picker-subtype="Agri_Process::Cropping System"]').click();
+  await new Promise((r) => setTimeout(r, 15));
+
+  assert.equal(
+    mounted.host.querySelector('[data-testid="span-label-picker"]'),
+    null,
+    'Picker closes after selecting a subcategory'
+  );
+  assert.ok(cropRow.textContent.includes('Agri Process'), 'Row displays updated parent entity');
+  assert.ok(cropRow.textContent.includes('Cropping System'), 'Row displays selected subcategory');
+});
