@@ -8,8 +8,8 @@
  *   - CGIAR Agronomy Ontology (AgrO — local agro.owl, 2022-11-02)
  *   - FAO AGROVOC Ontology (live Skosmos REST API, agrovoc.fao.org)
  *
- * v3 counts (strict ontology filter on NEW subcategories): 58 subcategories across 12 parent entities:
- *   - 52 in CGIAR AgrO + FAO AGROVOC
+ * v3 counts (strict ontology filter on NEW subcategories): 59 subcategories across 12 parent entities:
+ *   - 53 in CGIAR AgrO + FAO AGROVOC
  *   - 4 in CGIAR AgrO only
  *   - 2 in FAO AGROVOC only
  *   - Excluded: Disease -> Visual Symptom / Damage Sign (NEW, no match in AgrO or AGROVOC)
@@ -207,10 +207,16 @@ const RAW_ENTITY_SUBTYPES = {
 
   Agri_Process: [
     {
-      name: 'Agri_Method / Cropping System',
+      name: 'Agri_Method',
       legacyLabel: 'Agri_Method',
-      description: 'Agronomic methods, application techniques, farming systems, and cropping systems such as intercropping.',
-      agro: 'AGRO_00000036 (application method); AGRO_00000638 (cropping system); AGRO_00000516 (intercropping)',
+      description: 'Agronomic methods, application techniques, and operational cultural practices used in farming (such as foliar spraying, broadcasting, line sowing, or dibbling).',
+      agro: 'AGRO_00000036 (application method)',
+      agrovoc: 'c_542 (application methods); c_29762 (cultural methods)',
+    },
+    {
+      name: 'Cropping System',
+      description: 'Spatial and temporal arrangement of crops grown on land and their management systems (such as intercropping, crop rotation, monocropping, or mixed cropping).',
+      agro: 'AGRO_00000638 (cropping system); AGRO_00000516 (intercropping)',
       agrovoc: 'c_1971 (cropping systems); c_2807 (farming systems); c_3910 (intercropping)',
     },
     {
@@ -442,7 +448,7 @@ export const INDEPENDENT_ENTITY_ONTOLOGY = {
 
 /**
  * Filter strictly to subcategories verified in CGIAR AgrO and/or FAO AGROVOC
- * (v3: 52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only = 58 total),
+ * (v3: 53 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only = 59 total),
  * and attach normalized `ontologies` metadata.
  */
 export const ENTITY_SUBTYPES = Object.fromEntries(

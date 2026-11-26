@@ -247,7 +247,7 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
   const { ENTITY_SUBTYPES, getEntitySubtypes } = require(subtypesOut);
 
   // Verify v3 taxonomy counts (strictly ontology-verified NEW subcategories only):
-  // 12 parents, 58 subcategories (52 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only)
+  // 12 parents, 59 subcategories (53 AgrO + AGROVOC, 4 AgrO only, 2 AGROVOC only)
   const parentsWithSubtypes = Object.keys(ENTITY_SUBTYPES);
   assert.equal(parentsWithSubtypes.length, 12, '12 parent entities have subcategories');
   let totalSubs = 0;
@@ -276,10 +276,28 @@ test('only parent entities with AgrO/AGROVOC-verified subcategories render a dro
       else if (sub.agrovoc) agrovocOnlyCount += 1;
     }
   }
-  assert.equal(totalSubs, 58, '58 total ontology-verified subcategories across 12 parents');
-  assert.equal(bothCount, 52, '52 subcategories mapped in both AgrO and AGROVOC');
+  assert.equal(totalSubs, 59, '59 total ontology-verified subcategories across 12 parents');
+  assert.equal(bothCount, 53, '53 subcategories mapped in both AgrO and AGROVOC');
   assert.equal(agroOnlyCount, 4, '4 subcategories mapped in AgrO only');
   assert.equal(agrovocOnlyCount, 2, '2 subcategories mapped in AGROVOC only');
+
+  // Verify Agri_Method and Cropping System are separate subcategories under Agri_Process
+  const agriProcessSubs = getEntitySubtypes('Agri_Process');
+  assert.equal(
+    agriProcessSubs.find((s) => s.name === 'Agri_Method / Cropping System'),
+    undefined,
+    'Combined Agri_Method / Cropping System subcategory must no longer exist'
+  );
+  const agriMethodSub = agriProcessSubs.find((s) => s.name === 'Agri_Method');
+  const croppingSystemSub = agriProcessSubs.find((s) => s.name === 'Cropping System');
+  assert.ok(agriMethodSub, 'Agri_Method exists as its own subcategory under Agri_Process');
+  assert.equal(agriMethodSub.legacyLabel, 'Agri_Method');
+  assert.ok(agriMethodSub.agro?.includes('AGRO_00000036'), 'Agri_Method mapped to application method');
+  assert.ok(agriMethodSub.agrovoc?.includes('c_542'), 'Agri_Method mapped to AGROVOC application methods');
+  assert.ok(croppingSystemSub, 'Cropping System exists as its own subcategory under Agri_Process');
+  assert.equal(croppingSystemSub.legacyLabel, undefined, 'Cropping System is a distinct NEW subcategory');
+  assert.ok(croppingSystemSub.agro?.includes('AGRO_00000638'), 'Cropping System mapped to AGRO_00000638');
+  assert.ok(croppingSystemSub.agrovoc?.includes('c_1971'), 'Cropping System mapped to AGROVOC cropping systems');
 
   // Spot-check key v3 mapping corrections & exclusion of non-ontology NEW subcategory
   const varietySub = getEntitySubtypes('Crop').find((s) => s.name === 'Variety / Cultivar');
