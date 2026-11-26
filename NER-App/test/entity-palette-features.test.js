@@ -509,7 +509,7 @@ test('left-side Entities to check dropdown lists new parent entities and separat
   labelBtn.click();
   await new Promise((r) => setTimeout(r, 15));
 
-  const picker = mounted.host.querySelector('[data-testid="span-label-picker"]');
+  const picker = dom.window.document.body.querySelector('[data-testid="span-label-picker"]');
   assert.ok(picker, 'Hierarchical label picker opens');
 
   // Crop should be auto-expanded showing its subcategories
@@ -549,7 +549,7 @@ test('left-side Entities to check dropdown lists new parent entities and separat
   await new Promise((r) => setTimeout(r, 15));
 
   assert.equal(
-    mounted.host.querySelector('[data-testid="span-label-picker"]'),
+    dom.window.document.body.querySelector('[data-testid="span-label-picker"]'),
     null,
     'Picker closes after selecting a subcategory'
   );

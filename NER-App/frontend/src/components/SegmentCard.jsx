@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { getEntityColorStyle, formatEntityLabel, ENTITY_TYPES } from '../utils/textUtils.jsx';
+import { getEntityColorStyle, formatEntityLabel, formatSubtypeLabel, ENTITY_TYPES } from '../utils/textUtils.jsx';
+import { LabelPicker } from './SpanListPanel.jsx';
 
 export { ENTITY_TYPES };
 
@@ -225,7 +226,8 @@ export default function SegmentCard({ seg, filter, onAction }) {
 
 function EntityRow({ e, onAction }) {
   const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState(e.label);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const triggerRef = useRef(null);
   const pct = (Number(e.confidence ?? 1) * 100).toFixed(0);
   const colorStyle = getEntityColorStyle(e.label);
   const isManual = e.source === 'human' || e.status === 'edited';
@@ -234,40 +236,40 @@ function EntityRow({ e, onAction }) {
     <tr className="border-b border-rule/60 last:border-0">
       <td className="py-1.5 pr-3 font-serif text-[14px] text-ink">{e.text}</td>
       <td className="py-1.5 pr-3">
-        {editing ? (
-          <select
-            autoFocus
-            className="rounded border border-ink bg-sheet px-1.5 py-1 text-[12px] text-ink focus:outline-none"
-            value={label}
-            onChange={(x) => {
-              setLabel(x.target.value);
-              onAction({ action: 'edit', label: x.target.value });
-              setEditing(false);
-            }}
-            onBlur={() => setEditing(false)}
-          >
-            {!ENTITY_TYPES.includes(label) && (
-              <option value={label}>{formatEntityLabel(label)}</option>
-            )}
-            {ENTITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {formatEntityLabel(t)}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 text-[12px] text-ink transition hover:text-ink-soft"
-          >
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => {
+            setAnchorRect(triggerRef.current?.getBoundingClientRect() || null);
+            setEditing(true);
+          }}
+          className="flex flex-col items-start text-left text-[12px] text-ink transition hover:text-ink-soft"
+          title="Change this label or subcategory"
+        >
+          <span className="flex items-center gap-1.5">
             <span
               className="h-[3px] w-3 shrink-0 rounded-full"
               style={{ backgroundColor: colorStyle.border }}
             />
             {formatEntityLabel(e.label)}
             <ChevronDown className="h-3 w-3 text-ink-faint" />
-          </button>
+          </span>
+          {e.subtype && (
+            <span className="mt-0.5 pl-[18px] text-[10.5px] leading-tight text-ink-soft">
+              {formatSubtypeLabel(e.subtype)}
+            </span>
+          )}
+        </button>
+        {editing && (
+          <LabelPicker
+            span={e}
+            anchorRect={anchorRect}
+            onCancel={() => setEditing(false)}
+            onPick={(nextLabel, nextSubtype) => {
+              onAction({ action: 'edit', label: nextLabel, subtype: nextSubtype || undefined });
+              setEditing(false);
+            }}
+          />
         )}
       </td>
       <td className="py-1.5 pr-3 font-mono text-[11px] tabular-nums text-ink-faint">

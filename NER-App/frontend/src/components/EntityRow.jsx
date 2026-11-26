@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
-import { ENTITY_TYPES, getEntityColorStyle } from '../utils/textUtils.jsx';
+import React, { useState, useRef } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { getEntityColorStyle, formatEntityLabel, formatSubtypeLabel } from '../utils/textUtils.jsx';
+import { LabelPicker } from './SpanListPanel.jsx';
 
 export default function EntityRow({ e, onAction }) {
   const [editing, setEditing] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const triggerRef = useRef(null);
   const [label, setLabel] = useState(e.label);
+  const [subtype, setSubtype] = useState(e.subtype);
   const [text, setText] = useState(e.text);
   const pct = (Number(e.confidence ?? 1) * 100).toFixed(1);
   const conf = Number(e.confidence ?? 1);
@@ -30,25 +36,49 @@ export default function EntityRow({ e, onAction }) {
       </td>
       <td className="px-3 py-1.5">
         {editing ? (
-          <select
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            value={label}
-            onChange={(x) => setLabel(x.target.value)}
-          >
-            {!ENTITY_TYPES.includes(label) && <option value={label}>{label}</option>}
-            {ENTITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <>
+            <button
+              ref={triggerRef}
+              type="button"
+              onClick={() => {
+                setAnchorRect(triggerRef.current?.getBoundingClientRect() || null);
+                setPickerOpen(true);
+              }}
+              className="flex w-full items-center justify-between gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-left text-xs text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <span className="truncate">
+                {formatEntityLabel(label)}
+                {subtype ? ` · ${formatSubtypeLabel(subtype)}` : ''}
+              </span>
+              <ChevronDown className="h-3 w-3 shrink-0 text-slate-500" />
+            </button>
+            {pickerOpen && (
+              <LabelPicker
+                span={{ label, subtype }}
+                anchorRect={anchorRect}
+                onCancel={() => setPickerOpen(false)}
+                onPick={(nextLabel, nextSubtype) => {
+                  setLabel(nextLabel);
+                  setSubtype(nextSubtype || undefined);
+                  setPickerOpen(false);
+                }}
+              />
+            )}
+          </>
         ) : (
-          <span
-            className="inline-block rounded border px-2 py-0.5 text-[11px] font-semibold"
-            style={colorStyle}
-          >
-            {e.label}
-          </span>
+          <div className="flex flex-col items-start">
+            <span
+              className="inline-block rounded border px-2 py-0.5 text-[11px] font-semibold"
+              style={colorStyle}
+            >
+              {formatEntityLabel(e.label)}
+            </span>
+            {e.subtype && (
+              <span className="mt-0.5 text-[10.5px] text-slate-600">
+                {formatSubtypeLabel(e.subtype)}
+              </span>
+            )}
+          </div>
         )}
       </td>
       <td className="px-3 py-1.5">
@@ -66,7 +96,7 @@ export default function EntityRow({ e, onAction }) {
             <button
               className="rounded bg-blue-600 px-2 py-1 text-[11px] text-white hover:bg-blue-700"
               onClick={() => {
-                onAction({ action: 'edit', label, text });
+                onAction({ action: 'edit', label, subtype: subtype || undefined, text });
                 setEditing(false);
               }}
             >

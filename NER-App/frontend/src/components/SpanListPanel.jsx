@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import { ENTITY_TYPES, getEntityColorStyle, formatEntityLabel, formatSubtypeLabel } from '../utils/textUtils.jsx';
 import { getEntitySubtypes, SUBSUMED_ENTITY_TYPES } from '../utils/entitySubtypes.js';
@@ -46,7 +47,7 @@ function resolveInitialExpandedParent(label) {
  * scrollable sidebar, with instant search and the current entity's subcategories
  * expanded by default.
  */
-function LabelPicker({ span, anchorRect, onPick, onCancel }) {
+export function LabelPicker({ span, anchorRect, onPick, onCancel }) {
   const [query, setQuery] = useState('');
   const [expandedParent, setExpandedParent] = useState(() =>
     resolveInitialExpandedParent(span.label)
@@ -139,7 +140,7 @@ function LabelPicker({ span, anchorRect, onPick, onCancel }) {
     };
   }, [anchorRect]);
 
-  return (
+  const popoverContent = (
     <div
       ref={popoverRef}
       role="dialog"
@@ -278,6 +279,11 @@ function LabelPicker({ span, anchorRect, onPick, onCancel }) {
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined' && document.body) {
+    return createPortal(popoverContent, document.body);
+  }
+  return popoverContent;
 }
 
 /** One row of the annotation workflow's span list. */
